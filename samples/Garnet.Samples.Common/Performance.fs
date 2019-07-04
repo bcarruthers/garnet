@@ -111,8 +111,9 @@ type FpsMonitor() =
             let fps = stats.samples * 1000 / elapsed
             let newState = GCState.retrieve()
             let delta = GCState.getDelta gcState newState
-            printfn "FPS: %d, mean: %d ms, sd: %d, max: %d ms, GC: %s%s" 
-                fps (int stats.mean) (int (Stats.stdDev stats)) (int stats.max)
+            printfn "FPS: %d, mean: %d ms, sd: %d, min: %d, max: %d, GC: %s%s" 
+                fps (int stats.mean) (int (Stats.stdDev stats)) 
+                (int stats.min) (int stats.max)
                 (GCState.formatWithDelta newState delta)
                 (if delta.gc2 > 0 then " **" elif delta.gc1 > 0 then " *" else "")
             stats <- Stats.empty

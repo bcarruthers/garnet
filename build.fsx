@@ -75,7 +75,6 @@ Target.create "BuildLibrary" (fun _ ->
     |> Trace.logItems "LibraryBuild-Output: "
 )
 
-
 Target.create "BuildTests" (fun _ ->
   !! "tests/**/*.fsproj"
     |> MSBuild.runRelease id testsDir "Build"
@@ -88,23 +87,17 @@ Target.create "BuildSamples" (fun _ ->
     |> Trace.logItems "TestBuild-Output: "
 )
 
+let runTests() =
+    let result = DotNet.exec id (testsDir + "Garnet.Tests.dll") "--summary"
+    printfn "%A" result
+
 Target.create "Tests" (fun _ ->
-    DotNet.exec id (testsDir + "Garnet.Tests.dll --summary") |> ignore
+    runTests()    
 )
 
 Target.create "TestsOnly" (fun _ ->
-    let path = testsDir + "Garnet.Tests.dll --summary"
-    printfn "Path: %s" path
-    DotNet.exec id path |> ignore
+    runTests()    
 )
-//Target.create "Tests" <| fun _ ->
-//    let result =
-//        Process.execSimple (fun info -> 
-//            { info with
-//                FileName = "./src/Garnet.Tests/bin/Release/Garnet.Tests.exe"
-//            }
-//        ) (System.TimeSpan.FromMinutes 1.0)
-//    if result <> 0 then failwith "Failed result from fsyacc"
 
 Target.create "Default" (fun _ ->
     Trace.trace "Completed"
