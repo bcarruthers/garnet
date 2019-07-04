@@ -243,7 +243,7 @@ type PrintMessageHandler(id : ActorId, formatter : IFormatter, counter : ref<int
             messageCount <- messageCount + e.message.Count
           
 [<AutoOpen>]
-module private RecordingInternal =
+module internal RecordingInternal =
     let getSentCount (sender : StreamMessageSender) typeId = 
         if typeId = 0 then sender.SentCount else sender.GetCount typeId
             

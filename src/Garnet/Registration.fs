@@ -15,7 +15,7 @@ type private Disposable(dispose) =
         member c.Dispose() =
             dispose()
 
-type DisposableList(items : seq<IDisposable>) =
+type private DisposableList(items : seq<IDisposable>) =
     let list = List<_>(items)
     new() = new DisposableList(Seq.empty)
     member c.Add item =

@@ -248,7 +248,7 @@ type Container() =
     interface ISegmentStore<int> with
         member c.Get<'a>() = 
             components.Get<'a>() :> Segments<_,_>
-    interface ISegmentsLookup<int, Eid> with
+    interface IComponentStore<int, Eid> with
         member c.Get<'a>() = components.Get<'a>()
         member c.Destroy(id) = c.Destroy id
         member c.Handle id handler =

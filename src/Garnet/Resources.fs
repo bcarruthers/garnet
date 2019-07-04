@@ -6,7 +6,8 @@ open System.Runtime.InteropServices
 open Garnet.Comparisons
 open Garnet.Formatting
 
-/// Allows indexed access and lookup by key
+/// Provides lookup by both key and index and allows adding
+/// items while iterating.
 type internal IndexedLookup<'k, 'v when 'k : equality>() =
     let items = List<'v>()
     let idToIndex = Dictionary<'k, int>()

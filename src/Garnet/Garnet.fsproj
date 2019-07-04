@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="InternalsVisibleTo.fs" />
     <Compile Include="Comparisons.fs" />
     <Compile Include="Timing.fs" />
     <Compile Include="Formatting.fs" />

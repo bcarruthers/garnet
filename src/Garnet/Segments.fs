@@ -625,4 +625,3 @@ type ISegmentStore<'k
     and 'k : equality> =
     abstract member Get<'b> : unit -> Segments<'k, 'b>
         
-    

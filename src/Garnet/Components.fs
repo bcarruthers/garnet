@@ -41,7 +41,7 @@ type Components<'k, 'c, 'a
         let key = idToKey id
         c.Remove(key.segmentId, key.componentIndex)
     
-type ISegmentsLookup<'k, 'c 
+type IComponentStore<'k, 'c 
     when 'k :> IComparable<'k> 
     and 'k :> IEquatable<'k> 
     and 'k : equality 
@@ -86,7 +86,7 @@ type ComponentStore<'k, 'c
             segs.Commit()
     interface ISegmentStore<'k> with
         member c.Get<'a>() = c.Get<'a>() :> Segments<_,_>
-    interface ISegmentsLookup<'k, 'c> with
+    interface IComponentStore<'k, 'c> with
         member c.Get<'a>() = c.Get<'a>()
         member c.Destroy(id) = c.Destroy id
         member c.Handle id handler = c.Handle id handler
@@ -102,7 +102,7 @@ type Entity<'k, 'c, 'lookup
     and 'k :> IEquatable<'k> 
     and 'k : equality  
     and 'c :> IComparable<'c> 
-    and 'lookup :> ISegmentsLookup<'k, 'c>> = {
+    and 'lookup :> IComponentStore<'k, 'c>> = {
     id : 'c
     container : 'lookup
     } with

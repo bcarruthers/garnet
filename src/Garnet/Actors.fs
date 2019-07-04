@@ -49,7 +49,7 @@ module ActorOptions =
     }
 
 [<AutoOpen>]
-module Queueing =
+module internal Queueing =
     let defaultBufferSize = 32
 
     /// Single producer, single consumer
@@ -150,7 +150,7 @@ module Queueing =
             pool.ToString()
 
 [<AutoOpen>]        
-module private Internal =
+module internal Internal =
     type IMessage =
         inherit IDisposable
         abstract member Handle : IOutbox -> ActorId -> IMessageHandler -> unit

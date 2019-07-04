@@ -16,7 +16,7 @@ type Serializer<'a>(read, write) =
         member c.Read input = read input
 
 [<AutoOpen>]
-module private Serialization =
+module internal Serialization =
     let getNextPow2 x =
         let mutable y = x - 1
         y <- y ||| (y >>> 1)
@@ -53,7 +53,7 @@ module private Serialization =
     let isEmptyType (t : Type) =
         not (t.IsPrimitive || t.IsEnum || t.GetProperties().Length > 0)
 
-module private LittleEndian =
+module internal LittleEndian =
     let writeInt32 (bytes : byte[]) offset x =
         bytes.[offset] <- x &&& 0xff |> byte
         bytes.[offset + 1] <- (x >>> 8) &&& 0xff |> byte
@@ -182,7 +182,7 @@ type IMessageStreamReader =
     abstract member Flush : unit -> unit
     
 [<AutoOpen>]
-module private Streaming =    
+module internal Streaming =    
     type NullLogReader() =
         interface IMessageStreamReader with
             member c.Start _ _ = ()
@@ -296,7 +296,7 @@ type MessageStreamReaderPool(registry : MessageRegistry) =
             reader.Read stream
         reader.Flush()
 
-type private IntDictionary<'a when 'a : equality>() =
+type internal IntDictionary<'a when 'a : equality>() =
     let counts = Dictionary<'a, int>()
     member c.Item 
         with get key = 

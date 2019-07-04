@@ -15,7 +15,7 @@ module Wait =
     let defer = time -1
 
 [<AutoOpen>]
-module private Collections =
+module internal Collections =
     /// Mutable min-heap
     type Heap<'a>(compareTo : 'a -> 'a -> int) = // when 'a :> IComparable<'a>>() =
         // create a dummy value for easier indexing
@@ -85,7 +85,7 @@ module private Collections =
             heap.RemoveMin().second
         member q.Clear() = heap.Clear()
         
-type private StackScheduler() =
+type internal StackScheduler() =
     let temp = List<_>()
     let pending = List<_>()
     let active = List<_>()
@@ -127,7 +127,7 @@ type private StackScheduler() =
         sprintf "Stack: %d pending, %d active, frames: %s" pending.Count active.Count
             (String.Join(", ", frames))
             
-type private TimeScheduler() =
+type internal TimeScheduler() =
     let mutable time = 0
     let active = PriorityQueue<int,_>()
     member c.Enqueue (e : IEnumerator<_>) =

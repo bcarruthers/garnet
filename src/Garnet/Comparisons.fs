@@ -3,7 +3,7 @@
 // The purpose of this is to avoid equality operator allocations
 // https://github.com/dotnet/fsharp/issues/526
 #nowarn "86"
-module Comparisons =
+module private Comparisons =
     let inline eq<'a when 'a :> System.IEquatable<'a>> (x:'a) (y:'a) = x.Equals y    
     let inline (=) x y = eq x y
     let inline (<>) x y = not (eq x y)

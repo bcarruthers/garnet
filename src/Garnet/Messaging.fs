@@ -88,12 +88,6 @@ type MessageHandler() =
     interface IMessageHandler with
         member c.Handle e =
             c.TryHandle e |> ignore
-
-type MessageHandlerCollection(handlers : IMessageHandler[]) =
-    interface IMessageHandler with
-        member c.Handle<'a> e =
-            for handler in handlers do
-                handler.Handle<'a> e
             
 [<Struct>]
 type Disposable =
@@ -164,6 +158,12 @@ module ActorRule =
             dispose = ignore 
             }
         }
+
+type private MessageHandlerCollection(handlers : IMessageHandler[]) =
+    interface IMessageHandler with
+        member c.Handle<'a> e =
+            for handler in handlers do
+                handler.Handle<'a> e
             
 module ActorDefinition =
     let init handler = { 
