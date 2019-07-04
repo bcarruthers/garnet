@@ -1,0 +1,1 @@
+fake run build.fsx

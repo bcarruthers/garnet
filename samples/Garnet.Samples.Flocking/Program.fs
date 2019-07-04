@@ -31,8 +31,14 @@ let test() =
         c.Run <| { Update.deltaTime = 0.1f }
     c.Get(Eid 64).ToString()
 
+let setCurrentDir() =
+    let path = System.IO.Path.GetDirectoryName(typeof<TextureEntry>.Assembly.Location)
+    printfn "Path: %s" path
+    System.IO.Directory.SetCurrentDirectory path
+
 [<EntryPoint>]
 let main argv =
+    setCurrentDir()
     use g = new SampleGame(settings)
     g.Run()
     0

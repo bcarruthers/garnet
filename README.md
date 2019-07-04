@@ -60,6 +60,12 @@ While ECS focuses on managing shared state, the actor model isolates state into 
 
 - **Multiple worlds**: In addition to traditional ECS, Garnet provides actor-like messaging for scenarios where multiple ECS worlds are beneficial, such as AI agents or networking.
 
+## Building
+
+1. Install [.NET Core SDK](https://dotnet.microsoft.com/download)
+2. Install [FAKE](https://fake.build/fake-gettingstarted.html)
+3. Run build.cmd
+
 ## Containers
 
 ECS containers provide a useful bundle of functionality for working with shared game state, including event handling, component storage, entity ID generation, coroutine scheduling, and resource resolution.
@@ -146,8 +152,6 @@ While ECS containers provide a simple and fast means of storing and updating sha
 - **What about performance?** Functional code often involves allocation, which sometimes conflicts with the goal of consistent performance when garbage collection occurs. Part of the reason for this library is to reduce the effort in writing code that minimizes allocation. But for simple games, this is likely a non-issue and you should start with idiomatic code.
 
 - **Why use ECS over MVU?** You probably shouldn't start with ECS for a simple game, at least not when initially prototyping, unless you already have a good understanding of where it might be beneficial. MVU avoids a lot of complexity and has stronger type safety and immutability guarantees than ECS, but you may encounter issues if your project has demanding performance requirements or needs more flexibility than it allows. 
-
-- **Why do joins use a struct tuple?** Calling functions with more than five arguments incurs an allocation, so using a struct tuple keeps the number of arguments below this threshold.
 
 ## License
 This project is licensed under the [MIT license](https://github.com/bcarruthers/garnet/blob/master/LICENSE).
