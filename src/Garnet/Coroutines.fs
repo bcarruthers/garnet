@@ -90,6 +90,10 @@ type internal StackScheduler() =
     let pending = List<_>()
     let active = List<_>()
     let frames = List<_>()
+    member c.Clear() =
+        pending.Clear()
+        active.Clear()
+        frames.Clear()
     member c.Schedule (coroutine : _ seq) =
         pending.Add coroutine
     member c.Enqueue e =
@@ -143,11 +147,14 @@ type internal TimeScheduler() =
         iterCount > 0
     member c.Step deltaTime =
         time <- time + deltaTime
+    member c.Clear() =
+        active.Clear()
+        time <- 0
     override c.ToString() =
         sprintf "Timed: %d total, due: %s" active.Count
             (String.Join(", ", active.Items |> Seq.map (fun p -> p.first)))
             
-type CoroutineScheduler() =
+type internal CoroutineScheduler() =
     let timed = TimeScheduler()
     let stacked = StackScheduler()
     let iterate = 
@@ -175,6 +182,9 @@ type CoroutineScheduler() =
         while c.RunOnce() do ()      
     member c.Step deltaTime =
         timed.Step deltaTime
+    member c.Clear() =
+        timed.Clear()
+        stacked.Clear()
     override c.ToString() =
         sprintf "Coroutines\n  %s\n  %s" (stacked.ToString()) (timed.ToString())
 

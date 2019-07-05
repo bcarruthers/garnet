@@ -81,9 +81,8 @@ module Eid =
     let formatEid eid =
         sprintf "%d %d %d" (getGen eid) (getPartition eid) (getIndex eid)
 
-    let inline eidToComponentKey (id : Eid) = {
-        segmentId = getSegmentIndex id
-        componentIndex = getComponentIndex id }
+    let inline eidToComponentKey (id : Eid) =
+        struct(getSegmentIndex id, getComponentIndex id)
 
 type Eid with
     member i.Index = Eid.getIndex i
@@ -103,7 +102,7 @@ module ComponentStore =
     let create() = ComponentStore(Eid.eidToComponentKey)
 
 /// Stores available IDs with a given partition. IDs start at 1
-type EidPool(partition) =
+type internal EidPool(partition) =
     let mask = partition <<< Eid.indexBits
     let pendingIds = List<Eid>()
     let availableIds = Queue<int>()
@@ -162,9 +161,8 @@ type EidPool(partition) =
     override p.ToString() =
         sprintf "%dC %dT %dP %dR" p.Count p.Total p.Pooled p.Pending
 
-type EidPools() =
+type internal EidPools() =
     let pools = Array.init Eid.partitionCount EidPool
-    member internal c.Items = pools
     member c.Count = pools.Length
     member c.Item with get i = pools.[i]
     member c.Next() = c.[0].Next()
@@ -180,7 +178,7 @@ type EidPools() =
             pool.Clear()
     override c.ToString() =
         let prefix = ""
-        c.Items
+        pools
         |> Seq.mapi (fun i p -> 
             if p.Count > 0 
             then sprintf "%d: %s" i (p.ToString()) 
@@ -201,13 +199,17 @@ type Container() =
     let eids = components.Get<Eid>()
     member c.Get<'a>() = components.Get<'a>()
     member c.GetChannel<'a>() = channels.GetChannel<'a>()
-    member c.GetPool(i) = eidPools.[i]
     member c.RegisterResource x = types.RegisterResource x
     member c.AddResource x = types.AddResource x
     member c.TryGetResource<'a>([<Out>] r : byref<_>) = 
         types.TryGetResource<'a>(&r)
+    member internal c.Clear() =
+        channels.Clear()
+        components.Clear()
+        eidPools.Clear()
+        scheduler.Clear()
     /// Returns true if events were handled
-    member c.Dispatch() = 
+    member internal c.Dispatch() = 
         channels.Publish()
     member c.Commit() =
         // order doesn't matter since we're just moving data
@@ -221,8 +223,8 @@ type Container() =
         scheduler.RunOnce()
     member c.Contains(eid : Eid) =
         eids.Contains(eid)
-    member c.CreateEid(partition) =
-        let eid = c.GetPool(partition).Next()
+    member internal c.CreateEid(partition) =
+        let eid = eidPools.[partition].Next()
         eids.Add(eid, eid)
         eid
     member c.Handle(id, handler) =
@@ -230,7 +232,7 @@ type Container() =
     member c.Destroy(id : Eid) =
         components.Destroy(id)
         let partition = Eid.getPartition id
-        c.GetPool(partition).Recycle(id)
+        eidPools.[partition].Recycle(id)
     /// Assumes eid components have been populated and restores 
     /// eid pools from that state
     member c.RestoreEids() =
@@ -261,10 +263,9 @@ type Entity = {
     } with
     member e.Add x = e.container.Get<_>().Add(e.id, x)
     member e.Set x = e.container.Get<_>().Set(e.id, x)
-    member e.AddOrSet x = e.container.Get<_>().AddOrSet(e.id, x)
     member e.Remove<'a>() = e.container.Get<'a>().Remove(e.id)
     member e.Get<'a>() = e.container.Get<'a>().Get(e.id)    
-    member e.GetOrDefault<'a>(fallback) = e.container.Get<'a>().Get(e.id, fallback)
+    member e.Get<'a>(fallback) = e.container.Get<'a>().Get(e.id, fallback)
     member e.Contains<'a>() = e.container.Get<'a>().Contains(e.id)
     member e.Destroy() = e.container.Destroy(e.id)
     member e.With x = e.Add x; e
@@ -310,7 +311,7 @@ type Container with
         c.Run()
     
 [<AutoOpen>]
-module Composition =
+module internal Composition =
     let cmp c (e : Entity) = e.Add c
 
     let create prefab (c : Container) =
@@ -323,7 +324,7 @@ module Composition =
         fun e -> for c in arr do c e    
         
 /// Runs container for each incoming message
-type ContainerMessageHandler(container : Container) =
+type internal ContainerMessageHandler(container : Container) =
     let mutable batchCount = 0
     let mutable messageCount = 0
     let receiver = container.GetResource<MessageReceiver>()

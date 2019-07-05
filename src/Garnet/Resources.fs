@@ -84,7 +84,7 @@ type State<'a>() =
     member c.Set newValue =
         hasValue <- true
         v <- newValue
-    member c.GetOrDefault fallback =
+    member c.Get fallback =
         if hasValue then c.Value else fallback
     override c.ToString() =
         sprintf "%s\n  %s" (c.GetType() |> typeToString) (formatRecord "  " c.Value)

@@ -20,7 +20,7 @@ type Subscription<'a>(handler : EventHandler<'a>) =
     interface IDisposable with
         member c.Dispose() = isDisposed <- true
 
-type private Subscription(handler : IEventHandler) =
+type internal Subscription(handler : IEventHandler) =
     let mutable isDisposed = false
     let handler = handler
     member c.IsUnsubscribed = isDisposed
@@ -31,9 +31,14 @@ type private Subscription(handler : IEventHandler) =
 type IDispatcher =
     abstract member Dispatch<'a> : List<'a> -> List<Subscription<'a>> -> unit
 
-type IChannel =
+type internal IChannel =
+    abstract member Clear : unit -> unit
     abstract member Commit : unit -> unit
     abstract member Publish : unit -> bool
+            
+type internal NullDispatcher() =
+    interface IDispatcher with
+        member c.Dispatch batch handlers = ()
 
 type Dispatcher() =
     let formatBatch (messages : List<_>) =
@@ -48,6 +53,7 @@ type Dispatcher() =
         sb.ToString()
 
     static member Default = Dispatcher() :> IDispatcher
+    static member Null = NullDispatcher() :> IDispatcher
 
     interface IDispatcher with
         member c.Dispatch<'a> (batch : List<'a>) handlers =
@@ -62,11 +68,6 @@ type Dispatcher() =
                         sprintf "Error in handler %d on %s batch (%d):%s" 
                             i (typeof<'a> |> typeToString) batch.Count (formatBatch batch)
                     exn(str, ex) |> raise                
-            
-type NullDispatcher() =
-    static member Default = NullDispatcher() :> IDispatcher
-    interface IDispatcher with
-        member c.Dispatch batch handlers = ()
 
 type PrintDispatcherOptions = {
     isPrintEnabled : bool
@@ -152,6 +153,10 @@ type Channel<'a>(dispatcher : IDispatcher) =
     let mutable events = List<'a>()
     let mutable pending = List<'a>()
     let mutable total = 0
+    member c.Clear() =
+        events.Clear()
+        pending.Clear()
+        total <- 0
     /// Dispatches event immediately/synchronously
     member c.Handle(event) =
         // create a batch consisting of single item
@@ -186,6 +191,7 @@ type Channel<'a>(dispatcher : IDispatcher) =
             dispatcher.Dispatch events handlers
             true
     interface IChannel with
+        member c.Clear() = c.Clear()
         /// Calls handler behaviors and prunes subscriptions after
         member c.Publish() = c.Publish()
         /// Commit pending events to publish list and resets
@@ -199,7 +205,7 @@ type Channel<'a>(dispatcher : IDispatcher) =
         sprintf "%s: %dH %dP %dE %dT %dSE" (typeof<'a> |> typeToString) 
             handlers.Count pending.Count events.Count total singleEventPool.Count
 
-type private EventHandlerCollection() =
+type internal EventHandlerCollection() =
     let isUnsubscribed = Predicate(fun (sub : Subscription) -> sub.IsUnsubscribed)
     let handlers = List<Subscription>()
     member c.Subscribe(handler : IEventHandler) =
@@ -213,7 +219,7 @@ type private EventHandlerCollection() =
             for h in handlers do
                 h.Handle(batch)
 
-type private PrintEventHandler(print) =
+type internal PrintEventHandler(print) =
     interface IEventHandler with               
         member c.Handle batch =
             for x in batch do
@@ -227,6 +233,9 @@ type Channels() =
     // lookup needed for reentrancy since it has a list we can iterate over
     let mutable dispatcher = Dispatcher.Default
     let lookup = IndexedLookup<Type, IChannel>()
+    member c.Clear() =
+        for i = 0 to lookup.Count - 1 do
+            lookup.[i].Clear()
     member c.Commit() =
         for i = 0 to lookup.Count - 1 do
             lookup.[i].Commit()
