@@ -176,7 +176,10 @@ module Array =
 module Joins =
     let count (a : Segments<_,_>) = a.Count
     let get (a : Segments<_,_>) i = a.[i]
-    let find (a : Segments<_,_>) sid = a.Find sid
+    let find (a : Segments<_,_>) sid =
+        match a.TryFind(sid) with
+        | true, i -> i
+        | false, _ -> -1
         
     let iter1 action a param =
         let ca = count a

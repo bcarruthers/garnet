@@ -16,11 +16,61 @@ module Assertions =
 [<Tests>]
 let tests =
     testList "segments" [
+        testCase "get component" <| fun () ->
+            let s = Components.create()
+            s.Add(Eid 1, 10)
+            s.Commit()
+            s.Get(Eid 1, 10) |> shouldEqual 10
+
+        testCase "get component without commit" <| fun () ->
+            let s = Components.create()
+            s.Add(Eid 1, 10)
+            Expect.throws (fun () -> s.Get(Eid 1) |> ignore) "exception expected"
+
+        testCase "get component or default" <| fun () ->
+            let s = Components.create()
+            s.Get(Eid 1, 10) |> shouldEqual 10
+
+        testCase "add component multiple times" <| fun () ->
+            let s = Components.create()
+            s.Add(Eid 1, 10)
+            s.Commit()
+            s.Get(Eid 1) |> shouldEqual 10
+            s.Add(Eid 1, 11)
+            s.Commit()
+            s.Get(Eid 1) |> shouldEqual 11
+
+        testCase "add component multiple times before commit" <| fun () ->
+            let s = Components.create()
+            s.Add(Eid 1, 10)
+            s.Add(Eid 1, 11)
+            s.Commit()
+            s.Get(Eid 1) |> shouldEqual 11
+
+        testCase "add and remove component before commit" <| fun () ->
+            let s = Components.create()
+            s.Add(Eid 1, 10)
+            s.Remove(Eid 1)
+            s.Commit()
+            s.Contains(Eid 1) |> shouldEqual false
+
+        testCase "remove and add component before commit" <| fun () ->
+            let s = Components.create()
+            s.Remove(Eid 1)
+            s.Add(Eid 1, 10)
+            s.Commit()
+            s.Get(Eid 1) |> shouldEqual 10
+
+        testCase "remove component not present" <| fun () ->
+            let s = Components.create()
+            s.Remove(Eid 1)
+            s.Commit()
+
         testCase "data cleared before added back to pool" <| fun () ->
             let s = Segments<int, int>()
             let data = s.AddMask(1, UInt64.MaxValue)
             Array.fill data 0 data.Length 1
-            (s :> ISegments<int>).Commit()
+            s.Commit()
             let data = s.AddMask(2, 0UL)
             data.[0] |> shouldEqual 0
 
@@ -29,11 +79,11 @@ let tests =
             s.Add(Eid 1, 10)
             s.ComponentCount |> shouldEqual 0
             s.Contains(Eid 1) |> shouldEqual false
-            s.GetOrDefault(Eid 1, 0) |> shouldEqual 0
+            s.Get(Eid 1, 0) |> shouldEqual 0
             s.Commit()
             s.ComponentCount |> shouldEqual 1
             s.Contains(Eid 1) |> shouldEqual true
-            s.GetOrDefault(Eid 1, 0) |> shouldEqual 10
+            s.Get(Eid 1, 0) |> shouldEqual 10
                 
         testCase "removal is deferred" <| fun () ->
             let s = Components.create()
@@ -42,7 +92,7 @@ let tests =
             s.Remove(Eid 1)
             s.ComponentCount |> shouldEqual 1
             s.Contains(Eid 1) |> shouldEqual true
-            s.GetOrDefault(Eid 1, 0) |> shouldEqual 10
+            s.Get(Eid 1, 0) |> shouldEqual 10
             s.Commit()
             s.ComponentCount |> shouldEqual 0
             s.Contains(Eid 1) |> shouldEqual false

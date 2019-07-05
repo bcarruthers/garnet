@@ -20,36 +20,61 @@ type Components<'k, 'c, 'a
     inherit Segments<'k, 'a>()
     member c.Contains(id) =
         let key = idToKey id
-        c.Contains(key.segmentId, key.componentIndex)
+        let sid = key.segmentId
+        let ci = key.componentIndex
+        let mask = c.GetMask sid
+        (mask &&& (1UL <<< ci)) <> 0UL
     member c.Get(id : 'c) =
         let key = idToKey id
-        c.Get(key.segmentId, key.componentIndex)
+        let sid = key.segmentId
+        let ci = key.componentIndex
+        let seg = c.GetSegment(sid)
+        if seg.mask &&& (1UL <<< ci) = 0UL then 
+            failwithf "Cannot get %s component %d in segment %A" (typeToString typeof<'a>) ci sid
+        seg.data.[ci]
     member c.Set(id, value) =
         let key = idToKey id
-        c.Set(key.segmentId, key.componentIndex, value)
-    member c.GetOrDefault(id, fallback) =
+        let sid = key.segmentId
+        let ci = key.componentIndex
+        let seg = c.GetSegment(sid)
+        if seg.mask &&& (1UL <<< ci) = 0UL then 
+            failwithf "Cannot set %s component %d in segment %A" (typeToString typeof<'a>) ci sid
+        seg.data.[ci] <- value
+    member c.Get(id, fallback) =
         let key = idToKey id
-        c.GetOrDefault(key.segmentId, key.componentIndex, fallback)
+        let sid = key.segmentId
+        let ci = key.componentIndex
+        match c.TryFind(sid) with
+        | false, _ -> fallback
+        | true, si ->
+            let s = c.[si]
+            if s.mask &&& (1UL <<< ci) = 0UL then fallback
+            else s.data.[ci]                
     member c.Add(id, value) =
         let key = idToKey id
-        c.Add(key.segmentId, key.componentIndex, value)
+        let sid = key.segmentId
+        let ci = key.componentIndex
+        let data = c.AddMask(sid, 1UL <<< ci)
+        data.[ci] <- value
     member c.AddOrSet(id, value) =
         let key = idToKey id
-        c.AddOrSet(key.segmentId, key.componentIndex, value)
+        let sid = key.segmentId
+        let ci = key.componentIndex
+        let mask = 1UL <<< ci
+        let data =
+            match c.TryFind(sid) with
+            | false, _ -> c.AddMask(sid, mask)
+            | true, si ->
+                let s = c.[si]
+                if s.mask &&& mask = 0UL then c.AddMask(sid, mask)
+                else s.data
+        data.[ci] <- value            
     /// Removes single component
     member c.Remove(id) =
         let key = idToKey id
-        c.Remove(key.segmentId, key.componentIndex)
-    
-type IComponentStore<'k, 'c 
-    when 'k :> IComparable<'k> 
-    and 'k :> IEquatable<'k> 
-    and 'k : equality 
-    and 'c :> IComparable<'c>> =
-    inherit ISegmentStore<'k>
-    abstract member Get<'b> : unit -> Components<'k, 'c, 'b>
-    abstract member Handle : 'c -> ISegmentHandler -> unit
-    abstract member Destroy : 'c -> unit
+        let sid = key.segmentId
+        let ci = key.componentIndex
+        c.RemoveMask(sid, 1UL <<< ci)
     
 type ComponentStore<'k, 'c 
     when 'k :> IComparable<'k> 
@@ -57,7 +82,6 @@ type ComponentStore<'k, 'c
     and 'k : equality
     and 'c :> IComparable<'c> >(idToKey : 'c -> ComponentKey<'k>) =
     let lookup = Dictionary<Type, ISegments<'k>>()
-    member c.Lists = lookup.Values
     member c.Get<'a>() =
         let t = typeof<'a>
         match lookup.TryGetValue(t) with
@@ -72,7 +96,7 @@ type ComponentStore<'k, 'c
     member c.Remove(sid, mask) =
         for segs in lookup.Values do
             segs.RemoveMask(sid, mask)
-    member c.Handle id handler =        
+    member c.Handle(id, handler) =        
         let key = idToKey id
         let mask = 1UL <<< key.componentIndex
         for s in lookup.Values do
@@ -86,36 +110,8 @@ type ComponentStore<'k, 'c
             segs.Commit()
     interface ISegmentStore<'k> with
         member c.Get<'a>() = c.Get<'a>() :> Segments<_,_>
-    interface IComponentStore<'k, 'c> with
-        member c.Get<'a>() = c.Get<'a>()
-        member c.Destroy(id) = c.Destroy id
-        member c.Handle id handler = c.Handle id handler
     override c.ToString() =
         let prefix = ""
-        c.Lists
+        lookup.Values
         |> Seq.map (fun item -> item.ToString().Replace("\n", "\n  "))
         |> listToString (prefix + "  ") (c.GetType() |> typeToString)
-        
-[<Struct>]
-type Entity<'k, 'c, 'lookup 
-    when 'k :> IComparable<'k> 
-    and 'k :> IEquatable<'k> 
-    and 'k : equality  
-    and 'c :> IComparable<'c> 
-    and 'lookup :> IComponentStore<'k, 'c>> = {
-    id : 'c
-    container : 'lookup
-    } with
-    member e.Add x = e.container.Get<_>().Add(e.id, x)
-    member e.Set x = e.container.Get<_>().Set(e.id, x)
-    member e.AddOrSet x = e.container.Get<_>().AddOrSet(e.id, x)
-    member e.Remove<'a>() = e.container.Get<'a>().Remove(e.id)
-    member e.Get<'a>() = e.container.Get<'a>().Get(e.id)    
-    member e.GetOrDefault<'a>(fallback) = e.container.Get<'a>().GetOrDefault(e.id, fallback)
-    member e.Contains<'a>() = e.container.Get<'a>().Contains(e.id)
-    member e.Destroy() = e.container.Destroy(e.id)
-    member e.With x = e.Add x; e
-    override e.ToString() = 
-        let printer = PrintHandler(UInt64.MaxValue)
-        e.container.Handle e.id printer
-        "Entity " + e.id.ToString() + ": " + printer.ToString()

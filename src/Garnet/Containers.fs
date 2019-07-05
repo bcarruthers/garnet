@@ -1,5 +1,6 @@
 ﻿namespace Garnet.Ecs
 
+open System
 open System.Collections.Generic
 open System.Runtime.InteropServices
 open Garnet.Comparisons
@@ -224,6 +225,8 @@ type Container() =
         let eid = c.GetPool(partition).Next()
         eids.Add(eid, eid)
         eid
+    member c.Handle(id, handler) =
+        components.Handle(id, handler)
     member c.Destroy(id : Eid) =
         components.Destroy(id)
         let partition = Eid.getPartition id
@@ -248,15 +251,27 @@ type Container() =
     interface ISegmentStore<int> with
         member c.Get<'a>() = 
             components.Get<'a>() :> Segments<_,_>
-    interface IComponentStore<int, Eid> with
-        member c.Get<'a>() = components.Get<'a>()
-        member c.Destroy(id) = c.Destroy id
-        member c.Handle id handler =
-            components.Handle id handler
     override c.ToString() = 
         types.ToString()
-
-type Entity = Entity<int, Eid, Container>
+        
+[<Struct>]
+type Entity = {
+    id : Eid
+    container : Container
+    } with
+    member e.Add x = e.container.Get<_>().Add(e.id, x)
+    member e.Set x = e.container.Get<_>().Set(e.id, x)
+    member e.AddOrSet x = e.container.Get<_>().AddOrSet(e.id, x)
+    member e.Remove<'a>() = e.container.Get<'a>().Remove(e.id)
+    member e.Get<'a>() = e.container.Get<'a>().Get(e.id)    
+    member e.GetOrDefault<'a>(fallback) = e.container.Get<'a>().Get(e.id, fallback)
+    member e.Contains<'a>() = e.container.Get<'a>().Contains(e.id)
+    member e.Destroy() = e.container.Destroy(e.id)
+    member e.With x = e.Add x; e
+    override e.ToString() = 
+        let printer = PrintHandler(UInt64.MaxValue)
+        e.container.Handle(e.id, printer)
+        "Entity " + e.id.ToString() + ": " + printer.ToString()
 
 type Container with
     member c.Get(eid) = { id = eid; container = c }
