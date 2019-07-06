@@ -8,14 +8,6 @@ open Garnet.Ecs
 open Garnet.Formatting
 open Garnet.Actors
 
-[<AutoOpen>]
-module Assertions =
-    let shouldEqual b a =
-        Expect.equal a b ""
-
-    let shouldNotEqual b a =
-        Expect.notEqual a b ""
-
 let testRoundtripValue (serializer : ISerializer<_>) x =
     let ms = new MemoryStream()
     serializer.Write ms x

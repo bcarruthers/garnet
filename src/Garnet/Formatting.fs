@@ -1,10 +1,11 @@
-﻿module Garnet.Formatting
+﻿namespace Garnet.Formatting
 
 open System
 open System.Collections
 open System.Collections.Generic
 open System.Text
 open Garnet.Comparisons
+open Garnet.Metrics
 
 type IFormatter =
     abstract member Format<'a> : 'a -> string

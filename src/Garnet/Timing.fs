@@ -1,4 +1,4 @@
-﻿namespace Garnet
+﻿namespace Garnet.Metrics
 
 open System
 open System.Diagnostics

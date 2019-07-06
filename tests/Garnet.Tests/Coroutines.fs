@@ -91,17 +91,17 @@ let tests =
             let append = r.Add
             s.Schedule <| seq {
                 append 1
-                yield time 2
+                yield Wait.time 2
                 append 2
                 append 3
                 s.Schedule <| seq {
                     append 21
-                    yield time 1
+                    yield Wait.time 1
                     append 22
-                    yield time 5
+                    yield Wait.time 5
                     append 23
                     }
-                yield time 3
+                yield Wait.time 3
                 append 4
                 append 5
                 }
@@ -129,7 +129,7 @@ let tests =
             c.Start <| seq {
                 append 1
                 c.Send ""
-                yield time 0
+                yield Wait.time 0
                 append 2
                 }
             c.Run()
@@ -144,27 +144,27 @@ let tests =
                 if e = "update" then
                     c.Start <| seq {
                         append 21
-                        yield defer
+                        yield Wait.defer
                         append 22
-                        yield defer
+                        yield Wait.defer
                         append 23
                         }
                 elif e = "anim" then
                     c.Start <| seq {
                         append 31
-                        yield time 1
+                        yield Wait.time 1
                         append 32
-                        yield time 2
+                        yield Wait.time 2
                         append 33
                         }
             |> ignore
             c.Start <| seq {
                 append 1
                 c.Send "update"
-                yield defer
+                yield Wait.defer
                 append 2
                 c.Send "anim"
-                yield time 5
+                yield Wait.time 5
                 append 3
                 }
             for i = 1 to 8 do

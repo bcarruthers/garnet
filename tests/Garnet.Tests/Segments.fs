@@ -5,14 +5,6 @@ open System.Collections.Generic
 open Expecto
 open Garnet.Ecs
 
-[<AutoOpen>]
-module Assertions =
-    let shouldEqual b a =
-        Expect.equal a b ""
-
-    let shouldNotEqual b a =
-        Expect.notEqual a b ""
-
 [<Tests>]
 let tests =
     testList "segments" [

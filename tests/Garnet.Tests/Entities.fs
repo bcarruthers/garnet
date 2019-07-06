@@ -4,21 +4,11 @@ open System.Collections.Generic
 open Expecto
 open Garnet.Ecs
 
-[<AutoOpen>]
-module Assertions =
-    let shouldEqual b a =
-        Expect.equal a b ""
+type Velocity = {
+    velocity : int }
 
-    let shouldNotEqual b a =
-        Expect.notEqual a b ""
-
-[<AutoOpen>]
-module MockTypes =
-    type Velocity = {
-        velocity : int }
-
-    type Position = {
-        position : int }
+type Position = {
+    position : int }
 
 [<Tests>]
 let tests =

@@ -3,9 +3,10 @@
 open System
 open System.Collections.Generic
 open System.Text
-open Garnet
 open Garnet.Comparisons
 open Garnet.Formatting
+open Garnet.Metrics
+open Garnet.Collections
     
 type EventHandler<'a> = List<'a> -> unit
 
@@ -279,7 +280,7 @@ type Channels() =
         sb.ToString()
         
 [<AutoOpen>]
-module ChannelExtensions =
+module Channels =
     type IChannels with    
         member c.GetSender<'a>() =
             c.GetChannel<'a>().Send
@@ -301,3 +302,12 @@ module ChannelExtensions =
                 fun batch -> 
                     for i = 0 to batch.Count - 1 do
                         handler (batch.[i]))
+
+    type Channel<'a> with    
+        member c.Wait(msg) =
+            c.Send(msg)
+            Wait.defer
+
+    type IChannels with    
+        member c.Wait(msg) =
+            c.GetChannel<'a>().Wait msg

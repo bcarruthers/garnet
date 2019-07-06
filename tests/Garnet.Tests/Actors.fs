@@ -8,66 +8,35 @@ open Expecto
 open Garnet.Formatting
 open Garnet.Actors
 
-[<AutoOpen>]
-module Assertions =
-    let shouldEqual b a =
-        Expect.equal a b ""
+type Ping = struct end
+type Pong = struct end
 
-    let shouldNotEqual b a =
-        Expect.notEqual a b ""
-          
 module ActorFactory =
     let single bg actorId register = 
         ActorFactory.init bg ((=)actorId) (fun id -> ActorDefinition.handler register)
         
     let fg actorId register = single false actorId register
     let bg actorId register = single true actorId register
-
+    
 [<Tests>]
 let tests =
-    testList "actors" [
-        testCase "enqueue to ring buffer" <| fun () ->
-            let r = RingBuffer(2)
-            r.TryEnqueue 1 |> shouldEqual true
-            r.TryEnqueue 2 |> shouldEqual true
-            r.TryEnqueue 3 |> shouldEqual false
-            // dequeue
-            let x = ref 0
-            r.TryDequeue x |> shouldEqual true
-            x.Value |> shouldEqual 1
-            r.TryDequeue x |> shouldEqual true
-            x.Value |> shouldEqual 2
-            r.TryDequeue x |> shouldEqual false
-            // enqueue
-            r.TryEnqueue 3 |> shouldEqual true
-            r.TryDequeue x |> shouldEqual true
-            x.Value |> shouldEqual 3
+    testList "actors" [            
+        testCase "create ping pong actors" <| fun () ->
+            let msgs = List<obj>()
+            use a = new ActorSystem()
+            a.Register(ActorId 1, fun c ->
+                c.On<Ping> <| fun e -> 
+                    msgs.Add e.message
+                    e.Respond(Pong())
+                )
+            a.Register(ActorId 2, fun c ->
+                c.On<Pong> <| fun e -> 
+                    msgs.Add e.message
+                )
+            a.Send(ActorId 1, Ping(), sourceId = ActorId 2)
+            a.RunAll()
+            msgs.Count |> shouldEqual 2
 
-        testCase "enqueue to ring buffer node" <| fun () ->
-            let n = RingBufferNode(2)
-            n.Enqueue 1 |> shouldEqual n
-            n.Enqueue 2 |> shouldEqual n
-            let n2 = n.Enqueue 3 
-            n2 |> shouldNotEqual n
-            n2.Enqueue 4 |> shouldEqual n2
-            let x = ref 0
-            n.TryDequeue x |> shouldEqual n
-            x.Value |> shouldEqual 1
-            n.TryDequeue x |> shouldEqual n
-            x.Value |> shouldEqual 2
-            n2.TryDequeue x |> shouldEqual n2
-            x.Value |> shouldEqual 3
-            n2.TryDequeue x |> shouldEqual n2
-            x.Value |> shouldEqual 4
-            n2.TryDequeue x |> shouldEqual null
-
-        testCase "enqueue to ring buffer queue" <| fun () ->
-            let items = List<int>()
-            let q = RingBufferQueue(2)
-            [ 1..40 ] |> List.iter q.Enqueue
-            q.DequeueAll (Action<_>(items.Add))
-            Expect.sequenceEqual items [ 1..40 ] ""
-            
         testCase "send message to self" <| fun () ->
             let mutable count = 0
             use a = new ActorSystem(0)

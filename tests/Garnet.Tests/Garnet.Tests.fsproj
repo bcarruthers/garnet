@@ -7,9 +7,11 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="Assertions.fs" />
     <Compile Include="Coroutines.fs" />
     <Compile Include="Segments.fs" />
     <Compile Include="Entities.fs" />
+    <Compile Include="Collections.fs" />
     <Compile Include="Actors.fs" />
     <Compile Include="Serialization.fs" />
     <Compile Include="Main.fs" />

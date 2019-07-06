@@ -137,7 +137,7 @@ module private NullMessageHandler =
     let handler = new NullMessageHandler() :> IMessageHandler
 
 [<AutoOpen>]
-module MessagingExtensions =
+module MessageHandler =
     type MessageHandler with
         member c.On<'a>(action) =
             c.Subscribe<'a> <| fun e -> 

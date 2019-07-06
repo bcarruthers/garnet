@@ -191,7 +191,7 @@ type Commit = struct end
 
 /// Wrapper over resource lookup with default types for ECS
 type Container() =
-    let types = ResourceLookup()
+    let types = ResourceStore()
     let channels = types.GetResource<Channels>()
     let scheduler = types.GetResource<CoroutineScheduler>()
     let components = types.CreateResource(ComponentStore.create())
@@ -243,7 +243,7 @@ type Container() =
         scheduler.Schedule coroutine
     member c.SetDispatcher dispatcher =
         channels.SetDispatcher dispatcher
-    interface IResourceLookup with
+    interface IResourceStore with
         member c.RegisterResource f = c.RegisterResource f
         member c.AddResource x = c.AddResource x
         member c.TryGetResource<'a>([<Out>] r : byref<_>) = 
