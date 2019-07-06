@@ -2,7 +2,6 @@
 
 Garnet is a lightweight game composition library for F# with entity-component-system (ECS) and actor-like messaging features.
 
-## Example
 ```fsharp
 open Garnet.Ecs
 
@@ -38,6 +37,18 @@ for i = 1 to 10 do
     printfn "%O\n\n%O\n\n" world entity
 ```
 
+## Table of contents
+* [History](#history)
+* [Background](#background)
+* [Goals](#goals)
+* [Building](#building)
+* [Examples](#examples)
+* [Design](#design)
+* [Roadmap](#roadmap)
+* [FAQ](#faq)
+* [License](#license)
+* [Maintainers](#maintainers)
+
 ## History
 
 Garnet emerged from [Triverse](http://cragwind.com/blog/posts/grid-projectiles/), a 2D game under development where players build and command drone fleets in a large tri-grid world. The game serves as a performance testbed and ensures the library meets the actual needs of at least one moderately complex game.
@@ -52,13 +63,11 @@ While ECS focuses on managing shared state, the actor model isolates state into 
 
 - **Lightweight**: Garnet is essentially a simplified in-memory database and messaging system suitable for games. No inheritance, attributes, or interface implementations are required in your code. It's more of a library than a framework or engine, and most of your code shouldn't depend on it.
 
-- **Consistent performance**: Garbage collection spikes can cause dropped frames and unpredictable performance, so Garnet minimizes allocations and helps library users do so too. This generally amounts to use of structs, pooling, and avoiding closures.
+- **Fast**: Garbage collection spikes can cause dropped frames and inconsistent performance, so Garnet minimizes allocations and helps library users do so too. Component storage is data-oriented for fast operations.
 
-- **Generic storage**: Storage should work well for both sequential and sparse data and support generic key types. Entity IDs are typically used as keys, but other types like grid location should be possible as well.
+- **Minimal**: The core library focuses on events, scheduling, and storage, and anything game-specific like physics, rendering, or update loops should be implemented separately.
 
-- **Data-oriented**: Entities and components are stored as a struct of arrays rather than an array of structs, sorted and in blocks of memory, making them suitable for fast iteration and batch operations.
-
-- **Multiple worlds**: In addition to traditional ECS, Garnet provides actor-like messaging for scenarios where multiple ECS worlds are beneficial, such as AI agents or networking.
+- **Complete**: In addition to traditional ECS, Garnet provides actor-like messaging for scenarios where multiple ECS worlds are beneficial, such as AI agents or networking.
 
 ## Building
 
@@ -66,17 +75,180 @@ While ECS focuses on managing shared state, the actor model isolates state into 
 2. Install [FAKE](https://fake.build/fake-gettingstarted.html)
 3. Run build.cmd
 
-## Containers
+## Examples
+
+### Subscribing to events
+
+```fsharp
+[<Struct>] type UpdateTime = { dt : float32 }
+
+// call sub.Dispose() to unsubscribe
+let sub =
+    c.On<UpdateTime> <| fun e ->
+        // [do update here]
+        printfn "%A" e
+```
+
+### Defining systems
+
+```fsharp
+// a system is just a group of related subscriptions,
+// optionally with a name
+module MovementSystem =     
+    // separate methods as needed
+    let registerUpdate (c : Container) =
+        c.On<UpdatePositions> <| fun e ->
+            printfn "%A" e
+    // combine all together
+    let definition =
+        // give a name so we can hot reload
+        Registration.listNamed "Movement" [
+            registerUpdate
+            ]
+```
+
+### Iterating over entities
+
+```fsharp
+let runIter =
+    // first define an iteration callback:
+    // (1) param can be any type or just ignored
+    // (2) use struct record for component types
+    fun param struct(eid : Eid, p : Position, h : Health) ->
+        if h.hp <= 0 then 
+            // [start anim at position]
+            // destroy entity
+            c.Destroy(eid)
+    // iterate over all entities with all components
+    // present (inner join)
+    |> Iter.join3
+    // iterate over container
+    |> Iter.over c
+let healthSub =
+    c.On<DestroyZeroHealth> <| fun e ->
+        runIter()
+```
+
+### Composing systems
+
+```fsharp
+// just a way to further group systems
+module CoreSystems =        
+    let definition =
+        Registration.combine [
+            MovementSystem.definition
+            HashSpaceSystem.definition
+        ]
+```
+
+### Running stack-based coroutines
+
+```fsharp
+let system =
+    c.On<Msg> <| fun e ->
+        printf "2 "
+
+// start a coroutine
+c.Start <| seq {
+    printf "1 "
+    // send message and defer execution until all messages and
+    // coroutines created as a result of this have completed
+    c.Send <| Msg()
+    yield Wait.defer
+    printf "3 "
+    }
+
+// run until completion
+// output: 1 2 3
+c.Run()
+```
+
+### Updating in stages
+
+```fsharp
+// events
+type Update = struct end
+type UpdatePhysicsBodies = struct end
+type UpdateHashSpace = struct end
+
+// systems
+let updateSystem =
+    c.On<Update> <| fun e -> 
+        c.Start <| seq {
+            // using shorthand 'send and defer' to suspend
+            // execution here to achieve ordering of 
+            // sub-updates
+            yield c.Wait <| UpdatePhysicsBodies()
+            yield c.Wait <| UpdateHashSpace()
+        }
+let system1 = 
+    c.On<UpdatePhysicsBodies> <| fun e ->
+        // [update positions]
+        printfn "%A" e
+let system2 = 
+    c.On<UpdateHashSpace> <| fun e ->
+        // [update hash space from positions]
+        printfn "%A" e
+```
+
+### Running time-based coroutines
+
+```fsharp
+// start a coroutine
+c.Start <| seq {
+    for i = 1 to 5 do
+        printf "[%d] " i
+        // yield execution until time units pass
+        yield Wait.time 3
+    }
+
+// simulate update loop
+// output: [1] 1 2 3 [2] 4 5 6 [3] 7 8 9
+for i = 1 to 9 do
+    // increment time units and run pending coroutines
+    c.Step 1
+    c.Run()
+    printf "%d " i
+```
+
+### Creating actors
+
+```fsharp
+// message types
+type Ping = struct end
+type Pong = struct end
+
+// actor definitions
+let a = new ActorSystem()
+a.Register(ActorId 1, fun c ->
+    c.On<Ping> <| fun e -> 
+        printf "ping "
+        e.Respond(Pong())
+    )
+a.Register(ActorId 2, fun c ->
+    c.On<Pong> <| fun e -> 
+        printf "pong "
+    )
+    
+// send a message and run until all complete
+// output: ping pong
+a.Send(ActorId 1, Ping(), sourceId = ActorId 2)
+a.RunAll()
+```
+
+## Design
+
+### Containers
 
 ECS containers provide a useful bundle of functionality for working with shared game state, including event handling, component storage, entity ID generation, coroutine scheduling, and resource resolution.
 
 - **Resources**: Containers store resources such as component lists, ID pools, settings, and any other arbitrary type. You can access resources by type (i.e. service locator pattern) with some limited dependency resolution. This is great for extensibility, but it also introduces new kinds of runtime errors that could not occur with a hardwired approach. Reliance on explicit service locator calls also means dependencies are hidden within implementation code rather than clearly indicated as part of an interface. 
 
-- **Object pooling**: Almost all objects are either pooled within a container or on the stack, so there's little or no GC impact or allocation once maximum load is reached. If needed, warming up or provisioning buffers ahead of time is possible for avoiding GC entirely during gameplay. 
+- **Object pooling**: Avoiding GC generally amounts to use of structs, pooling, and avoiding closures. Almost all objects are either pooled within a container or on the stack, so there's little or no GC impact or allocation once maximum load is reached. If needed, warming up or provisioning buffers ahead of time is possible for avoiding GC entirely during gameplay.
 
 - **Commits**: Certain operations on containers, such as sending events or adding/removing components, are staged until a commit occurs, allowing any running event handlers to observe the original state. Commits occur automatically after all processors have completed handling a list of events.
 
-## Entities
+### Entities
 
 An entity is any identifiable thing in your game which you can attach components to. At minimum, an entity consists only of an entity ID.
 
@@ -86,9 +258,13 @@ An entity is any identifiable thing in your game which you can attach components
 
 - **Partitioning**: Component storage could become inefficient if it grows too sparse (i.e. the average number of occupied elements per segment becomes low). If this is a concern (or you just want to organize your entities), you can optionally use partitions to specify a high bit mask in ID generation. For example, if ship and bullet entities shared the same ID space, they may become mixed over time and the ship components would become sparse. Instead, with separate partitions, both entities would remain dense. Note: this will likely be replaced with groups in the future.
 
-## Components
+- **Generic storage**: Storage should work well for both sequential and sparse data and support generic key types. Entity IDs are typically used as keys, but other types like grid location should be possible as well.
+
+### Components
 
 Components are any arbitrary data type associated with an entity.
+
+- **Data-oriented**: Entities and components are stored as a struct of arrays rather than an array of structs, sorted and in blocks of memory, making them suitable for fast iteration and batch operations.
 
 - **Data types**: Components should ideally be pure data rather than classes with behavior and dependencies. They should typically be structs to avoid jumping around in memory or incurring allocations and garbage collection. Structs should almost always be immutable, but mutable structs (with their gotchas) are possible too.
 
@@ -98,13 +274,13 @@ Components are any arbitrary data type associated with an entity.
 
 - **Adding/removing**: Additions or removals are deferred until a commit occurs. Any code dependent on those operations completing needs to be implemented as a coroutine. Note that you can repeatedly add and remove components for the same entity ID before a commit if needed.
 
-- **Updating**: Unlike additions and removals, updating/replacing an existing component can be done directly at the risk of affecting subsequent subscribers. This way is convenient if the changes are incremental/commutative or there are no other subscribers writing to the component type during the same event.
+- **Updating**: Unlike additions and removals, updating/replacing an existing component can be done directly at the risk of affecting subsequent subscribers. This way is convenient if the changes are incremental/commutative or there are no other subscribers writing to the component type during the same event. You can alternately just use addition if you don't know whether a component is already present.
 
 - **Markers**: Empty (0-byte, e.g. "Marker = struct end") flag types can be defined, in which case only 64-bit masks need to be stored per segment. Markers are an efficient way to define static groups for querying.
 
 - **Limits**: Only a single component of a type is allowed per entity, but there is no hard limit on the total number of different component types used (i.e. there is no fixed-size mask defining which components an entity has).
 
-## Systems
+### Systems
 
 Systems typically subscribe to events and iterate over components, such as updating position based on velocity, but they can do any other kind of processing too. You can optionally name systems to allow hot reloading.
 
@@ -116,7 +292,7 @@ Systems typically subscribe to events and iterate over components, such as updat
 
 - **Event ordering**: For systems that subscribe to the same event and access the same resources or components, you need to consider whether one is dependent on the other and should run first. One way to guarantee ordering is to define individual sub-events for the systems and publish those events in the desired order as part of a coroutine started from the original event (with waits following each event to ensure all subscribers are run before proceeding).
 
-## Actors
+### Actors
 
 While ECS containers provide a simple and fast means of storing and updating shared memory state using a single thread, actors share no common state and communicate only through messages, making them suitable for parallel processing.
 
@@ -149,9 +325,9 @@ While ECS containers provide a simple and fast means of storing and updating sha
 
 - **Why F#?** F# offers conciseness, functional-first defaults like immutability, an algebraic type system, interactive code editing, and pragmatic support for other paradigms like OOP. Strong type safety makes it more likely that code is correct, which is especially helpful for tweaking game code that changes frequently enough to make unit testing impractical.
 
-- **What about performance?** Functional code often involves allocation, which sometimes conflicts with the goal of consistent performance when garbage collection occurs. Part of the reason for this library is to reduce the effort in writing code that minimizes allocation. But for simple games, this is likely a non-issue and you should start with idiomatic code.
+- **What about performance?** Functional code often involves allocation, which sometimes conflicts with the goal of consistent performance when garbage collection occurs. A goal of this library is to reduce the effort in writing code that minimizes allocation. But for simple games, this is likely a non-issue and you should start with idiomatic code.
 
-- **Why use ECS over MVU?** You probably shouldn't start with ECS for a simple game, at least not when initially prototyping, unless you already have a good understanding of where it might be beneficial. MVU avoids a lot of complexity and has stronger type safety and immutability guarantees than ECS, but you may encounter issues if your project has demanding performance requirements or needs more flexibility than it allows. 
+- **Why use ECS over MVU?** You probably shouldn't start with ECS for a simple game, at least not when prototyping, unless you already have a good understanding of where it might be beneficial. MVU avoids a lot of complexity and has stronger type safety and immutability guarantees than ECS, but you may encounter issues if your project has demanding performance requirements or needs more flexibility than it allows. 
 
 ## License
 This project is licensed under the [MIT license](https://github.com/bcarruthers/garnet/blob/master/LICENSE).
