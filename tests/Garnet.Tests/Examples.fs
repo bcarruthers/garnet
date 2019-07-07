@@ -62,7 +62,7 @@ let runIter =
     // (2) use struct record for component types
     fun param struct(eid : Eid, p : Position, h : Health) ->
         if h.hp <= 0 then 
-            // [start anim at position]
+            // [start animation at position]
             // destroy entity
             c.Destroy(eid)
     // iterate over all entities with all components
@@ -83,7 +83,7 @@ module CoreSystems =
             HashSpaceSystem.definition
         ]
 
-// Running stack-based coroutines
+// Running stack-like coroutines
 
 let system =
     c.On<Msg> <| fun e ->

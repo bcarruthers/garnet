@@ -1,15 +1,3 @@
-//#r "paket:
-//nuget FSharp.Core 4.5.0.0
-//nuget Fake.DotNet
-//nuget Fake.DotNet.AssemblyInfoFile
-//nuget Fake.DotNet.Cli
-//nuget Fake.Core.Target
-//nuget Fake.Core.ReleaseNotes
-//nuget Fake.IO.FileSystem
-//nuget Fake.IO.Zip
-//nuget Fake.DotNet.Paket
-//nuget Fake.Core.Xml //"
-//#load "./.fake/build.fsx/intellisense.fsx"
 #r "paket:
 nuget Fake.IO.FileSystem
 nuget Fake.DotNet.MSBuild
@@ -24,6 +12,8 @@ nuget Fake.Core.Target //"
   #r "Facades/netstandard"
 #endif
 
+open System
+open System.IO
 open Fake
 open Fake.Core
 open Fake.DotNet
@@ -32,17 +22,21 @@ open Fake.IO.Globbing.Operators
 open Fake.Core.TargetOperators
 
 let title = "Garnet"
-let description = "Game composition library"
+let summary = "Garnet is a lightweight game composition library for F# with entity-component-system (ECS) and actor-like messaging features."
+let description = "F# game composition library"
 let release = ReleaseNotes.load "RELEASE_NOTES.md"
-let tags = "game ecs actor"
+let tags = "fsharp game ecs actor"
 let authors = "Ben Carruthers"
 let owners = "Ben Carruthers"
 let projectUrl = "https://github.com/bcarruthers/garnet"
 let copyright = "Copyright © 2019 Ben Carruthers"
-let buildDir = "./build/"
+let license = "MIT"
+let buildDir = Path.getFullName "./artifacts/"
 let libDir = buildDir + "lib/"
 let testsDir = buildDir + "tests/"
 let samplesDir = buildDir + "samples/"
+let nugetDir = buildDir + "nuget/"
+let configuration = DotNet.BuildConfiguration.Release
 
 Target.create "Clean" (fun _ ->
     Shell.cleanDir buildDir
@@ -87,16 +81,38 @@ Target.create "BuildSamples" (fun _ ->
     |> Trace.logItems "TestBuild-Output: "
 )
 
-let runTests() =
+Target.create "Tests" (fun _ ->
     let result = DotNet.exec id (testsDir + "Garnet.Tests.dll") "--summary"
     printfn "%A" result
-
-Target.create "Tests" (fun _ ->
-    runTests()    
 )
 
-Target.create "TestsOnly" (fun _ ->
-    runTests()    
+Target.create "Pack" (fun _ ->
+    let nugetProjects = !! "src/**/*.??proj"
+    for proj in nugetProjects do
+        DotNet.pack (fun p ->
+            { p with
+                OutputPath = Some nugetDir
+                Configuration = configuration
+                NoBuild = true
+                MSBuildParams = { 
+                    p.MSBuildParams with
+                        Properties =
+                        [
+                            "Version", release.NugetVersion
+                            "PackageReleaseNotes", (String.concat Environment.NewLine release.Notes) 
+                            "Title", title
+                            "PackageDescription", summary
+                            "PackageTags", tags
+                            "Copyright", copyright
+                            "Authors", authors
+                            "Owners", owners
+                            "Description", description
+                            "RepositoryUrl", projectUrl
+                            "PackageLicenseExpression", license
+                        ]
+                }
+            }
+        ) proj
 )
 
 Target.create "Default" (fun _ ->
@@ -109,6 +125,7 @@ Target.create "Default" (fun _ ->
     ==> "BuildTests"
     ==> "BuildSamples"
     ==> "Tests"
+    ==> "Pack"
     ==> "Default"
 
 Target.runOrDefault "Default"

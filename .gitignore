@@ -16,6 +16,8 @@
 packages/
 paket-files/
 build/
+publish/
+artifacts/
 BenchmarkDotNet.Artifacts/
 bin
 obj

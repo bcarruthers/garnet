@@ -63,7 +63,7 @@ While ECS focuses on managing shared state, the actor model isolates state into 
 
 - **Lightweight**: Garnet is essentially a simplified in-memory database and messaging system suitable for games. No inheritance, attributes, or interface implementations are required in your code. It's more of a library than a framework or engine, and most of your code shouldn't depend on it.
 
-- **Fast**: Garbage collection spikes can cause dropped frames and inconsistent performance, so Garnet minimizes allocations and helps library users do so too. Component storage is data-oriented for fast operations.
+- **Fast**: Garbage collection spikes can cause dropped frames and inconsistent performance, so Garnet minimizes allocations and helps library users do so too. Component storage is data-oriented for fast iteration.
 
 - **Minimal**: The core library focuses on events, scheduling, and storage, and anything game-specific like physics, rendering, or update loops should be implemented separately.
 
@@ -116,7 +116,7 @@ let runIter =
     // (2) use struct record for component types
     fun param struct(eid : Eid, p : Position, h : Health) ->
         if h.hp <= 0 then 
-            // [start anim at position]
+            // [start animation at position]
             // destroy entity
             c.Destroy(eid)
     // iterate over all entities with all components
@@ -141,7 +141,7 @@ module CoreSystems =
         ]
 ```
 
-### Running stack-based coroutines
+### Running stack-like coroutines
 
 ```fsharp
 let system =
@@ -286,7 +286,9 @@ Systems typically subscribe to events and iterate over components, such as updat
 
 - **Events**: Events can be arbitrary types, but preferably structs. Subscribers such as systems receive batches of events with no guaranteed ordering among the subscribers. Any additional events raised during event handling are run after all the original event handlers complete, thereby avoiding any possibility of reentrancy but complicating synchronous behavior. Also note that events intentionally decouple publishers and subscribers, and since dispatching events is typically not synchronous within the ECS, it can be difficult to trace the source of events when something goes wrong (no callstack).
 
-- **Coroutines**: Coroutines allow capturing state and continuing processing for longer than the handling of a single event. They can be used to achieve synchronous behavior despite the asynchronous nature of event handling. This is one of the few parts of the code which incurs allocation.
+- **Coroutines**: Coroutines allow capturing state and continuing processing for longer than the handling of a single event. They are implemented as sequences and can be used to achieve synchronous behavior despite the asynchronous nature of event handling. This is one of the few parts of the code which incurs allocation.
+
+- **Scheduling**: Coroutines run until they encounter a yield statement, which can tell the scheduler to either wait for a time duration or to wait until all nested processing has completed. Nested processing refers to any coroutines created as a result of events sent by the current coroutine, allowing a stack-like flow and ordering of events.
 
 - **Multithreading**: It's often useful to run physics in parallel with other processing that doesn't depend on its output, but the event system currently has no built-in features to facilitate multiple threads reading or writing. Instead, parallel execution is implemented at a higher level actor system, or you can implement your own multithreaded systems.
 
