@@ -77,7 +77,7 @@ Target.create "BuildTests" (fun _ ->
 
 Target.create "BuildSamples" (fun _ ->
   !! "samples/**/*.fsproj"
-    |> MSBuild.runRelease id samplesDir "Build"
+    |> MSBuild.runRelease id samplesDir "Build,Restore"
     |> Trace.logItems "TestBuild-Output: "
 )
 

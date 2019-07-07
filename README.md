@@ -72,8 +72,8 @@ While ECS focuses on managing shared state, the actor model isolates state into 
 ## Building
 
 1. Install [.NET Core SDK](https://dotnet.microsoft.com/download)
-2. Install [FAKE](https://fake.build/fake-gettingstarted.html)
-3. Run build.cmd
+2. Install [VS or build tools](https://visualstudio.microsoft.com/downloads) (2017 or later)
+2. Run build.cmd
 
 ## Examples
 
