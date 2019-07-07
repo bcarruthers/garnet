@@ -1,16 +1,4 @@
-#r "paket:
-nuget Fake.IO.FileSystem
-nuget Fake.DotNet.MSBuild
-nuget Fake.DotNet.Cli
-nuget Fake.DotNet.AssemblyInfoFile
-nuget Fake.Core.ReleaseNotes
-nuget Fake.Core.Target //"
-#load "./.fake/build.fsx/intellisense.fsx"
-
-// https://github.com/ionide/ionide-vscode-fsharp/issues/839#issuecomment-396296095
-#if !FAKE
-  #r "Facades/netstandard"
-#endif
+#load ".fake/build.fsx/intellisense.fsx"
 
 open System
 open System.IO
@@ -18,6 +6,7 @@ open Fake
 open Fake.Core
 open Fake.DotNet
 open Fake.IO
+open Fake.IO.FileSystemOperators
 open Fake.IO.Globbing.Operators
 open Fake.Core.TargetOperators
 
@@ -39,7 +28,10 @@ let nugetDir = buildDir + "nuget/"
 let configuration = DotNet.BuildConfiguration.Release
 
 Target.create "Clean" (fun _ ->
-    Shell.cleanDir buildDir
+    !! "**/bin"
+    ++ "**/obj"
+    ++ buildDir
+    |> Shell.cleanDirs 
 )
 
 Target.create "AssemblyInfo" (fun _ ->
@@ -63,9 +55,17 @@ Target.create "AssemblyInfo" (fun _ ->
     )
 )
 
+// needed to restore netstandard, etc
+Target.create "RestoreSln" (fun _ ->
+  !! "*.sln"
+    |> MSBuild.runRelease id libDir "Restore"
+    |> Trace.logItems "RestoreSln-Output: "
+)
+
+// use default output folder because pack expects DLL there
 Target.create "BuildLibrary" (fun _ ->
   !! "src/**/*.fsproj"
-    |> MSBuild.runRelease id libDir "Build"
+    |> MSBuild.runWithDefaults "Build"
     |> Trace.logItems "LibraryBuild-Output: "
 )
 
@@ -121,6 +121,7 @@ Target.create "Default" (fun _ ->
 
 "Clean"
     ==> "AssemblyInfo"
+    ==> "RestoreSln"
     ==> "BuildLibrary"
     ==> "BuildTests"
     ==> "BuildSamples"

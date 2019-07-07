@@ -308,7 +308,7 @@ While ECS containers provide a simple and fast means of storing and updating sha
 
 - **Message ordering**: Messages sent from one actor to another are guaranteed to arrive in the order they were sent, but they may be interleaved with messages arriving from other actors. In general, multiple actors and parallelism can introduce complexity similar to the use of microservices, which address scaleability but can introduce race conditions and challenges in synchronization.
 
-- **Multithreading**: You can designate actors to run on either the main thread or a background thread. Actors are run whenever outstanding messages arrive, resembling task-based parallelism. In addition to running actors, the main thread also delivers messages among actors. Background actors are currently run using a fixed pool of worker threads.
+- **Multithreading**: You can designate actors to run on either the main thread (for UI if needed) or a background thread. Actors run when a batch of messages is delivered, resembling task-based parallelism. In addition to running designated actors, the main thread also delivers messages among actors, although this could change in the future if it becomes a bottleneck. Background actors currently run using a fixed pool of worker threads.
 
 ## Roadmap
 
@@ -321,7 +321,7 @@ While ECS containers provide a simple and fast means of storing and updating sha
 - Urho scripts with hot reloading
 - Extensions or samples for networking and compression
 - Fault tolerance in actor system
-- Tighten public API
+- Guidance for managing game states
 
 ## FAQ
 
