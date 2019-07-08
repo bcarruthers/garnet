@@ -1,4 +1,4 @@
-﻿namespace Garnet.Samples.Common
+﻿namespace Garnet.Samples
 
 // The purpose of this is to avoid equality operator allocations
 // https://github.com/dotnet/fsharp/issues/526

@@ -16,6 +16,7 @@ NUGET
       System.Security.Cryptography.Csp (>= 4.3) - restriction: && (< net35) (>= netstandard1.3)
       System.Threading (>= 4.3) - restriction: && (< net35) (>= netstandard1.3)
     MonoGame.Framework.DesktopGL (3.7.1.189)
+    MonoGame.Framework.DesktopGL.Core (3.7.0.7)
     runtime.debian.8-x64.runtime.native.System.Security.Cryptography.OpenSsl (4.3.3) - restriction: || (&& (< monoandroid) (< net35) (>= netstandard2.0) (< xamarinios) (< xamarinmac)) (&& (< net35) (>= net461) (>= netstandard1.6))
     runtime.debian.9-x64.runtime.native.System.Security.Cryptography.OpenSsl (4.3.3) - restriction: || (&& (< monoandroid) (< net35) (>= netstandard2.0) (< xamarinios) (< xamarinmac)) (&& (< net35) (>= net461) (>= netstandard1.6))
     runtime.fedora.23-x64.runtime.native.System.Security.Cryptography.OpenSsl (4.3.3) - restriction: || (&& (< monoandroid) (< net35) (>= netstandard2.0) (< xamarinios) (< xamarinmac)) (&& (< net35) (>= net461) (>= netstandard1.6))

@@ -8,6 +8,8 @@
 *.orig
 *.vsp
 *.psess
+*.vspx
+*.stackdump
 
 .fake/
 .vs/

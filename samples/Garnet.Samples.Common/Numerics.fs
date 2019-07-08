@@ -1,4 +1,4 @@
-﻿module Garnet.Samples.Common.Numerics
+﻿module Garnet.Samples.Numerics
 
 [<Struct>]
 type Vec2f = {

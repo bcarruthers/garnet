@@ -39,7 +39,7 @@ Target.create "AssemblyInfo" (fun _ ->
         "src/Garnet", "Garnet"
         "tests/Garnet.Tests", "Garnet.Tests"
         "samples/Garnet.Samples.Common", "Garnet.Samples.Common"
-        "samples/Garnet.Samples.Flocking", "Garnet.Samples.Flocking"
+        "samples/Garnet.Samples.MonoGame", "Garnet.Samples.MonoGame"
     ]
     |> List.iter (fun (path, name) ->
         let filename = path + "/AssemblyInfo.fs"
@@ -57,9 +57,7 @@ Target.create "AssemblyInfo" (fun _ ->
 
 // needed to restore netstandard, etc
 Target.create "RestoreSln" (fun _ ->
-  !! "*.sln"
-    |> MSBuild.runRelease id libDir "Restore"
-    |> Trace.logItems "RestoreSln-Output: "
+    DotNet.restore id "Garnet.sln"
 )
 
 // use default output folder because pack expects DLL there
@@ -77,7 +75,7 @@ Target.create "BuildTests" (fun _ ->
 
 Target.create "BuildSamples" (fun _ ->
   !! "samples/**/*.fsproj"
-    |> MSBuild.runRelease id samplesDir "Build,Restore"
+    |> MSBuild.runRelease id samplesDir "Build"
     |> Trace.logItems "TestBuild-Output: "
 )
 

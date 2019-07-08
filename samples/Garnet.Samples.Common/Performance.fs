@@ -1,4 +1,4 @@
-﻿module Garnet.Samples.Common.Performance
+﻿module Garnet.Samples.Performance
 
 open System
 

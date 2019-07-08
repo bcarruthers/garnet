@@ -1,4 +1,4 @@
-﻿module Garnet.Samples.Flocking.MonoGameWrapper
+﻿module Garnet.Samples.MonoGame.MonoGameWrapper
 
 open System
 open System.IO
@@ -6,11 +6,10 @@ open System.Collections.Generic
 open Microsoft.Xna.Framework
 open Microsoft.Xna.Framework.Graphics
 open Garnet.Ecs
-open Garnet.Samples.Common.Comparisons
-open Garnet.Samples.Common.Performance
-open Garnet.Samples.Common.Numerics
-open Garnet.Samples.Flocking.Domain
-open Garnet.Samples.Flocking.Systems
+open Garnet.Samples.Comparisons
+open Garnet.Samples.Performance
+open Garnet.Samples.Numerics
+open Garnet.Samples.FrameworkTypes
 
 module Conversion =
     let toVector v =
@@ -91,15 +90,13 @@ module SpriteSystems =
             registerDrawSprites
             ]
 
-module GameSystems =
+module MonoGameSystems =
     let definition = 
-        Registration.combine [ 
-            CoreSystems.definition
-            ViewSystems.definition
+        Registration.combine [
             SpriteSystems.definition
             ]
 
-type SampleGame(settings) as c =
+type SampleGame(registration) as c =
     inherit Game()
     do c.Content.RootDirectory <- "."
     let graphics = new GraphicsDeviceManager(c)
@@ -108,11 +105,13 @@ type SampleGame(settings) as c =
     override c.Initialize() =
         let w = 800
         let h = 600
+        // init world
         world.AddResource<Game> c
-        world.AddResource<WorldSettings> settings
         world.SetValue { viewSize = Vec2f.init (float32 w) (float32 h) }
-        Registration.register GameSystems.definition world |> ignore
+        Registration.register MonoGameSystems.definition world |> ignore
+        Registration.register registration world |> ignore
         world.Run <| Reset()
+        // init mg
         graphics.SynchronizeWithVerticalRetrace <- false
         graphics.PreferredBackBufferWidth <- w
         graphics.PreferredBackBufferHeight <- h
