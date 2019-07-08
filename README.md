@@ -1,5 +1,7 @@
 # Garnet
 
+[![Build status](https://ci.appveyor.com/api/projects/status/g82kak7btxp48rnd?svg=true)](https://ci.appveyor.com/project/bcarruthers/garnet)
+
 Garnet is a lightweight game composition library for F# with entity-component-system (ECS) and actor-like messaging features.
 
 ```fsharp
