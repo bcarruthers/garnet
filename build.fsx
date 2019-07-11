@@ -60,23 +60,27 @@ Target.create "RestoreSln" (fun _ ->
     DotNet.restore id "Garnet.sln"
 )
 
+let build outputDir = 
+    DotNet.build (fun p -> { 
+        p with
+            OutputPath = Some outputDir
+            Configuration = configuration
+    })
+
 // use default output folder because pack expects DLL there
 Target.create "BuildLibrary" (fun _ ->
-  !! "src/**/*.fsproj"
-    |> MSBuild.runWithDefaults "Build"
-    |> Trace.logItems "LibraryBuild-Output: "
+    !! "src/**/*.fsproj"
+    |> Seq.iter (DotNet.build id)
 )
 
 Target.create "BuildTests" (fun _ ->
-  !! "tests/**/*.fsproj"
-    |> MSBuild.runRelease id testsDir "Build"
-    |> Trace.logItems "TestBuild-Output: "
+    !! "tests/**/*.fsproj"
+    |> Seq.iter (build testsDir)
 )
 
 Target.create "BuildSamples" (fun _ ->
-  !! "samples/**/*.fsproj"
-    |> MSBuild.runRelease id samplesDir "Build"
-    |> Trace.logItems "TestBuild-Output: "
+    !! "samples/**/*.fsproj"
+    |> Seq.iter (build samplesDir)
 )
 
 Target.create "Tests" (fun _ ->

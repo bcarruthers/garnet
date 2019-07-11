@@ -176,7 +176,7 @@ Only a single component of a type is allowed per entity, but there is no hard li
 
 ### Iteration
 
-You can iterate over entities with specific combinations of components using joins/queries. In this way you could define a system that updates all entities with a position and velocity, but iteration would skip over any entities with only a position and not velocity. Currently, only a fixed set of predefined joins are provided rather than allowing arbitrary queries.
+You can iterate over entities with specific combinations of components using joins. In this way you could define a system that updates all entities with a position and velocity, and iteration would skip over any entities with only a position and not velocity. Currently only a fixed set of predefined joins are provided rather than allowing arbitrary queries.
 
 ```fsharp
 let runIter =
@@ -198,20 +198,28 @@ let healthSub =
         runIter()
 ```
 
-### Adding/removing
+### Adding
 
-Additions or removals are deferred until a commit occurs. Any code dependent on those operations completing needs to be implemented as a coroutine. Note that you can repeatedly add and remove components for the same entity ID before a commit if needed.
+Additions are deferred until a commit occurs, so any code dependent on those operations completing needs to be implemented as a coroutine.
 
 ```fsharp
 let e = c.Get(Eid 100)
 e.Add<Position> { x = 1.0f; y = 2.0f }
+// change not yet visible
+```
+
+### Removing
+
+Like additions, removals are also deferred until commit. Note that you can repeatedly add and remove components for the same entity ID before a commit if needed.
+
+```fsharp
 e.Remove<Velocity>()
 // change not yet visible
 ```
 
 ### Updating
 
-Unlike additions and removals, updating/replacing an existing component can be done directly at the risk of affecting subsequent subscribers. This way is convenient if the changes are incremental/commutative or there are no other subscribers writing to the component type during the same event. You can alternately just use addition if you don't know whether a component is already present.
+Unlike additions and removals, updating/replacing an existing component can be done directly at the risk of affecting subsequent subscribers. This way is convenient if the update operation is commutative or there are no other subscribers writing to the same component type during the same event. You can alternately just use addition if you don't know whether a component is already present.
 
 ```fsharp
 let e = c.Get(Eid 100)
@@ -257,7 +265,7 @@ c.Run()
 
 ### Events
 
-Events can be arbitrary types, but preferably structs. Subscribers such as systems receive batches of events with no guaranteed ordering among the subscribers. Any additional events raised during event handling are run after all the original event handlers complete, thereby avoiding any possibility of reentrancy but complicating synchronous behavior. 
+Like components, you can use any arbitrary type for an event, but structs are generally preferable to avoid GC. When events are published, subscribers receive batches of events with no guaranteed ordering among the subscribers or event types. Any additional events raised during event handling are run after all the original event handlers complete, thereby avoiding any possibility of reentrancy but complicating synchronous behavior. 
 
 ```fsharp
 [<Struct>] type UpdateTime = { dt : float32 }
@@ -272,7 +280,7 @@ let sub =
 c.Send { dt = 0.1f }
 ```
 
-Also note that events intentionally decouple publishers and subscribers, and since dispatching events is typically not synchronous within the ECS, it can be difficult to trace the source of events when something goes wrong (no callstack).
+Events intentionally decouple publishers and subscribers, and since dispatching events is typically not synchronous within the ECS, it can be difficult to trace the source of events when something goes wrong (no callstack).
 
 ### Coroutines
 
@@ -411,7 +419,7 @@ It's useful to wrap a container within an actor, where incoming messages to the 
 
 ### Replay debugging
 
-If you can write logic where your game state is fully determined by the sequence of incoming messages, you can log these messages and replay them to diagnose bugs. This works best if you can isolate the problem to a single actor, such as observing incorrect state or incorrect outgoing messages given a reasonable input sequence.
+If you can write logic where your game state is fully determined by the sequence of incoming messages, you can log these messages and replay them to diagnose bugs. This works best if you can isolate the problem to a single actor, such as observing incorrect state or incorrect outgoing messages given a correct input sequence.
 
 ### Message ordering
 
@@ -425,15 +433,28 @@ You can designate actors to run on either the main thread (for UI if needed) or 
 
 How does Garnet integrate with frameworks or engines like Unity, MonoGame, or UrhoSharp? You have a few options depending on how much you want to depend on Garnet, your chosen framework, and your own code. This approach also works for integrating narrower libraries like physics or networking.
 
-### Abstracting the framework
+### Abstracting framework calls
 
-You can choose to insulate your code from the framework (e.g. MonoGame) at the cost of more effort building an abstraction layer, less power, and some overhead in marshalling data. You have several options for defining the abstraction layer:
+When you need to call the framework (e.g. MonoGame) from your code, you can choose to insulate your code from the framework with an abstraction layer. This reduces your dependency on it, but it takes more effort and may result in less power to use framework-specific features and more overhead in marshaling data. If you decide to abstract, you have several options for defining the abstraction layer:
 
 - **Services**: Register an interface for a subsystem and provide an implemention for the specific framework, e.g. *ISpriteRenderer* with *MonoGameSpriteRenderer*. This makes sense if you want synchronous calls or an explicit interface.
 
 - **Events**: Define interface event types and framework-specific systems which subscribe to them, e.g. a sprite rendering system subscribing to *DrawSprite* events. This way is more decoupled, but the interface may not be so clear.
 
 - **Components**: Define interface component types and implement framework-specific systems which iterate over them, e.g. a sprite rendering system which iterates over entities with a *Sprite* component. 
+
+### Sending framework events
+
+For the reverse direction, when you want the framework to call your code, you can simply send interface event types and run the container or actors.
+
+```fsharp
+    let world = Container()
+    // [configure container here]
+    override c.Update gt = 
+        world.Run { deltaTime = gt.ElapsedGameTime }
+    override c.Draw gameTime = 
+        world.Run <| Draw()
+```
 
 ### Code organization
 
