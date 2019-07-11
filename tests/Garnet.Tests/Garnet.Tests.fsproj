@@ -9,8 +9,10 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Assertions.fs" />
+    <Compile Include="Registry.fs" />
     <Compile Include="Coroutines.fs" />
     <Compile Include="Segments.fs" />
+    <Compile Include="Components.fs" />
     <Compile Include="Entities.fs" />
     <Compile Include="Collections.fs" />
     <Compile Include="Actors.fs" />

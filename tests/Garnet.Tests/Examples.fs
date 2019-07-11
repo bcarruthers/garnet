@@ -10,11 +10,8 @@ type UpdatePositions = struct end
 type DestroyZeroHealth = struct end
 type EnemyMarker = struct end
 
-[<Struct>]
-type Position = {
-    x : float32
-    y : float32
-}
+[<Struct>] type Position = { x : float32; y : float32 }
+[<Struct>] type Velocity = { vx : float32; vy : float32 }
 
 [<Struct>]
 type Health = {
@@ -67,9 +64,9 @@ let runIter =
             c.Destroy(eid)
     // iterate over all entities with all components
     // present (inner join)
-    |> Iter.join3
+    |> Join.iter3
     // iterate over container
-    |> Iter.over c
+    |> Join.over c
 let healthSub =
     c.On<DestroyZeroHealth> <| fun e ->
         runIter()
@@ -170,14 +167,20 @@ a.Register(ActorId 2, fun c ->
 a.Send(ActorId 1, Ping(), sourceId = ActorId 2)
 a.RunAll()
 
-
-
 // Subscribing to event batch
 
 [<Struct>] type AddShip = { x : float32; y : float32 }
 
 let batchSub =
-    c.Subscribe<AddShip> <| fun list ->
+    c.OnAll<AddShip> <| fun list ->
         for e in list do
             // [do update here]
             printfn "%A" e
+
+// Creating an entity
+
+let entity = 
+    c.Create()
+        .With({ x = 10.0f; y = 5.0f })
+        .With({ vx = 1.0f; vy = 2.0f })
+        

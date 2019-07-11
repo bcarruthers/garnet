@@ -225,12 +225,12 @@ module Systems =
                         directionToNeighbor = Vec2f.divideOrZero distance offset
                         distance = distance
                         }
-            |> Iter.join4
-            |> Iter.over c
+            |> Join.iter4
+            |> Join.over c
         
         let createForceCalculator (c : Container) =
             let calc = 
-                let settings = c.GetResource<WorldSettings>()
+                let settings = c.GetInstance<WorldSettings>()
                 Forces.getCalculator settings.steering
             let neighbors = List<_>()
             let collect = iterNeighbors neighbors.Add c
@@ -258,8 +258,8 @@ module Systems =
                         }
                     |> Vec2f.multiply veh.maxSpeed
                     |> Heading.fromVelocity
-                |> Iter.update5
-                |> Iter.over c)
+                |> Join.update5
+                |> Join.over c)
             Disposable.list [
                 c.On<Update> <| fun e ->
                     update.Value e
@@ -268,7 +268,7 @@ module Systems =
         let registerReset (c : Container) =
             c.On<Reset> <| fun e ->
                 c.DestroyAll()
-                let settings = c.GetResource<WorldSettings>()
+                let settings = c.GetInstance<WorldSettings>()
                 let rand = Random(settings.seed)
                 let nextCoord() = float32 (rand.NextDouble() - 0.5) * settings.spawnRange
                 for i = 1 to settings.vehicleCount do
@@ -285,22 +285,22 @@ module Systems =
                     let r = { lifespan = ls.lifespan - e.deltaTime }
                     if ls.lifespan <= 0.0f then c.Destroy eid
                     r
-                |> Iter.update2
-                |> Iter.over c)
+                |> Join.update2
+                |> Join.over c)
 
         let registerUpdatePosition (c : Container) =
             c.On<Update> <| (
                 fun e struct(p : Position, h : Heading) ->
                     { pos = Heading.getNextPosition e.deltaTime h p.pos }
-                |> Iter.update2
-                |> Iter.over c)
+                |> Join.update2
+                |> Join.over c)
 
         let registerUpdateRotation (c : Container) =
             c.On<Update> (
                 fun e struct(r : Rotation, v : AngularVelocity) ->
                     { radians = r.radians + e.deltaTime * v.rotationSpeed }
-                |> Iter.update2
-                |> Iter.over c)
+                |> Join.update2
+                |> Join.over c)
         
         let registerTrailEmission (c : Container) =
             c.On<Update> (
@@ -311,11 +311,11 @@ module Systems =
                         .With({ radians = Vec2f.radians h.direction })
                         .With({ lifespan = 0.6f })
                         .Add(Trail())
-                |> Iter.join4
-                |> Iter.over c)
+                |> Join.iter4
+                |> Join.over c)
 
         let registerDefaultSettings (c : Container) =
-            c.RegisterResource <| fun () -> WorldSettings.settings
+            c.Register <| fun () -> WorldSettings.settings
             Disposable.empty
 
         let definition =
@@ -351,8 +351,8 @@ module Systems =
                         size = 0.1f
                         color = Team.toColor team
                         }
-                |> Iter.join4
-                |> Iter.over c)
+                |> Join.iter4
+                |> Join.over c)
 
         let registerTrailSprites (c : Container) =
             let drawSprite = c.GetSender<Sprite>()
@@ -365,8 +365,8 @@ module Systems =
                         size = ls.lifespan * 0.3f
                         color = Team.toColor team |> Rgba.multiplyAlpha (ls.lifespan * 0.3f)
                         }
-                |> Iter.join5
-                |> Iter.over c)
+                |> Join.iter5
+                |> Join.over c)
 
         let definition =
             Registration.listNamed "View" [
@@ -377,7 +377,7 @@ module Systems =
     let test() =
         let c = Container()    
         CoreSystems.definition.register c |> ignore
-        c.AddResource WorldSettings.settings//{ settings with vehicleCount = 10 }
+        c.RegisterInstance WorldSettings.settings//{ settings with vehicleCount = 10 }
         c.Run <| Reset()
         for i = 1 to 10 do
             c.Run <| { Update.deltaTime = 0.1f }

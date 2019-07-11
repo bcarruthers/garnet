@@ -86,7 +86,7 @@ module Registration =
         then system.register c
         else
             // unregister any existing with name
-            let lookup = c.GetResource<RegistrationLookup>()
+            let lookup = c.GetInstance<RegistrationLookup>()
             lookup.UnregisterAny system.registeredName
             // create new registration
             let sub = system.register c

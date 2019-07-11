@@ -50,15 +50,15 @@ type TextureSet() =
 
 module SpriteSystems =
     let registerSpriteBatch (c : Container) =
-        c.RegisterResource<SpriteBatch> <| fun () ->
-            let game = c.GetResource<Game>()
+        c.Register<SpriteBatch> <| fun () ->
+            let game = c.GetInstance<Game>()
             new SpriteBatch(game.GraphicsDevice)            
         Disposable.empty
 
     let registerTextureSet (c : Container) =
-        c.RegisterResource<TextureSet> <| fun () ->
+        c.Register<TextureSet> <| fun () ->
             let assetsPath = "assets/"
-            let game = c.GetResource<Game>()
+            let game = c.GetInstance<Game>()
             let ts = TextureSet()
             ts.Add(game.GraphicsDevice, Triangle, assetsPath + "triangle.png", Vector2(0.3333f, 0.5f))
             ts.Add(game.GraphicsDevice, Hex, assetsPath + "hex.png", Vector2(0.3333f, 0.5f))
@@ -67,14 +67,14 @@ module SpriteSystems =
         Disposable.empty
 
     let registerDrawSprites (c : Container) =
-        c.Subscribe<Sprite> <| fun list ->
+        c.OnAll<Sprite> <| fun list ->
             let zoom = 1.0f
-            let vs = c.GetValue<ViewSize>()
-            let sb = c.GetResource<SpriteBatch>()
-            let tileSet = c.GetResource<TextureSet>()
+            let vs = c.GetInstance<ref<ViewSize>>()
+            let sb = c.GetInstance<SpriteBatch>()
+            let tileSet = c.GetInstance<TextureSet>()
             let xf = 
                 Matrix.CreateScale(float32 zoom) *
-                Matrix.CreateTranslation(Vector3(vs.viewSize.x * 0.5f, vs.viewSize.y * 0.5f, 0.0f))
+                Matrix.CreateTranslation(Vector3(vs.Value.viewSize.x * 0.5f, vs.Value.viewSize.y * 0.5f, 0.0f))
             sb.Begin(
                 samplerState = SamplerState.LinearClamp, 
                 blendState = BlendState.Additive,
@@ -106,8 +106,8 @@ type SampleGame(registration) as c =
         let w = 800
         let h = 600
         // init world
-        world.AddResource<Game> c
-        world.SetValue { viewSize = Vec2f.init (float32 w) (float32 h) }
+        world.RegisterInstance<Game> c
+        world.Register(fun () -> ref { viewSize = Vec2f.init (float32 w) (float32 h) })
         Registration.register MonoGameSystems.definition world |> ignore
         Registration.register registration world |> ignore
         world.Run <| Reset()

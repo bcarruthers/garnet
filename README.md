@@ -24,8 +24,8 @@ let system =
             x = p.x + v.vx * e.dt
             y = p.y + v.vy * e.dt
             }
-        |> Iter.update2
-        |> Iter.over world)
+        |> Join.update2
+        |> Join.over world)
 
 // add an entity to world
 let entity = 
@@ -83,16 +83,30 @@ While ECS focuses on managing shared state, the actor model isolates state into 
 
 ECS containers provide a useful bundle of functionality for working with shared game state, including event handling, component storage, entity ID generation, coroutine scheduling, and resource resolution.
 
-### Resources
-
-Containers store resources such as component lists, ID pools, settings, and any other arbitrary type. You can access resources by type with some limited dependency resolution.
-
 ```fsharp
-c.RegisterResource(fun () -> defaultWorldSettings)
-let settings = c.GetResource<WorldSettings>()
+// create a container/world
+let c = Container()
 ```
 
-This kind of service locator is useful for extensibility, but it also introduces new kinds of runtime errors that could not occur with a hardwired approach, plus it hides dependencies within implementation code rather than part of a public signature.
+### Registry
+
+Containers store single instances of types such as component lists, ID pools, settings, and any other arbitrary type. You can access instances by type, with optional lazy resolution. This is the service locator (anti-)pattern.
+
+```fsharp
+// option 1: add specific instance
+c.RegisterInstance(defaultWorldSettings)
+// option 2: register a factory
+c.Register(fun () -> defaultWorldSettings)
+// resolve type
+let settings = c.GetInstance<WorldSettings>()
+```
+
+To access value types you can use a reference cell:
+
+```fsharp
+c.Register(fun () -> ref { zoomLevel = 0.5f })
+let zoom = c.GetInstance<ref<Zoom>>()
+```
 
 ### Object pooling
 
@@ -100,7 +114,7 @@ Avoiding GC generally amounts to use of structs, pooling, and avoiding closures.
 
 ### Commits
 
-Certain operations on containers, such as sending events or adding/removing components, are staged until a commit occurs, allowing any running event handlers to observe the original state. Commits occur automatically after all processors have completed handling a list of events, so you typically shouldn't need to explicitly commit.
+Certain operations on containers, such as sending events or adding/removing components, are staged until a commit occurs, allowing any running event handlers to observe the original state. Commits occur automatically after all subscribers have completed handling a list of events, so you typically shouldn't need to explicitly commit.
 
 ```fsharp
 // create an entity
@@ -137,11 +151,7 @@ Storage should work well for both sequential and sparse data and support generic
 
 ## Components
 
-Components are any arbitrary data type associated with an entity.
-
-### Data-oriented
-
-Entities and components are stored as a struct of arrays rather than an array of structs, sorted and in blocks of memory, making them suitable for fast iteration and batch operations.
+Components are any arbitrary data type associated with an entity. Combined with systems that operate on them, components provide a way to specify behavior or capabilities of entities.
 
 ### Data types
 
@@ -150,11 +160,17 @@ Components should ideally be pure data rather than classes with behavior and dep
 ```fsharp
 [<Struct>] type Position = { x : float32; y : float32 }
 [<Struct>] type Velocity = { vx : float32; vy : float32 }
+
+// create an entity and add two components to it
+let entity = 
+    c.Create()
+        .With({ x = 10.0f; y = 5.0f })
+        .With({ vx = 1.0f; vy = 2.0f })
 ```
 
 ### Storage
 
-Components are stored separately from each other in 64-element segments with a mask, ordered by ID. This provides CPU-friendly iteration over densely stored data while retaining some benefits of sparse storage. Some ECS implementations provide a variety of specialized data structures, but Garnet attempts a middle ground that works moderately well for both sequential entity IDs and sparse keys such as world grid locations.
+Components are stored in 64-element segments with a mask, ordered by ID. This provides CPU-friendly iteration over densely stored data while retaining some benefits of sparse storage. Some ECS implementations provide a variety of specialized data structures, but Garnet attempts a middle ground that works moderately well for both sequential entity IDs and sparse keys such as grid locations.
 
 Only a single component of a type is allowed per entity, but there is no hard limit on the total number of different component types used (i.e. there is no fixed-size mask defining which components an entity has).
 
@@ -174,9 +190,9 @@ let runIter =
             c.Destroy(eid)
     // iterate over all entities with all components
     // present (inner join)
-    |> Iter.join3
+    |> Join.iter3
     // iterate over container
-    |> Iter.over c
+    |> Join.over c
 let healthSub =
     c.On<DestroyZeroHealth> <| fun e ->
         runIter()
@@ -230,6 +246,15 @@ module MovementSystem =
             ]
 ```
 
+### Execution
+
+When any code creates or modifies entities, sends events, or starts coroutines, it's only staging those things. To actually set all of it into motion, you need to run the container, which would typically happen as part of the game loop. Each time you run the container, it commits all changes, publishes events, and advances coroutines, repeating this process until no work remains to do (so you should avoid introducing cycles unless they are part of a timed coroutine).
+
+```fsharp
+// run the container
+c.Run()
+```
+
 ### Events
 
 Events can be arbitrary types, but preferably structs. Subscribers such as systems receive batches of events with no guaranteed ordering among the subscribers. Any additional events raised during event handling are run after all the original event handlers complete, thereby avoiding any possibility of reentrancy but complicating synchronous behavior. 
@@ -248,19 +273,6 @@ c.Send { dt = 0.1f }
 ```
 
 Also note that events intentionally decouple publishers and subscribers, and since dispatching events is typically not synchronous within the ECS, it can be difficult to trace the source of events when something goes wrong (no callstack).
-
-### Composing systems
-
-Since systems are just named event subscriptions, you can compose them into larger systems. This allows for bundling related functionality.
-
-```fsharp
-module CoreSystems =        
-    let definition =
-        Registration.combine [
-            MovementSystem.definition
-            HashSpaceSystem.definition
-        ]
-```
 
 ### Coroutines
 
@@ -310,7 +322,7 @@ for i = 1 to 9 do
 
 ### Multithreading
 
-It's often useful to run physics in parallel with other processing that doesn't depend on its output, but the event system currently has no built-in features to facilitate multiple threads reading or writing. Instead, parallel execution is implemented at a higher level actor system, or you can implement your own multithreaded systems.
+It's often useful to run physics in parallel with other processing that doesn't depend on its output, but the event system currently has no built-in features to facilitate multiple threads reading or writing. Instead, you can use the actor system for parallel execution at a higher level, or you can implement your own multithreading at the container level.
 
 ### Event ordering
 
@@ -328,11 +340,12 @@ type UpdateHashSpace = struct end
 let updateSystem =
     c.On<Update> <| fun e -> 
         c.Start <| seq {
-            // using shorthand 'send and defer' to suspend
-            // execution here to achieve ordering of 
-            // sub-updates
-            yield c.Wait <| UpdatePhysicsBodies()
-            yield c.Wait <| UpdateHashSpace()
+            // sending and suspending execution to 
+            // achieve ordering of sub-updates
+            c.Send <| UpdatePhysicsBodies()
+            yield Wait.defer
+            c.Send <| UpdateHashSpace()
+            yield Wait.defer
         }
 let system1 = 
     c.On<UpdatePhysicsBodies> <| fun e ->
@@ -342,6 +355,19 @@ let system2 =
     c.On<UpdateHashSpace> <| fun e ->
         // [update hash space from positions]
         printfn "%A" e
+```
+
+### Composing systems
+
+Since systems are just named event subscriptions, you can compose them into larger systems. This allows for bundling related functionality.
+
+```fsharp
+module CoreSystems =        
+    let definition =
+        Registration.combine [
+            MovementSystem.definition
+            HashSpaceSystem.definition
+        ]
 ```
 
 ## Actors
@@ -397,17 +423,17 @@ You can designate actors to run on either the main thread (for UI if needed) or 
 
 ## Integration
 
-How does Garnet integrate with larger frameworks or engines like Unity, MonoGame, or UrhoSharp? You have a few options depending on how much you want to depend on Garnet, your chosen framework, and your own code.
+How does Garnet integrate with frameworks or engines like Unity, MonoGame, or UrhoSharp? You have a few options depending on how much you want to depend on Garnet, your chosen framework, and your own code. This approach also works for integrating narrower libraries like physics or networking.
 
 ### Abstracting the framework
 
 You can choose to insulate your code from the framework (e.g. MonoGame) at the cost of more effort building an abstraction layer, less power, and some overhead in marshalling data. You have several options for defining the abstraction layer:
 
-- **Resources**: Define an interface for a subsystem and provide an implemention for the framework, e.g. ISpriteRenderer. This makes sense if you want synchronous calls and an explicit interface.
+- **Services**: Register an interface for a subsystem and provide an implemention for the specific framework, e.g. *ISpriteRenderer* with *MonoGameSpriteRenderer*. This makes sense if you want synchronous calls or an explicit interface.
 
-- **Events**: Define interface event types and framework-specific systems which subscribe to them, e.g. sprite rendering system subscribes to DrawSprite events. This way is more decoupled, but the interface may not be so clear.
+- **Events**: Define interface event types and framework-specific systems which subscribe to them, e.g. a sprite rendering system subscribing to *DrawSprite* events. This way is more decoupled, but the interface may not be so clear.
 
-- **Components**: Define interface component types and implement framework-specific systems which iterate over them, e.g. sprite rendering system iterates over entities with Sprite component. 
+- **Components**: Define interface component types and implement framework-specific systems which iterate over them, e.g. a sprite rendering system which iterates over entities with a *Sprite* component. 
 
 ### Code organization
 

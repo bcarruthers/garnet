@@ -181,7 +181,7 @@ type Channel<'a>(dispatcher : IDispatcher) =
         for event in events do
             pending.Add(event)
         total <- total + events.Count
-    member c.Subscribe(handler) =
+    member c.OnAll(handler) =
         let sub = new Subscription<_>(handler)
         handlers.Add(sub)
         sub :> IDisposable
@@ -209,7 +209,7 @@ type Channel<'a>(dispatcher : IDispatcher) =
 type internal EventHandlerCollection() =
     let isUnsubscribed = Predicate(fun (sub : Subscription) -> sub.IsUnsubscribed)
     let handlers = List<Subscription>()
-    member c.Subscribe(handler : IEventHandler) =
+    member c.OnAll(handler : IEventHandler) =
         let sub = new Subscription(handler)
         handlers.Add(sub)
         sub :> IDisposable
@@ -288,17 +288,17 @@ module Channels =
         member c.Send(msg) =
             c.GetChannel<'a>().Send msg
 
-        member c.Subscribe<'a>(handler) =
-            c.GetChannel<'a>().Subscribe(handler)
+        member c.OnAll<'a>(handler) =
+            c.GetChannel<'a>().OnAll(handler)
 
         member c.Handle<'a>(event : 'a) =
             c.GetChannel<'a>().Handle event
 
         member c.On<'a>() =
-            c.GetChannel<'a>().Subscribe
+            c.GetChannel<'a>().OnAll
 
         member c.On<'a>(handler) =
-            c.GetChannel<'a>().Subscribe(
+            c.GetChannel<'a>().OnAll(
                 fun batch -> 
                     for i = 0 to batch.Count - 1 do
                         handler (batch.[i]))

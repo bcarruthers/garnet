@@ -169,7 +169,7 @@ let tests =
                 }
             for i = 1 to 8 do
                 append (i * 100)
-                c.GetResource<CoroutineScheduler>().Step 1
+                c.Step 1
                 c.Run()
             //r.ToArray()
             Expect.sequenceEqual [|100; 1; 21; 22; 23; 2; 31; 200; 32; 300; 400; 33; 500; 600; 3; 700; 800|] r ""

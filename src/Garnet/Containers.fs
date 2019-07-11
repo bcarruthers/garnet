@@ -92,15 +92,6 @@ type Eid with
     member i.IsDefined = i.value <> 0
     member i.IsUndefined = i.value = 0
 
-type Components<'a> = Components<int, Eid, 'a>
-type ComponentStore = ComponentStore<int, Eid>
-
-module Components =
-    let create<'a>() = Components<'a>(Eid.eidToComponentKey)
-
-module ComponentStore =
-    let create() = ComponentStore(Eid.eidToComponentKey)
-
 /// Stores available IDs with a given partition. IDs start at 1
 type internal EidPool(partition) =
     let mask = partition <<< Eid.indexBits
@@ -191,18 +182,23 @@ type Commit = struct end
 
 /// Wrapper over resource lookup with default types for ECS
 type Container() =
-    let types = ResourceStore()
-    let channels = types.GetResource<Channels>()
-    let scheduler = types.GetResource<CoroutineScheduler>()
-    let components = types.CreateResource(ComponentStore.create())
-    let eidPools = types.GetResource<EidPools>()
+    let types = Registry()
+    let channels = types.GetInstance<Channels>()
+    let scheduler = types.GetInstance<CoroutineScheduler>()
+    let segments = types.GetInstance<SegmentStore<int>>()
+    let components = 
+        let store = ComponentStore(segments, Eid.eidToComponentKey)
+        types.RegisterInstance(store)
+        store        
+    let eidPools = types.GetInstance<EidPools>()
     let eids = components.Get<Eid>()
     member c.Get<'a>() = components.Get<'a>()
+    member c.GetSegments<'a>() = segments.GetSegments<'a>()
     member c.GetChannel<'a>() = channels.GetChannel<'a>()
-    member c.RegisterResource x = types.RegisterResource x
-    member c.AddResource x = types.AddResource x
-    member c.TryGetResource<'a>([<Out>] r : byref<_>) = 
-        types.TryGetResource<'a>(&r)
+    member c.Register x = types.Register x
+    member c.RegisterInstance x = types.RegisterInstance x
+    member c.TryGetInstance<'a>([<Out>] r : byref<_>) = 
+        types.TryGetInstance<'a>(&r)
     member internal c.Clear() =
         channels.Clear()
         components.Clear()
@@ -243,16 +239,19 @@ type Container() =
         scheduler.Schedule coroutine
     member c.SetDispatcher dispatcher =
         channels.SetDispatcher dispatcher
-    interface IResourceStore with
-        member c.RegisterResource f = c.RegisterResource f
-        member c.AddResource x = c.AddResource x
-        member c.TryGetResource<'a>([<Out>] r : byref<_>) = 
-            c.TryGetResource<'a>(&r)
+    interface IRegistry with
+        member c.Register f = c.Register f
+        member c.RegisterInstance x = c.RegisterInstance x
+        member c.TryGetInstance<'a>([<Out>] r : byref<_>) = 
+            c.TryGetInstance<'a>(&r)
     interface IChannels with
         member c.GetChannel<'a>() = channels.GetChannel<'a>()
-    interface ISegmentStore<int> with
+    interface IComponentStore<int, Eid> with
         member c.Get<'a>() = 
-            components.Get<'a>() :> Segments<_,_>
+            components.Get<'a>()
+    interface ISegmentStore<int> with
+        member c.GetSegments<'a>() = 
+            segments.GetSegments<'a>()
     override c.ToString() = 
         types.ToString()
         
@@ -284,7 +283,7 @@ type Container with
     member c.Create() = c.Create(0)
 
     member c.DestroyAll() =
-        let segs = c.Get<Eid>()
+        let segs = c.GetSegments<Eid>()
         for si = 0 to segs.Count - 1 do
             let seg = segs.[si]
             let mutable m = seg.mask
@@ -327,8 +326,8 @@ module internal Composition =
 type internal ContainerMessageHandler(container : Container) =
     let mutable batchCount = 0
     let mutable messageCount = 0
-    let receiver = container.GetResource<MessageReceiver>()
-    let sender = container.GetResource<MessageSender>()
+    let receiver = container.GetInstance<MessageReceiver>()
+    let sender = container.GetInstance<MessageSender>()
     interface IMessageHandler with
         member c.Handle e =
             // assign outbox for duration of call

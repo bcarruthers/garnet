@@ -42,10 +42,10 @@ let tests =
             let e = c.Create()
             e.Add { velocity = 3 }
             e.Add { position = 5 }
-            c.Get<Eid>().Count |> shouldEqual 0
+            c.GetSegments<Eid>().Count |> shouldEqual 0
             c.Commit()
-            c.Get<Eid>().Count |> shouldEqual 1            
-            c.Get<Velocity>().Count |> shouldEqual 1
+            c.GetSegments<Eid>().Count |> shouldEqual 1            
+            c.GetSegments<Velocity>().Count |> shouldEqual 1
             
         testCase "remove entity" <| fun () ->
             let c = Container()
@@ -53,11 +53,11 @@ let tests =
             e.Add { velocity = 3 }
             c.Commit()
             e.Destroy()
-            c.Get<Eid>().Count |> shouldEqual 1
-            c.Get<Velocity>().Count |> shouldEqual 1
+            c.GetSegments<Eid>().Count |> shouldEqual 1
+            c.GetSegments<Velocity>().Count |> shouldEqual 1
             c.Commit()
-            c.Get<Eid>().Count |> shouldEqual 0
-            c.Get<Velocity>().Count |> shouldEqual 0
+            c.GetSegments<Eid>().Count |> shouldEqual 0
+            c.GetSegments<Velocity>().Count |> shouldEqual 0
 
         testCase "add and remove simultaneously" <| fun () ->
             let c = Container()
@@ -68,9 +68,7 @@ let tests =
             e.Destroy()
             c.Commit()
             // so components are present
-            c.Get<Eid>().ComponentCount |> shouldEqual 0
-            c.Get<Eid>().Count |> shouldEqual 0
-            c.Get<int>().ComponentCount |> shouldEqual 0
+            c.GetSegments<Eid>().Count |> shouldEqual 0
 
         testCase "add and remove sequentially" <| fun () ->
             let c = Container()
@@ -79,16 +77,11 @@ let tests =
             e.Add 123
             // additions applied
             c.Commit()
-            c.Get<Eid>().ComponentCount |> shouldEqual 1
-            c.Get<Eid>().Count |> shouldEqual 1
-            c.Get<int>().ComponentCount |> shouldEqual 1
+            c.GetSegments<Eid>().Count |> shouldEqual 1
             // Eid goes into removal
             e.Destroy()
             // removals applied
             c.Commit()
             // so components are not present
-            c.Get<Eid>().ComponentCount |> shouldEqual 0
-            c.Get<Eid>().Count |> shouldEqual 0
-            // automatically removed during commit:
-            c.Get<int>().ComponentCount |> shouldEqual 0
+            c.GetSegments<Eid>().Count |> shouldEqual 0
     ]

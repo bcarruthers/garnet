@@ -67,7 +67,7 @@ type IMessageHandler =
 
 type MessageHandler() =
     let dict = Dictionary<Type, obj>()
-    member c.Subscribe<'a>(action : Envelope<List<'a>> -> unit) =
+    member c.OnAll<'a>(action : Envelope<List<'a>> -> unit) =
         let t = typeof<'a>
         let combined =
             match dict.TryGetValue t with
@@ -140,7 +140,7 @@ module private NullMessageHandler =
 module MessageHandler =
     type MessageHandler with
         member c.On<'a>(action) =
-            c.Subscribe<'a> <| fun e -> 
+            c.OnAll<'a> <| fun e -> 
                 for msg in e.message do
                     action { 
                         sourceId = e.sourceId

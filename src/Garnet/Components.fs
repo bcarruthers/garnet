@@ -1,86 +1,108 @@
 ﻿namespace Garnet.Ecs
 
 open System
-open System.Collections.Generic
 open Garnet.Comparisons
 open Garnet.Formatting
 
 /// Adds convenience methods to access individual components
+[<Struct>]
 type Components<'k, 'c, 'a 
     when 'k :> IComparable<'k> 
     and 'k :> IEquatable<'k> 
     and 'k : equality 
-    and 'c :> IComparable<'c>>(idToKey) =    
-    inherit Segments<'k, 'a>()
+    and 'c :> IComparable<'c>>
+    (
+        segs : Segments<'k, 'a>,
+        idToKey : 'c -> struct('k * int)
+    ) =
+    new(idToKey) =
+        Components(Segments(), idToKey)
+    member c.Segments = segs
+    member c.Count = 
+        let mutable total = 0
+        for i = 0 to segs.Count - 1 do
+            total <- total + bitCount64 segs.[i].mask
+        total
+    member internal c.Components = segs.Components
+    member c.Clear() =
+        segs.Clear()
+    member c.Commit() =
+        segs.Commit()
     member c.Contains(id) =
         let struct(sid, ci) = idToKey id
-        let mask = c.GetMask sid
+        let mask = segs.GetMask sid
         (mask &&& (1UL <<< ci)) <> 0UL
     member c.Get(id : 'c) =
         let struct(sid, ci) = idToKey id
-        let seg = c.GetSegment(sid)
+        let seg = segs.Get(sid)
         if seg.mask &&& (1UL <<< ci) = 0UL then 
             failwithf "Cannot get %s component %d in segment %A" (typeToString typeof<'a>) ci sid
         seg.data.[ci]
     member c.Set(id, value) =
         let struct(sid, ci) = idToKey id
-        let seg = c.GetSegment(sid)
+        let seg = segs.Get(sid)
         if seg.mask &&& (1UL <<< ci) = 0UL then 
             failwithf "Cannot set %s component %d in segment %A" (typeToString typeof<'a>) ci sid
         seg.data.[ci] <- value
     member c.Get(id, fallback) =
         let struct(sid, ci) = idToKey id
-        match c.TryFind(sid) with
+        match segs.TryFind(sid) with
         | false, _ -> fallback
         | true, si ->
-            let s = c.[si]
+            let s = segs.[si]
             if s.mask &&& (1UL <<< ci) = 0UL then fallback
             else s.data.[ci]                
     member c.Add(id, value) =
         let struct(sid, ci) = idToKey id
-        let data = c.AddMask(sid, 1UL <<< ci)
+        let data = segs.Add(sid, 1UL <<< ci)
         data.[ci] <- value
     /// Removes single component
     member c.Remove(id) =
         let struct(sid, ci) = idToKey id
-        c.RemoveMask(sid, 1UL <<< ci)
-    
+        segs.Remove(sid, 1UL <<< ci)
+
+type IComponentStore<'k, 'c 
+    when 'k :> IComparable<'k> 
+    and 'k :> IEquatable<'k> 
+    and 'k : equality
+    and 'c :> IComparable<'c>> =
+    abstract member Get<'b> : unit -> Components<'k, 'c, 'b>
+
 type ComponentStore<'k, 'c 
     when 'k :> IComparable<'k> 
     and 'k :> IEquatable<'k> 
     and 'k : equality
-    and 'c :> IComparable<'c>>(idToKey : 'c -> struct('k * int)) =
-    let lookup = Dictionary<Type, ISegments<'k>>()
+    and 'c :> IComparable<'c>>
+    (
+        segs : SegmentStore<'k>,
+        idToKey : 'c -> struct('k * int)
+    ) =
+    new(idToKey) =
+        ComponentStore(SegmentStore(), idToKey)
+    member c.Segments = segs
+    member c.GetSegments<'a>() = 
+        segs.GetSegments<'a>()
     member c.Get<'a>() =
-        let t = typeof<'a>
-        match lookup.TryGetValue(t) with
-        | true, segs -> segs :?> Components<'k, 'c, 'a>
-        | false, _ ->
-            let segs = Components<'k, 'c, 'a>(idToKey)
-            lookup.Add(t, segs)
-            segs
+        Components(segs.GetSegments<'a>(), idToKey)
     member c.Clear() =
-        for segs in lookup.Values do
-            segs.Clear()
+        segs.Clear()
     member c.Remove(sid, mask) =
-        for segs in lookup.Values do
-            segs.RemoveMask(sid, mask)
+        segs.Remove(sid, mask)
     member c.Handle(id, handler) =        
         let struct(sid, ci) = idToKey id
         let mask = 1UL <<< ci
-        for s in lookup.Values do
-            s.Handle handler sid mask
+        segs.Handle(sid, mask, handler)
     /// Removes all components associated with a given ID
     member c.Destroy(id) =
         let struct(sid, ci) = idToKey id
         c.Remove(sid, 1UL <<< ci)
     member c.Commit() =
-        for segs in lookup.Values do
-            segs.Commit()
+        segs.Commit()
+    interface IComponentStore<'k, 'c> with
+        member c.Get<'a>() = 
+            c.Get<'a>()
     interface ISegmentStore<'k> with
-        member c.Get<'a>() = c.Get<'a>() :> Segments<_,_>
+        member c.GetSegments<'a>() = 
+            segs.GetSegments<'a>()
     override c.ToString() =
-        let prefix = ""
-        lookup.Values
-        |> Seq.map (fun item -> item.ToString().Replace("\n", "\n  "))
-        |> listToString (prefix + "  ") (c.GetType() |> typeToString)
+        segs.ToString()

@@ -12,7 +12,7 @@
     <Compile Include="Formatting.fs" />
     <Compile Include="Messaging.fs" />
     <Compile Include="Collections.fs" />
-    <Compile Include="Resources.fs" />
+    <Compile Include="Registry.fs" />
     <Compile Include="Segments.fs" />
     <Compile Include="Iteration.fs" />
     <Compile Include="Components.fs" />

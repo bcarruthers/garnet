@@ -327,7 +327,7 @@ module internal Internal =
         let mutable count = 0
         member c.Count = count        
         member c.Item with get i = BitSegment.init ids.[i] masks.[i]
-        member internal c.ComponentCount = 
+        member c.ComponentCount = 
             let mutable total = 0
             for i = 0 to count - 1 do
                 total <- total + bitCount64 masks.[i]
@@ -379,7 +379,7 @@ module internal Internal =
         and 'k : equality> =
         abstract member Clear : unit -> unit
         abstract member TryFind : 'k * byref<int> -> bool
-        abstract member RemoveMask : 'k * uint64 -> unit
+        abstract member Remove : 'k * uint64 -> unit
         abstract member Remove : RemovalSegments<'k> -> unit
         abstract member Commit : unit -> unit
         abstract member Handle : ISegmentHandler -> 'k -> uint64 ->unit
@@ -478,9 +478,7 @@ type Segments<'k, 'a
     let pending = PendingBatches(factory.CreatePendingBatch)
     let current = factory.CreateSegments()
     /// Returns a sequence of the components present
-    member c.Components = current.Components
-    /// Number of components within all current segments
-    member c.ComponentCount = current.ComponentCount
+    member internal c.Components = current.Components
     /// Number of current segments
     member c.Count = current.Count        
     /// Takes segment index, not ID
@@ -493,16 +491,16 @@ type Segments<'k, 'a
         pending.Clear()
         current.Clear()
     /// Sets mask for a segment ID
-    member c.SetMask(sid, mask) =
+    member c.Set(sid, mask) =
         match c.TryFind(sid) with
         | true, i -> current.Set(i, mask)
         | false, _ -> failwithf "Segment %A not present" sid
     /// Returns segment so data can be filled
     /// Assume either not present or in removal list
-    member c.AddMask(sid, mask) =
+    member c.Add(sid, mask) =
         pending.Add(sid, mask)
     /// Assumes present, not considering addition list
-    member c.RemoveMask(sid, mask) =
+    member c.Remove(sid, mask) =
         pending.Remove(sid, mask)
     /// Commits any pending changes and removes empty segments
     member c.Commit() = 
@@ -512,12 +510,12 @@ type Segments<'k, 'a
             c.Clear()
         member c.TryFind(sid, [<Out>] i : byref<_>) = 
             current.TryFind(sid, &i)
-        member c.RemoveMask(sid, mask) =
-            c.RemoveMask(sid, mask)
+        member c.Remove(sid, mask) =
+            c.Remove(sid, mask)
         member c.Remove(ids : RemovalSegments<'k>) =
             for i = 0 to ids.Count - 1 do
                 let delta = ids.[i]
-                c.RemoveMask(delta.id, delta.mask)
+                c.Remove(delta.id, delta.mask)
         member c.Commit() = c.Commit()
         member c.Handle handler sid mask =
             match c.TryFind(sid) with
@@ -546,29 +544,62 @@ type Segments<'k, 'a
         match c.TryFind(sid) with
         | true, i -> c.[i].mask
         | false, _ -> 0UL
-    member c.ContainsSegment(sid) =
+    member c.Contains(sid) =
         let mutable i = 0
         c.TryFind(sid, &i)          
-    member c.GetSegment(sid) =
+    member c.Get(sid) =
         match c.TryFind(sid) with
         | true, si -> c.[si]
         | false, _ -> failwithf "Cannot get %s segment %A" (typeToString typeof<'a>) sid
     /// Removes entire segment
-    member c.RemoveSegment(sid) =
+    member c.Remove(sid) =
         match c.TryFind(sid) with
         | false, _ -> ()
         | true, si ->
             let mask = c.[si].mask
-            c.RemoveMask(sid, mask)
+            c.Remove(sid, mask)
     /// Marks all segemnts for removal, which is different than immediate Clear()
     member c.RemoveAll() =
         for i = 0 to c.Count - 1 do
             let seg = c.[i]
-            c.RemoveMask(seg.id, seg.mask)
+            c.Remove(seg.id, seg.mask)
 
 type ISegmentStore<'k
     when 'k :> IComparable<'k> 
     and 'k :> IEquatable<'k> 
     and 'k : equality> =
-    abstract member Get<'b> : unit -> Segments<'k, 'b>
+    abstract member GetSegments<'b> : unit -> Segments<'k, 'b>
         
+type SegmentStore<'k 
+    when 'k :> IComparable<'k> 
+    and 'k :> IEquatable<'k> 
+    and 'k : equality>() =
+    let lookup = Dictionary<Type, ISegments<'k>>()
+    member c.GetSegments<'a>() =
+        let t = typeof<'a>
+        match lookup.TryGetValue(t) with
+        | true, segs -> segs :?> Segments<'k, 'a>
+        | false, _ ->
+            let segs = Segments<'k, 'a>()
+            lookup.Add(t, segs)
+            segs
+    member c.Clear() =
+        for segs in lookup.Values do
+            segs.Clear()
+    member c.Remove(sid, mask) =
+        for segs in lookup.Values do
+            segs.Remove(sid, mask)
+    member c.Handle(sid, mask, handler) =      
+        for s in lookup.Values do
+            s.Handle handler sid mask
+    member c.Commit() =
+        for segs in lookup.Values do
+            segs.Commit()
+    interface ISegmentStore<'k> with
+        member c.GetSegments<'a>() = 
+            c.GetSegments<'a>()
+    override c.ToString() =
+        let prefix = ""
+        lookup.Values
+        |> Seq.map (fun item -> item.ToString().Replace("\n", "\n  "))
+        |> listToString (prefix + "  ") (c.GetType() |> typeToString)
