@@ -12,18 +12,65 @@ type Ping = struct end
 type Pong = struct end
 
 module ActorFactory =
-    let single bg actorId register = ActorFactory {
-        isBackground = bg
-        canCreate = ((=)actorId)
-        create = (fun id -> ActorDefinition.handler register)
-        }
-
-    let fg actorId register = single false actorId register
-    let bg actorId register = single true actorId register
+    let main actorId register = 
+        ActorFactory.handler actorId register 
+        |> ActorFactory.map Actor.execMain
     
 [<Tests>]
 let tests =
     testList "actors" [            
+        testCase "send to undefined actor" <| fun () ->
+            use a = new ActorSystem()
+            a.Send(ActorId 1, 10)
+            a.RunAll()
+
+        testCase "send to any actor" <| fun () ->
+            let msgs = List<_>()
+            let inbox = Inbox()
+            inbox.On<int> msgs.Add
+            use a = new ActorSystem()
+            a.Register(ActorFactory.any (fun id -> Actor.inbox inbox))
+            a.Send(ActorId 1, 10)
+            a.RunAll()
+            msgs.Count |> shouldEqual 1
+
+        testCase "get routed actor" <| fun () ->
+            let route = ActorFactory.route (fun id -> ActorId (id.value + 1))
+            let actor = route(ActorId 1)
+            actor.routedId |> shouldEqual (ActorId 2)
+            actor.execution |> shouldEqual Execution.Route
+
+        testCase "route to self" <| fun () ->
+            use a = new ActorSystem()
+            a.Register (ActorFactory.route id)
+            a.Send(ActorId 1, 10)
+            a.RunAll()
+
+        testCase "get combined factory with route" <| fun () ->
+            let list1 = List<_>()
+            let list2 = List<_>()
+            let create = 
+                ActorFactory.combine [
+                    ActorFactory.handler (ActorId 5) (fun h -> h.On<int> list1.Add)
+                    ActorFactory.route (fun id -> ActorId (id.value + 1))
+                    ActorFactory.handler (ActorId 6) (fun h -> h.On<int> list2.Add)
+                ]
+            let actor = create(ActorId 4)
+            actor.execution |> shouldEqual Execution.Route
+            actor.routedId |> shouldEqual (ActorId 5)
+            let actor = create(ActorId 5)
+            actor.execution |> shouldEqual Execution.Default
+            actor.routedId |> shouldEqual ActorId.undefined
+            use a = new ActorSystem()
+            a.Register create
+            a.Send(ActorId 4, 10)
+            a.Send(ActorId 5, 10)
+            a.Send(ActorId 6, 10)
+            a.Send(ActorId 7, 10)
+            a.RunAll()
+            list1.Count |> shouldEqual 2
+            list2.Count |> shouldEqual 1
+            
         testCase "create ping pong actors" <| fun () ->
             let msgs = List<obj>()
             use a = new ActorSystem()
@@ -44,7 +91,7 @@ let tests =
             let mutable count = 0
             use a = new ActorSystem(0)
             a.RegisterAll [
-                ActorFactory.fg (ActorId 1) <| fun c ->
+                ActorFactory.main (ActorId 1) <| fun c ->
                     c.OnInbound<int> <| fun e ->
                         if e.message < 10 then
                             count <- count + 1
@@ -59,12 +106,12 @@ let tests =
             let mutable count2 = 0
             use a = new ActorSystem(0)
             a.RegisterAll [
-                ActorFactory.fg (ActorId 1) <| fun c ->
+                ActorFactory.handler (ActorId 1) <| fun c ->
                     c.OnInbound<int> <| fun e ->
                         if e.message < 10 then
                             count1 <- count1 + 1
                             e.outbox.Send(ActorId 2, e.message + 1)
-                ActorFactory.fg (ActorId 2) <| fun c ->
+                ActorFactory.handler (ActorId 2) <| fun c ->
                     c.OnInbound<int> <| fun e ->
                         if e.message < 10 then
                             count2 <- count2 + 1
@@ -80,7 +127,7 @@ let tests =
             let mutable count2 = 0
             use a = new ActorSystem(1)
             a.RegisterAll [
-                ActorFactory.fg (ActorId 1) <| fun c ->
+                ActorFactory.main (ActorId 1) <| fun c ->
                     c.OnInbound<Thread> <| fun e ->
                         // bg thread should be different
                         Expect.notEqual Thread.CurrentThread.ManagedThreadId e.message.ManagedThreadId ""
@@ -89,7 +136,7 @@ let tests =
                             count1 <- count1 + 1
                             //printfn "FG: %d" Thread.CurrentThread.ManagedThreadId
                             e.outbox.Send(ActorId 2, e.message + 1)
-                ActorFactory.bg (ActorId 2) <| fun c ->
+                ActorFactory.handler (ActorId 2) <| fun c ->
                     c.OnInbound<int> <| fun e ->
                         if e.message < 10 then
                             count2 <- count2 + 1
@@ -107,17 +154,14 @@ let tests =
             use a = new ActorSystem(2)
             a.RegisterAll [
                 //ActorId.consoleOut, fun id -> PrintMessageHandler.Handler 
-                ActorFactory { 
-                    isBackground = false
-                    canCreate = fun id -> true
-                    create = ActorDefinition.handlerId <| fun id c -> 
-                        let rand = Random(id.value)
-                        c.OnInbound<int> <| fun e -> 
-                            //printfn "%d: %d" id.id e.message
-                            if e.message < 1000 then
-                                let nextId = rand.Next(1, 256)
-                                e.outbox.Send(ActorId nextId, e.message + 1)
-                }]
+                ActorFactory.filterHandler (fun id -> true) <| fun id c -> 
+                    let rand = Random(id.value)
+                    c.OnInbound<int> <| fun e -> 
+                        //printfn "%d: %d" id.id e.message
+                        if e.message < 1000 then
+                            let nextId = rand.Next(1, 256)
+                            e.outbox.Send(ActorId nextId, e.message + 1)
+                ]
             a.Run(ActorId 1, 123)
 
         testCase "actor thread stress test" <| fun () ->
@@ -136,12 +180,12 @@ let tests =
             use a = new ActorSystem(4)
             let rules = 
                 [
-                ActorFactory.bg (ActorId 1) <| fun c ->
+                ActorFactory.handler (ActorId 1) <| fun c ->
                     c.OnInbound<int> <| fun e ->
                         for i = 1 to 1000 do
                             e.outbox.Send(ActorId 2, uint32 i)
                             e.outbox.Send(ActorId 2, uint16 i)
-                ActorFactory.bg (ActorId 2) <| fun c ->
+                ActorFactory.handler (ActorId 2) <| fun c ->
                     c.OnInbound<int> <| fun e ->
                         for i = 1 to 1 do
                             e.outbox.Send(ActorId 3, uint32 i)
@@ -149,7 +193,7 @@ let tests =
                     c.OnInbound<uint32> <| fun e ->
                         for i = 1 to 1 do
                             e.outbox.Send(ActorId 3, uint8 i)
-                ActorFactory.bg (ActorId 3) <| fun c ->
+                ActorFactory.handler (ActorId 3) <| fun c ->
                     c.OnInbound<uint8> <| fun e ->
                         for i = 1 to 1 do
                             e.outbox.Send(ActorId 4, int8 i)
@@ -158,7 +202,7 @@ let tests =
                             e.outbox.Send(ActorId 4, int8 i)
                     c.OnInbound<uint32> <| fun e ->
                         Interlocked.Increment(&count) |> ignore
-                ActorFactory.bg (ActorId 4) <| fun c ->
+                ActorFactory.handler (ActorId 4) <| fun c ->
                     c.OnInbound<int8> <| fun e ->
                         for i = 1 to 1 do
                             e.outbox.Send(ActorId 2, int i)
@@ -194,11 +238,11 @@ let tests =
             use a = new ActorSystem(4)
             let rules = 
                 [
-                ActorFactory.bg (ActorId 1) <| fun c ->
+                ActorFactory.handler (ActorId 1) <| fun c ->
                     c.OnInbound<int> <| fun e ->
                         for i = 1 to 100 do
                             e.outbox.Send(ActorId 2, uint32 i)
-                ActorFactory.bg (ActorId 2) <| fun c ->
+                ActorFactory.handler (ActorId 2) <| fun c ->
                     c.OnInbound<uint32> <| fun e ->
                         for i = 1 to 1 do
                             e.outbox.Send(ActorId 3, uint8 i)
@@ -233,24 +277,22 @@ let tests =
             reg.Register 11 <| StringSerializer()
             let ms = new MemoryStream()
             use a = new ActorSystem(0)
-            a.Register <| ActorFactory {
-                isBackground = false
-                canCreate = fun id -> id = ActorId 15
-                create = fun id -> 
+            let id1 = ActorId 15
+            let id2 = ActorId 25
+            a.RegisterAll [
+                ActorFactory.init id1 <| fun () ->
                     let h = Inbox()
-                    h.OnInbound<int> <| fun e -> e.outbox.Send(ActorId 25, "msg" + e.message.ToString())
-                    LogInbox(id, h, StreamInbox(reg, ms)) |> ActorDefinition.init
-                }
-            a.Run(ActorId 15, 100)
+                    h.OnInbound<int> <| fun e -> 
+                        e.outbox.Send(id2, "msg" + e.message.ToString())
+                    Actor.inbox (LogInbox(id1, h, StreamInbox(reg, ms)))
+                ]
+            a.Run(id1, 100)
             ms.Position <- 0L
             use a2 = new ActorSystem(0)
-            a2.Register <| ActorFactory {
-                isBackground = false
-                canCreate = fun id -> true
-                create = fun id -> PrintInbox(id, Formatter(), ref 0, ignore) |> ActorDefinition.init
-                }
-            a2.Run(ActorId 15, { enableActorLog = true })
-            a2.Run(ActorId 25, { enableActorLog = true })
+            a2.Register <| ActorFactory.any (fun id -> 
+                PrintInbox(id, Formatter(), ref 0, ignore) |> Actor.inbox)
+            a2.Run(id1, { enableActorLog = true })
+            a2.Run(id2, { enableActorLog = true })
             let sender = StreamMessageSender(reg, fun h -> true)
             sender.SendAll(ms, a2)
             a2.RunAll()

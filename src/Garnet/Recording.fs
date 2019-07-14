@@ -268,58 +268,46 @@ module internal RecordingInternal =
         let formatter = options.createFormatter()
         let counter = ref 0
         let a = new ActorSystem(actorOptions)
-        a.Register <| ActorFactory { 
-            isBackground = false
-            canCreate = options.filter.destinationFilter
-            create = fun id ->
+        a.Register(fun id ->
+            if options.filter.destinationFilter id then
                 let h = PrintInbox(id, formatter, counter, options.print) 
                 h.IsEnabled <- true
-                h |> ActorDefinition.init
-            } 
+                h |> Actor.inbox
+            else Actor.none)
         a
 
 [<AutoOpen>]
 module Recording =          
-    module ActorDefinition =        
+    module Actor =        
         let print id formatter =
             PrintInbox(id, formatter, ref 0, printfn "%s") 
-            |> ActorDefinition.init
+            |> Actor.inbox
     
     module ActorFactory =
-        let mapFactory map =
-            function
-            | ActorFactory f -> ActorFactory (map f)
-            | x -> x
-                
-        let withPrinting createFormatter print rule =
-            rule |> mapFactory (fun factory -> { 
-                factory with
-                    create = fun id ->
-                        let formatter = createFormatter()
-                        let h = PrintInbox(id, formatter, ref 0, print) 
-                        h.IsEnabled <- true
-                        ActorDefinition.combine [
-                            factory.create id
-                            h |> ActorDefinition.init
-                            ]                
-                        })
+        let withPrinting createFormatter print createActor =
+            fun id ->
+                let formatter = createFormatter()
+                let h = PrintInbox(id, formatter, ref 0, print) 
+                h.IsEnabled <- true
+                Actor.combine [
+                    createActor id
+                    Actor.inbox h
+                    ]
             
-        let withLogging createRegistry openStream rule =
-            rule |> mapFactory (fun factory -> { 
-                factory with 
-                    create = fun id ->
-                        let def = factory.create id
-                        let stream = openStream id
-                        let registry = createRegistry()
-                        let logHandler = StreamInbox(registry, stream)
-                        {   dispose = fun () ->
-                                def.dispose()
-                                stream.Dispose()
-                            handler = 
-                                LogInbox(id, def.handler, logHandler)
-                                :> IInbox
-                            }
-                })
+        let withLogging createRegistry openStream createActor =
+            fun id ->
+                let def = createActor id
+                let stream = openStream id
+                let registry = createRegistry()
+                let logHandler = StreamInbox(registry, stream)
+                { def with
+                    dispose = fun () ->
+                        def.dispose()
+                        stream.Dispose()
+                    inbox = 
+                        LogInbox(id, def.inbox, logHandler)
+                        :> IInbox
+                }
 
     type IActorStreamReader with
         member c.CopyTo (writer : IActorStreamWriter) =

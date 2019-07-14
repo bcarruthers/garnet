@@ -32,11 +32,6 @@ module private Utility =
         sprintf "%s (%d)%s" name count
             (if count > 0 then ":\n  " + addIndent str else "")
 
-[<Struct>]
-type ThreadType =
-    | Background
-    | Main
-
 type ActorOptions = {
     threadCount : int
     processLimit : int
@@ -269,7 +264,7 @@ module internal Internal =
         destId : ActorId
         }
 
-    type Actor(actorId : ActorId, definition : ActorDefinition, onProcess : Action) =
+    type ActorRunner(actorId : ActorId, definition : Actor, onProcess : Action) =
         let mutable lock = 0
         let mutable total = 0
         let receiveQueue = RingBufferQueue<QueuedMessage>()
@@ -290,7 +285,7 @@ module internal Internal =
                 while processed < options.processLimit && receiveQueue.TryDequeue(&msg) do
                     let ex =
                         try
-                            msg.message.Receive outbox msg.destId definition.handler
+                            msg.message.Receive outbox msg.destId definition.inbox
                             processed <- processed + 1
                             onProcess.Invoke()
                             null
@@ -317,9 +312,9 @@ module internal Internal =
         let wait = new AutoResetEvent(false)
         let outbox = QueueOutbox()
         let disposalQueue = RingBufferQueue<MessageResult>()
-        let actorQueue = RingBufferQueue<Actor>()
-        let actors = List<Actor>()
-        let addActor = Action<Actor>(actors.Add)
+        let actorQueue = RingBufferQueue<ActorRunner>()
+        let actors = List<ActorRunner>()
+        let addActor = Action<ActorRunner>(actors.Add)
         let enqueueDisposal = Action<_>(disposalQueue.Enqueue)
         let runOnce() =
             let count = actors.Count
@@ -383,58 +378,40 @@ module internal Internal =
                     (proc :> IDisposable).Dispose()
         override c.ToString() =
             (formatList "Workers" procs.Length (String.Join("\n", procs)))
-
-    // Not thread-safe
-    type DescriptorLookup() =
-        let factories = List<_>()
-        member c.Add(desc) =
-            factories.Add(desc)
-        member c.GetDescriptor(id : ActorId) =
-            // find most specific factory for id
-            //let mutable minMask = Int32.MaxValue
-            let mutable minDesc = ActorRule.empty
-            for desc in factories do
-                if desc.canCreate id then
-                    //minMask <- desc.idMask
-                    minDesc <- desc
-            minDesc
-
-    type Redirector() =
-        let rules = List<_>()
-        member c.Add rule =
-            rules.Add rule
-        member c.MapId id =
-            let mutable mappedId = id
-            for map in rules do
-                mappedId <- map mappedId
-            mappedId
-
+            
     type Actors(options, onProcess) =
-        let actorLookup = Dictionary<int, Actor>()
-        let bgActors = List<Actor>()
-        let fgActors = List<Actor>()
+        let actorLookup = Dictionary<int, ActorRunner>()
+        let bgActors = List<ActorRunner>()
+        let fgActors = List<ActorRunner>()
         let workers = new BackgroundWorkers(options)
-        let descLookup = DescriptorLookup()
-        let redirector = Redirector()
+        let descLookup = ActorFactoryCollection()
         member c.Count = actorLookup.Count
         member c.ForegroundCount = fgActors.Count
-        member c.Register rule =
-            match rule with
-            | ActorFactory f -> descLookup.Add f
-            | ActorRedirect map -> redirector.Add map
-        member c.GetActor (destId : ActorId) =
-            let destId = redirector.MapId destId
+        member c.Register f =
+            descLookup.Add f
+        member c.GetActor(destId : ActorId, maxDepth) =           
             match actorLookup.TryGetValue(destId.value) with
             | true, x -> x
             | false, _ ->
-                let desc = descLookup.GetDescriptor destId
-                let actor = new Actor(destId, desc.create destId, onProcess)
-                actorLookup.Add(destId.value, actor) |> ignore
-                if desc.isBackground && options.threadCount > 0 
-                    then 
-                        bgActors.Add actor
-                        workers.Add(actor) 
-                    else fgActors.Add(actor)
+                // limit depth for the case of repeated routing
+                let desc = 
+                    if maxDepth <= 0 then Actor.none
+                    else descLookup.Create destId
+                let actor =
+                    if int desc.execution = int Execution.Route 
+                    then c.GetActor(desc.routedId, maxDepth - 1)
+                    else 
+                        let actor = new ActorRunner(destId, desc, onProcess)
+                        let isDefault = int desc.execution = int Execution.Default
+                        let isBackground = isDefault && options.threadCount > 0
+                        if isBackground
+                            then 
+                                bgActors.Add actor
+                                workers.Add(actor) 
+                            else fgActors.Add(actor)
+                        actor
+                // replace existing to handle cycles
+                actorLookup.[destId.value] <- actor
                 actor
         member c.SendAll(send, disposeMsg) =
             // Send messages from each worker outbox to destination inbox and
@@ -466,7 +443,7 @@ module internal Internal =
         member c.SentCount = sentCount
         member c.Send (info : MessageInfo) =
             // should be called on main thread
-            let actor = actors.GetActor info.destinationId
+            let actor = actors.GetActor(info.destinationId, maxDepth = 2)
             actor.Enqueue(info.message, info.destinationId)
             sentCount <- sentCount + 1
 
@@ -502,8 +479,8 @@ type ActorSystem(options) =
     new(threadCount) = new ActorSystem({ ActorOptions.defaultOptions with threadCount = threadCount })
     member private c.PendingCount = 
         sender.SentCount - receiver.DisposedCount
-    member c.Register desc =
-        actors.Register desc
+    member c.Register factory =
+        actors.Register factory
     member c.BeginSend() =
         fgOutbox.BeginSend()
     member c.Create(destId) =
@@ -562,22 +539,17 @@ module ActorSystem =
             c.Run()
 
     type ActorSystem with
-        member c.RegisterAll entries =
-            for desc in entries do
-                c.Register(desc)
-
-        member c.Register(actorId, register) =
-            c.Register(ActorFactory.init actorId (fun () -> 
-                ActorDefinition.handler register))
+        member c.Register(actorId, inbox) =
+            c.Register(fun id ->
+                if id <> actorId then Actor.none
+                else Actor.inbox inbox)
 
         member c.Register(actorId, handler) =
-            c.Register(ActorFactory.init actorId (fun () -> 
-                ActorDefinition.init handler))
+            c.Register(ActorFactory.handler actorId handler)
 
-        member c.Register(canCreate, register) =
-            c.Register(ActorFactory.initRange canCreate (fun id -> 
-                ActorDefinition.handler (fun h -> register id h)))
-
+        member c.RegisterAll(factories) =
+            c.Register(ActorFactory.combine factories)
+                
     type ActorReference with
         member c.Send msg =
             c.pump.Send(c.actorId, msg)

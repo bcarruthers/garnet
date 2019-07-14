@@ -9,22 +9,10 @@ type ActorId =
     val value : int
     new(id) = { value = id }
     override e.ToString() = e.value.ToString()
-        
-[<Struct>]
-type Addresses = {
-    sourceId : ActorId
-    destinationId : ActorId
-    }
     
 module ActorId =
     let undefined = ActorId 0
     let isAny (id : ActorId) = true
-    
-module Addresses =
-    let undefined = { 
-        sourceId = ActorId.undefined
-        destinationId = ActorId.undefined 
-        }
     
 type IMessageWriter<'a> =
     inherit IDisposable
@@ -44,9 +32,6 @@ type Envelope<'a> = {
     channelId : int
     message : 'a
     } with
-    member c.addresses =
-        { sourceId = c.sourceId
-          destinationId = c.destinationId }
     override c.ToString() =
         sprintf "%d->%d: %A" c.sourceId.value c.destinationId.value c.message
 
@@ -66,7 +51,7 @@ type Inbox() =
                     existing e
                     action e        
         dict.[t] <- combined
-    member c.TryHandle<'a> e =
+    member c.TryReceive<'a> e =
         match dict.TryGetValue(typeof<'a>) with
         | true, x -> 
             let handle = x :?> (Envelope<List<'a>> -> unit)
@@ -75,7 +60,7 @@ type Inbox() =
         | false, _ -> false
     interface IInbox with
         member c.Receive e =
-            c.TryHandle e |> ignore
+            c.TryReceive e |> ignore
             
 [<Struct>]
 type Disposable =
@@ -111,31 +96,24 @@ module Envelope =
         message = msg
         }
 
-    let forwardMessageFrom (e : Envelope<List<_>>) targetId channelId sourceId =
-        use batch = e.outbox.BeginSend()
-        batch.SetChannel channelId
-        batch.SetSource sourceId
-        batch.AddRecipient targetId
-        for msg in e.message do
-            batch.AddMessage msg
+type IDisposableInbox =
+    inherit IDisposable
+    inherit IInbox
+    
+//type ActorDefinition = {
+//    handler : IInbox
+//    dispose : unit -> unit
+//    }
 
-    let forwardMessage (e : Envelope<List<_>>) targetId channelId =
-        forwardMessageFrom e targetId channelId e.sourceId
+//type ActorFactory = {
+//    isBackground : bool
+//    canCreate : ActorId -> bool
+//    create : ActorId -> ActorDefinition
+//    }
 
-type ActorDefinition = {
-    handler : IInbox
-    dispose : unit -> unit
-    }
-
-type ActorFactory = {
-    isBackground : bool
-    canCreate : ActorId -> bool
-    create : ActorId -> ActorDefinition
-    }
-
-type ActorRule =
-    | ActorRedirect of (ActorId -> ActorId)
-    | ActorFactory of ActorFactory
+//type ActorRule =
+//    | ActorRedirect of (ActorId -> ActorId)
+//    | ActorFactory of (ActorId -> Actor voption)
 
 type private NullInbox() =
     interface IInbox with
@@ -145,6 +123,110 @@ type private NullInbox() =
         
 module private NullInbox =
     let handler = new NullInbox() :> IInbox
+
+type private InboxCollection(handlers : IInbox[]) =
+    interface IInbox with
+        member c.Receive<'a> e =
+            for handler in handlers do
+                handler.Receive<'a> e
+                
+type Execution =
+    | None = 0
+    | Route = 1
+    | Default = 2
+    | Main = 3
+
+[<Struct>]
+type Actor = {
+    routedId : ActorId
+    execution : Execution
+    inbox : IInbox
+    dispose : unit -> unit
+    }
+
+module Actor =
+    let init exec inbox dispose = {
+        routedId = ActorId.undefined
+        execution = exec
+        inbox = inbox
+        dispose = dispose
+        }
+
+    let none = init Execution.None NullInbox.handler ignore
+
+    let route routedId = { 
+        none with 
+            routedId = routedId 
+            execution = Execution.Route
+            }
+
+    let disposable inbox dispose =
+        init Execution.Default inbox dispose
+
+    let inbox inbox = disposable inbox ignore
+
+    let handler register = 
+        let inbox = Inbox()
+        register inbox
+        disposable inbox ignore
+
+    let execMain a =
+        { a with execution = Execution.Main }
+
+    let combine actors =
+        let actors = actors |> Seq.toArray
+        if actors.Length = 0 then none
+        else
+            let inboxes = actors |> Array.map (fun d -> d.inbox)
+            let exec = 
+                actors 
+                |> Seq.map (fun a -> a.execution) 
+                |> Seq.reduce max
+            let inbox = InboxCollection(inboxes) :> IInbox
+            let dispose = fun () -> for d in actors do d.dispose() 
+            init exec inbox dispose
+
+type internal ActorFactoryCollection() =
+    let factories = List<_>()
+    member c.Add(desc : ActorId -> Actor) =
+        factories.Add(desc)
+    member c.Create(id : ActorId) =
+        // first priority is execution type, then order where last wins
+        let mutable result = Actor.none
+        let mutable i = factories.Count - 1
+        while int result.execution <> int Execution.Default && i >= 0 do
+            let actor = factories.[i] id
+            if int actor.execution > int result.execution then
+                result <- actor
+            i <- i - 1
+        result
+
+module ActorFactory =
+    let route map =
+        fun (id : ActorId) -> Actor.route (map id)
+
+    let filter canCreate create =
+        fun id -> if canCreate id then create id else Actor.none
+
+    let any create =
+        filter (fun id -> true) create
+
+    let init actorId create =
+        filter ((=)actorId) (fun id -> create())
+
+    let filterHandler canCreate register =
+        filter canCreate (fun id -> Actor.handler (register id))
+
+    let handler actorId register =
+        init actorId (fun () -> Actor.handler register)
+
+    let map (f : Actor -> Actor) create =
+        fun (id : ActorId) -> create id |> f
+
+    let combine factories =
+        let collection = ActorFactoryCollection()
+        for f in factories do collection.Add f
+        collection.Create
 
 [<AutoOpen>]
 module Inbox =
@@ -189,73 +271,67 @@ module Inbox =
             for msg in msgs do
                 batch.AddMessage msg
     
-module ActorRule =
-    let empty = {
-        isBackground = false
-        canCreate = fun id -> false
-        create = fun id -> { 
-            handler = NullInbox.handler
-            dispose = ignore 
-            }
-        }
+//module ActorRule =
+//    let empty = {
+//        isBackground = false
+//        canCreate = fun id -> false
+//        create = fun id -> { 
+//            handler = NullInbox.handler
+//            dispose = ignore 
+//            }
+//        }
 
-type private InboxCollection(handlers : IInbox[]) =
-    interface IInbox with
-        member c.Receive<'a> e =
-            for handler in handlers do
-                handler.Receive<'a> e
-            
-module ActorDefinition =
-    let init handler = { 
-        handler = handler
-        dispose = ignore 
-        }
+//module ActorDefinition =
+//    let init handler = { 
+//        handler = handler
+//        dispose = ignore 
+//        }
 
-    let disposable<'a when 'a :> IDisposable and 'a :> IInbox> (handler : 'a) = 
-        { 
-            handler = handler
-            dispose = handler.Dispose 
-        }
+//    let disposable<'a when 'a :> IDisposable and 'a :> IInbox> (handler : 'a) = 
+//        { 
+//            handler = handler
+//            dispose = handler.Dispose 
+//        }
 
-    let combine definitions =
-        let definitions = definitions |> Seq.toArray
-        let handlers = definitions |> Array.map (fun d -> d.handler)
-        { 
-            handler = InboxCollection(handlers) :> IInbox
-            dispose = fun () -> for d in definitions do d.dispose() 
-        }
+//    let combine definitions =
+//        let definitions = definitions |> Seq.toArray
+//        let handlers = definitions |> Array.map (fun d -> d.handler)
+//        { 
+//            handler = InboxCollection(handlers) :> IInbox
+//            dispose = fun () -> for d in definitions do d.dispose() 
+//        }
 
-    let handlerId register id =
-        let h = Inbox()
-        h.OnInbound<Inbox -> unit> <| fun e -> 
-            e.message h
-        register id h
-        { 
-            handler = h :> IInbox
-            dispose = ignore 
-        }
+//    let handlerId register id =
+//        let h = Inbox()
+//        h.OnInbound<Inbox -> unit> <| fun e -> 
+//            e.message h
+//        register id h
+//        { 
+//            handler = h :> IInbox
+//            dispose = ignore 
+//        }
 
-    let handler register =
-        handlerId (fun _ handler -> register handler) ()
+//    let handler register =
+//        handlerId (fun _ handler -> register handler) ()
           
-module ActorFactory =
-    let main canCreate create = ActorFactory {
-        isBackground = false
-        canCreate = canCreate
-        create = create
-        }
+//module ActorFactory =
+//    let main canCreate create = ActorFactory {
+//        isBackground = false
+//        canCreate = canCreate
+//        create = create
+//        }
 
-    let initRange canCreate create = ActorFactory {
-        isBackground = true
-        canCreate = canCreate
-        create = create
-        }
+//    let initRange canCreate create = ActorFactory {
+//        isBackground = true
+//        canCreate = canCreate
+//        create = create
+//        }
 
-    let init actorId create = ActorFactory {
-        isBackground = true
-        canCreate = ((=)actorId)
-        create = fun id -> create()
-        }
+//    let init actorId create = ActorFactory {
+//        isBackground = true
+//        canCreate = ((=)actorId)
+//        create = fun id -> create()
+//        }
 
 /// Need sender member indirection because container registrations
 /// need permanent reference while incoming messages have varying sender
