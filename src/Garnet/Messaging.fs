@@ -100,21 +100,6 @@ type IDisposableInbox =
     inherit IDisposable
     inherit IInbox
     
-//type ActorDefinition = {
-//    handler : IInbox
-//    dispose : unit -> unit
-//    }
-
-//type ActorFactory = {
-//    isBackground : bool
-//    canCreate : ActorId -> bool
-//    create : ActorId -> ActorDefinition
-//    }
-
-//type ActorRule =
-//    | ActorRedirect of (ActorId -> ActorId)
-//    | ActorFactory of (ActorId -> Actor voption)
-
 type private NullInbox() =
     interface IInbox with
         member c.Receive e = ()
@@ -271,68 +256,6 @@ module Inbox =
             for msg in msgs do
                 batch.AddMessage msg
     
-//module ActorRule =
-//    let empty = {
-//        isBackground = false
-//        canCreate = fun id -> false
-//        create = fun id -> { 
-//            handler = NullInbox.handler
-//            dispose = ignore 
-//            }
-//        }
-
-//module ActorDefinition =
-//    let init handler = { 
-//        handler = handler
-//        dispose = ignore 
-//        }
-
-//    let disposable<'a when 'a :> IDisposable and 'a :> IInbox> (handler : 'a) = 
-//        { 
-//            handler = handler
-//            dispose = handler.Dispose 
-//        }
-
-//    let combine definitions =
-//        let definitions = definitions |> Seq.toArray
-//        let handlers = definitions |> Array.map (fun d -> d.handler)
-//        { 
-//            handler = InboxCollection(handlers) :> IInbox
-//            dispose = fun () -> for d in definitions do d.dispose() 
-//        }
-
-//    let handlerId register id =
-//        let h = Inbox()
-//        h.OnInbound<Inbox -> unit> <| fun e -> 
-//            e.message h
-//        register id h
-//        { 
-//            handler = h :> IInbox
-//            dispose = ignore 
-//        }
-
-//    let handler register =
-//        handlerId (fun _ handler -> register handler) ()
-          
-//module ActorFactory =
-//    let main canCreate create = ActorFactory {
-//        isBackground = false
-//        canCreate = canCreate
-//        create = create
-//        }
-
-//    let initRange canCreate create = ActorFactory {
-//        isBackground = true
-//        canCreate = canCreate
-//        create = create
-//        }
-
-//    let init actorId create = ActorFactory {
-//        isBackground = true
-//        canCreate = ((=)actorId)
-//        create = fun id -> create()
-//        }
-
 /// Need sender member indirection because container registrations
 /// need permanent reference while incoming messages have varying sender
 type internal Outbox() =

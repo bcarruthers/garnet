@@ -32,25 +32,13 @@ module private Utility =
         sprintf "%s (%d)%s" name count
             (if count > 0 then ":\n  " + addIndent str else "")
 
-type ActorOptions = {
-    threadCount : int
-    processLimit : int
-    }
-
-module ActorOptions =
-    // Allow at least one background thread by default
-    let defaultOptions = {
-        threadCount = Environment.ProcessorCount - 1 |> max 1
-        processLimit = Int32.MaxValue
-    }
-
-    let noBackgroundThreads = {
-        threadCount = 0
-        processLimit = Int32.MaxValue
-    }
-
 [<AutoOpen>]        
 module internal Internal =
+    type ActorOptions = {
+        threadCount : int
+        batchSizeLimit : int
+        }
+
     type IMessage =
         inherit IDisposable
         abstract member Receive : IOutbox -> ActorId -> IInbox -> unit
@@ -282,7 +270,7 @@ module internal Internal =
             if isLocked then
                 outbox.SetSource actorId
                 let mutable msg = Unchecked.defaultof<QueuedMessage>
-                while processed < options.processLimit && receiveQueue.TryDequeue(&msg) do
+                while processed < options.batchSizeLimit && receiveQueue.TryDequeue(&msg) do
                     let ex =
                         try
                             msg.message.Receive outbox msg.destId definition.inbox
@@ -379,40 +367,40 @@ module internal Internal =
         override c.ToString() =
             (formatList "Workers" procs.Length (String.Join("\n", procs)))
             
-    type Actors(options, onProcess) =
+    type ActorRunnerCollection(options, onProcess) =
         let actorLookup = Dictionary<int, ActorRunner>()
         let bgActors = List<ActorRunner>()
         let fgActors = List<ActorRunner>()
         let workers = new BackgroundWorkers(options)
-        let descLookup = ActorFactoryCollection()
+        let factory = ActorFactoryCollection()
         member c.Count = actorLookup.Count
         member c.ForegroundCount = fgActors.Count
         member c.Register f =
-            descLookup.Add f
-        member c.GetActor(destId : ActorId, maxDepth) =           
+            factory.Add f
+        member c.GetRunner(destId : ActorId, maxDepth) =           
             match actorLookup.TryGetValue(destId.value) with
             | true, x -> x
             | false, _ ->
                 // limit depth for the case of repeated routing
-                let desc = 
+                let actor = 
                     if maxDepth <= 0 then Actor.none
-                    else descLookup.Create destId
-                let actor =
-                    if int desc.execution = int Execution.Route 
-                    then c.GetActor(desc.routedId, maxDepth - 1)
+                    else factory.Create destId
+                let runner =
+                    if int actor.execution = int Execution.Route 
+                    then c.GetRunner(actor.routedId, maxDepth - 1)
                     else 
-                        let actor = new ActorRunner(destId, desc, onProcess)
-                        let isDefault = int desc.execution = int Execution.Default
+                        let runner = new ActorRunner(destId, actor, onProcess)
+                        let isDefault = int actor.execution = int Execution.Default
                         let isBackground = isDefault && options.threadCount > 0
                         if isBackground
                             then 
-                                bgActors.Add actor
-                                workers.Add(actor) 
-                            else fgActors.Add(actor)
-                        actor
+                                bgActors.Add runner
+                                workers.Add runner
+                            else fgActors.Add runner
+                        runner
                 // replace existing to handle cycles
-                actorLookup.[destId.value] <- actor
-                actor
+                actorLookup.[destId.value] <- runner
+                runner
         member c.SendAll(send, disposeMsg) =
             // Send messages from each worker outbox to destination inbox and
             // count how many messages have been disposed
@@ -438,12 +426,12 @@ module internal Internal =
                 (formatList "BG" bgActors.Count (String.Join("\n", bgActors)))
                 (workers.ToString())
 
-    type ActorSender(actors : Actors) =
+    type ActorSender(actors : ActorRunnerCollection) =
         let mutable sentCount = 0
         member c.SentCount = sentCount
         member c.Send (info : MessageInfo) =
             // should be called on main thread
-            let actor = actors.GetActor(info.destinationId, maxDepth = 2)
+            let actor = actors.GetRunner(info.destinationId, maxDepth = 2)
             actor.Enqueue(info.message, info.destinationId)
             sentCount <- sentCount + 1
 
@@ -464,19 +452,23 @@ type IMessagePump =
     abstract member RunAll : unit -> unit
 
 /// Not thread-safe, specify zero threads to disable BG workers
-type ActorSystem(options) =
+type ActorSystem(threadCount, batchSizeLimit) =
+    let options = { 
+        threadCount = threadCount
+        batchSizeLimit = batchSizeLimit
+        }
     let mutable receivedCount = 0
     let onProcess = Action(fun () -> 
         Interlocked.Increment &receivedCount |> ignore)
     let nullMessage = new NullMessage()
-    let actors = new Actors(options, onProcess)
+    let actors = new ActorRunnerCollection(options, onProcess)
     let receiver = Disposer()
     let sender = ActorSender(actors)
     let disposeMsg = Action<_>(receiver.Receive)
     let send = Action<_>(sender.Send)
     let fgOutbox = Outbox(send)
-    new() = new ActorSystem(ActorOptions.defaultOptions)
-    new(threadCount) = new ActorSystem({ ActorOptions.defaultOptions with threadCount = threadCount })
+    new() = new ActorSystem(ActorSystem.DefaultThreadCount)
+    new(threadCount) = new ActorSystem(threadCount, Int32.MaxValue)
     member private c.PendingCount = 
         sender.SentCount - receiver.DisposedCount
     member c.Register factory =
@@ -502,6 +494,9 @@ type ActorSystem(options) =
             Thread.Sleep(1)
     member c.Dispose() =
         actors.Dispose()
+    static member DefaultThreadCount = 
+        // Allow at least one background thread by default
+        Environment.ProcessorCount - 1 |> max 1
     interface IMessagePump with
         member c.Run() = c.Run()
         member c.RunAll() = c.RunAll()
