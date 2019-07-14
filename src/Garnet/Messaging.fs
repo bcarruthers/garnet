@@ -34,7 +34,7 @@ type IMessageWriter<'a> =
     abstract member AddMessage : 'a -> unit
 
 type IOutbox =
-    abstract member StartBatch<'a> : unit -> IMessageWriter<'a>
+    abstract member BeginSend<'a> : unit -> IMessageWriter<'a>
 
 [<Struct>]
 type Envelope<'a> = {
@@ -50,22 +50,10 @@ type Envelope<'a> = {
     override c.ToString() =
         sprintf "%d->%d: %A" c.sourceId.value c.destinationId.value c.message
 
-module Envelope =
-    let forwardMessageFrom (e : Envelope<List<_>>) targetId channelId sourceId =
-        use batch = e.outbox.StartBatch()
-        batch.SetChannel channelId
-        batch.SetSource sourceId
-        batch.AddRecipient targetId
-        for msg in e.message do
-            batch.AddMessage msg
+type IInbox =
+    abstract member Receive<'a> : Envelope<List<'a>> -> unit
 
-    let forwardMessage (e : Envelope<List<_>>) targetId channelId =
-        forwardMessageFrom e targetId channelId e.sourceId
-
-type IMessageHandler =
-    abstract member Handle<'a> : Envelope<List<'a>> -> unit
-
-type MessageHandler() =
+type Inbox() =
     let dict = Dictionary<Type, obj>()
     member c.OnAll<'a>(action : Envelope<List<'a>> -> unit) =
         let t = typeof<'a>
@@ -85,8 +73,8 @@ type MessageHandler() =
             handle e
             true
         | false, _ -> false
-    interface IMessageHandler with
-        member c.Handle e =
+    interface IInbox with
+        member c.Receive e =
             c.TryHandle e |> ignore
             
 [<Struct>]
@@ -110,10 +98,32 @@ module private Batches =
 
 type NullOutbox() =
     interface IOutbox with
-        member c.StartBatch() = nullBatch<'a>
+        member c.BeginSend() = nullBatch<'a>
+        
+module Envelope =
+    let private nullOutbox = NullOutbox()
+
+    let empty msg = {
+        outbox = nullOutbox
+        sourceId = ActorId.undefined
+        destinationId = ActorId.undefined
+        channelId = 0
+        message = msg
+        }
+
+    let forwardMessageFrom (e : Envelope<List<_>>) targetId channelId sourceId =
+        use batch = e.outbox.BeginSend()
+        batch.SetChannel channelId
+        batch.SetSource sourceId
+        batch.AddRecipient targetId
+        for msg in e.message do
+            batch.AddMessage msg
+
+    let forwardMessage (e : Envelope<List<_>>) targetId channelId =
+        forwardMessageFrom e targetId channelId e.sourceId
 
 type ActorDefinition = {
-    handler : IMessageHandler
+    handler : IInbox
     dispose : unit -> unit
     }
 
@@ -127,19 +137,24 @@ type ActorRule =
     | ActorRedirect of (ActorId -> ActorId)
     | ActorFactory of ActorFactory
 
-type private NullMessageHandler() =
-    interface IMessageHandler with
-        member c.Handle e = ()
+type private NullInbox() =
+    interface IInbox with
+        member c.Receive e = ()
     interface IDisposable with
         member c.Dispose() = ()
         
-module private NullMessageHandler =
-    let handler = new NullMessageHandler() :> IMessageHandler
+module private NullInbox =
+    let handler = new NullInbox() :> IInbox
 
 [<AutoOpen>]
-module MessageHandler =
-    type MessageHandler with
-        member c.On<'a>(action) =
+module Inbox =
+    type Inbox with
+        member c.On<'a>(handler) =
+            c.OnAll<'a> <| fun e -> 
+                for i = 0 to e.message.Count - 1 do
+                    handler (e.message.[i])
+
+        member c.OnInbound<'a>(action) =
             c.OnAll<'a> <| fun e -> 
                 for msg in e.message do
                     action { 
@@ -148,22 +163,47 @@ module MessageHandler =
                         destinationId = e.destinationId
                         outbox = e.outbox
                         message = msg }
+
+    type IOutbox with
+        member c.BeginSend<'a>(destId) =
+            let batch = c.BeginSend<'a>()
+            batch.AddRecipient destId
+            batch
+        member c.Send<'a>(destId, msg) =
+            c.Send<'a>(destId, msg, ActorId.undefined)
+        member c.Send<'a>(destId, msg, sourceId) =
+            c.Send<'a>(destId, msg, sourceId, 0)
+        member c.Send<'a>(destId, msg, sourceId, channelId) =
+            use batch = c.BeginSend<'a>(destId)
+            batch.SetSource sourceId
+            batch.SetChannel channelId
+            batch.AddMessage msg
+        member c.SendAll<'a>(destId, msgs : List<'a>) =
+            c.SendAll<'a>(destId, msgs, ActorId.undefined)
+        member c.SendAll<'a>(destId, msgs : List<'a>, sourceId) =
+            c.SendAll<'a>(destId, msgs, sourceId, 0)
+        member c.SendAll<'a>(destId, msgs : List<'a>, sourceId, channelId) =
+            use batch = c.BeginSend<'a>(destId)
+            batch.SetSource sourceId
+            batch.SetChannel channelId
+            for msg in msgs do
+                batch.AddMessage msg
     
 module ActorRule =
     let empty = {
         isBackground = false
         canCreate = fun id -> false
         create = fun id -> { 
-            handler = NullMessageHandler.handler
+            handler = NullInbox.handler
             dispose = ignore 
             }
         }
 
-type private MessageHandlerCollection(handlers : IMessageHandler[]) =
-    interface IMessageHandler with
-        member c.Handle<'a> e =
+type private InboxCollection(handlers : IInbox[]) =
+    interface IInbox with
+        member c.Receive<'a> e =
             for handler in handlers do
-                handler.Handle<'a> e
+                handler.Receive<'a> e
             
 module ActorDefinition =
     let init handler = { 
@@ -171,7 +211,7 @@ module ActorDefinition =
         dispose = ignore 
         }
 
-    let disposable<'a when 'a :> IDisposable and 'a :> IMessageHandler> (handler : 'a) = 
+    let disposable<'a when 'a :> IDisposable and 'a :> IInbox> (handler : 'a) = 
         { 
             handler = handler
             dispose = handler.Dispose 
@@ -181,17 +221,17 @@ module ActorDefinition =
         let definitions = definitions |> Seq.toArray
         let handlers = definitions |> Array.map (fun d -> d.handler)
         { 
-            handler = MessageHandlerCollection(handlers) :> IMessageHandler
+            handler = InboxCollection(handlers) :> IInbox
             dispose = fun () -> for d in definitions do d.dispose() 
         }
 
     let handlerId register id =
-        let h = MessageHandler()
-        h.On<MessageHandler -> unit> <| fun e -> 
+        let h = Inbox()
+        h.OnInbound<Inbox -> unit> <| fun e -> 
             e.message h
         register id h
         { 
-            handler = h :> IMessageHandler
+            handler = h :> IInbox
             dispose = ignore 
         }
 
@@ -199,15 +239,27 @@ module ActorDefinition =
         handlerId (fun _ handler -> register handler) ()
           
 module ActorFactory =
-    let init isBackground canCreate create = ActorFactory {
-        isBackground = isBackground
+    let main canCreate create = ActorFactory {
+        isBackground = false
         canCreate = canCreate
         create = create
         }
 
+    let initRange canCreate create = ActorFactory {
+        isBackground = true
+        canCreate = canCreate
+        create = create
+        }
+
+    let init actorId create = ActorFactory {
+        isBackground = true
+        canCreate = ((=)actorId)
+        create = fun id -> create()
+        }
+
 /// Need sender member indirection because container registrations
 /// need permanent reference while incoming messages have varying sender
-type MessageSender() =
+type internal Outbox() =
     let nullOutbox = NullOutbox() :> IOutbox
     let mutable batchCount = 0
     let mutable pushCount = 0
@@ -226,25 +278,13 @@ type MessageSender() =
         pushCount <- pushCount + 1
         scope
     /// Create an outgoing message batch which is sent on batch disposal
-    member c.StartBatch() =             
+    member c.BeginSend() =             
         // get current outbox
-        let batch = outboxStack.Peek().StartBatch()
+        let batch = outboxStack.Peek().BeginSend()
         batchCount <- batchCount + 1
         batch
     interface IOutbox with
-        member c.StartBatch() = c.StartBatch()            
+        member c.BeginSend() = c.BeginSend()            
     override c.ToString() =
-        sprintf "Sender: %d outboxes, %d batches, %d/%d push/pop" outboxStack.Count batchCount pushCount popCount
-
-/// Maps incoming messages to include address info if needed
-type MessageReceiver() =
-    let mappings = Dictionary<Type, obj>()
-    member c.Register<'a> (map : 'a -> Addresses -> 'a) = 
-        mappings.[typeof<'a>] <- map
-        new Disposable(ignore) :> IDisposable
-    member c.Map<'a> (msg : 'a) addresses =
-        match mappings.TryGetValue(typeof<'a>) with
-        | true, map -> (map :?> 'a -> Addresses -> 'a) msg addresses
-        | false, _ -> msg
-    override c.ToString() =
-        sprintf "Receiver: %d mappings" mappings.Count
+        sprintf "Outbox: %d outboxes, %d batches, %d/%d push/pop" outboxStack.Count batchCount pushCount popCount
+        

@@ -194,7 +194,7 @@ module internal Streaming =
         let mutable writer = nullMessageWriter
         interface IMessageStreamReader with
             member c.Start (header : MessageHeader) (outbox : IOutbox) =
-                writer <- outbox.StartBatch<'a>()
+                writer <- outbox.BeginSend<'a>()
                 writer.SetSource header.sourceId
                 writer.AddRecipient header.destinationId
             member c.Read stream =
@@ -204,7 +204,7 @@ module internal Streaming =
                 writer.Dispose()
                 writer <- nullMessageWriter
 
-    type LogMessageWriter<'a>(actorId : ActorId, logger : IMessageHandler, onDispose : Action<_>) =
+    type LogMessageWriter<'a>(actorId : ActorId, logger : IInbox, onDispose : Action<_>) =
         let nullOutbox = NullOutbox()
         let nullMessageWriter = new NullMessageWriter<'a>() :> IMessageWriter<'a>
         let recipients = List<ActorId>()
@@ -229,7 +229,7 @@ module internal Streaming =
                 messages.Add msg
             member c.Dispose() = 
                 for id in recipients do                    
-                    logger.Handle { 
+                    logger.Receive { 
                         outbox = nullOutbox
                         sourceId = sourceId
                         channelId = channelId
@@ -245,7 +245,7 @@ module internal Streaming =
     type LogMessageOutbox<'a>(actorId, logger) =
         let builders = Stack<_>()
         let recycle = Action<_>(builders.Push)
-        member c.StartBatch(writer : IMessageWriter<'a>) = 
+        member c.BeginSend(writer : IMessageWriter<'a>) = 
             let b =
                 if builders.Count = 0 then new LogMessageWriter<'a>(actorId, logger, recycle)
                 else builders.Pop()
@@ -269,9 +269,9 @@ module internal Streaming =
         member c.SetOutbox outbox =
             baseOutbox <- outbox
         interface IOutbox with
-            member c.StartBatch() = 
-                let writer = baseOutbox.StartBatch()
-                c.Get().StartBatch writer
+            member c.BeginSend() = 
+                let writer = baseOutbox.BeginSend()
+                c.Get().BeginSend writer
                 
 type MessageStreamReaderPool(registry : MessageRegistry) =
     let dict = Dictionary<int, obj>()
@@ -342,11 +342,11 @@ type StreamMessageSender(registry : MessageRegistry, filter) =
         while c.Send(stream, outbox) do ()
 
 /// Serializes individual messages to stream
-type StreamMessageHandler(registry : MessageRegistry, stream : Stream) =
+type StreamInbox(registry : MessageRegistry, stream : Stream) =
     let headerInfo = registry.Get<MessageHeader>()
-    interface IMessageHandler with
-        member c.Handle<'a> (e : Envelope<List<'a>>) =     
-            StreamMessageHandler.Write registry headerInfo stream e
+    interface IInbox with
+        member c.Receive<'a> (e : Envelope<List<'a>>) =     
+            StreamInbox.Write registry headerInfo stream e
     static member Write<'a> (registry : MessageRegistry) headerInfo (stream : Stream) (e : Envelope<List<'a>>) =
         let info = registry.Get<'a>()
         if info.typeId <> 0 then

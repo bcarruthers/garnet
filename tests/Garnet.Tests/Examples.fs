@@ -153,7 +153,7 @@ type Pong = struct end
 // actor definitions
 let a = new ActorSystem()
 a.Register(ActorId 1, fun c ->
-    c.On<Ping> <| fun e -> 
+    c.OnInbound<Ping> <| fun e -> 
         printf "ping "
         e.Respond(Pong())
     )
@@ -172,8 +172,8 @@ a.RunAll()
 [<Struct>] type AddShip = { x : float32; y : float32 }
 
 let batchSub =
-    c.OnAll<AddShip> <| fun list ->
-        for e in list do
+    c.OnAll<AddShip> <| fun e ->
+        for e in e.message do
             // [do update here]
             printfn "%A" e
 
@@ -184,3 +184,17 @@ let entity =
         .With({ x = 10.0f; y = 5.0f })
         .With({ vx = 1.0f; vy = 2.0f })
         
+// Defining a container actor
+let test() =
+    use a = new ActorSystem()
+    a.Register(ActorId 1, fun h ->
+        h.OnInbound<Ping> <| fun e ->
+            e.Respond(Pong()))
+    a.Register(ActorId 2, 
+        let c = Container()
+        let sub =
+            c.OnInbound<Ping> <| fun e ->
+                e.Respond(Pong())        
+        c)
+    a.Send(ActorId 1, Ping())
+    a.RunAll()

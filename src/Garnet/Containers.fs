@@ -182,41 +182,50 @@ type Commit = struct end
 
 /// Wrapper over resource lookup with default types for ECS
 type Container() =
-    let types = Registry()
-    let channels = types.GetInstance<Channels>()
-    let scheduler = types.GetInstance<CoroutineScheduler>()
-    let segments = types.GetInstance<SegmentStore<int>>()
+    let reg = Registry()
+    let channels = reg.GetInstance<Channels>()
+    let scheduler = reg.GetInstance<CoroutineScheduler>()
+    let segments = reg.GetInstance<SegmentStore<int>>()
+    let outbox = reg.GetInstance<Outbox>()
     let components = 
         let store = ComponentStore(segments, Eid.eidToComponentKey)
-        types.RegisterInstance(store)
+        reg.RegisterInstance(store)
         store        
-    let eidPools = types.GetInstance<EidPools>()
+    //let mailbox = reg.GetInstance<Mailbox>()
+    let eidPools = reg.GetInstance<EidPools>()
     let eids = components.Get<Eid>()
     member c.Get<'a>() = components.Get<'a>()
     member c.GetSegments<'a>() = segments.GetSegments<'a>()
     member c.GetChannel<'a>() = channels.GetChannel<'a>()
-    member c.Register x = types.Register x
-    member c.RegisterInstance x = types.RegisterInstance x
+    member c.Register x = reg.Register x
+    member c.RegisterInstance x = reg.RegisterInstance x
     member c.TryGetInstance<'a>([<Out>] r : byref<_>) = 
-        types.TryGetInstance<'a>(&r)
+        reg.TryGetInstance<'a>(&r)
     member internal c.Clear() =
         channels.Clear()
         components.Clear()
         eidPools.Clear()
         scheduler.Clear()
-    /// Returns true if events were handled
-    member internal c.Dispatch() = 
-        channels.Publish()
     member c.Commit() =
         // order doesn't matter since we're just moving data
         // into committed state and not calling any handlers
         channels.Commit()
         components.Commit()
         eidPools.Commit()
-        channels.Handle <| Commit()
-    member c.RunOnce() = 
+        channels.Publish <| Commit()
+    /// Returns true if events were handled
+    member private c.DispatchOnce() = 
+        c.Commit()
+        channels.Publish()
+    member private c.DispatchAll() = 
+        while c.DispatchOnce() do ()
+    member private c.RunOnce() = 
         c.Commit()
         scheduler.RunOnce()
+    member c.Run() = 
+        c.DispatchAll()
+        while c.RunOnce() do
+            c.DispatchAll()
     member c.Contains(eid : Eid) =
         eids.Contains(eid)
     member internal c.CreateEid(partition) =
@@ -237,8 +246,8 @@ type Container() =
         scheduler.Step deltaTime
     member c.Start coroutine = 
         scheduler.Schedule coroutine
-    member c.SetDispatcher dispatcher =
-        channels.SetDispatcher dispatcher
+    member c.SetPublisher dispatcher =
+        channels.SetPublisher dispatcher
     interface IRegistry with
         member c.Register f = c.Register f
         member c.RegisterInstance x = c.RegisterInstance x
@@ -252,8 +261,22 @@ type Container() =
     interface ISegmentStore<int> with
         member c.GetSegments<'a>() = 
             segments.GetSegments<'a>()
+    member c.BeginSend() =
+        outbox.BeginSend()
+    interface IOutbox with
+        member c.BeginSend() =
+            outbox.BeginSend()
+    member c.Receive e =
+        // assign outbox for duration of call
+        use s = outbox.PushOutbox(e.outbox)
+        let channel = c.GetChannel<'a>()
+        channel.PublishAll e
+        c.Run()
+    interface IInbox with
+        member c.Receive e =
+            c.Receive(e)
     override c.ToString() = 
-        types.ToString()
+        reg.ToString()
         
 [<Struct>]
 type Entity = {
@@ -293,18 +316,6 @@ type Container with
                 m <- m >>> 1
                 i <- i + 1
 
-    member private c.DispatchOnce() = 
-        c.Commit()
-        c.Dispatch()
-        
-    member private c.DispatchAll() = 
-        while c.DispatchOnce() do ()
-
-    member c.Run() = 
-        c.DispatchAll()
-        while c.RunOnce() do
-            c.DispatchAll()
-
     member c.Run(msg) = 
         c.Send(msg)
         c.Run()
@@ -321,28 +332,3 @@ module internal Composition =
     let compose components =
         let arr = components |> Seq.toArray
         fun e -> for c in arr do c e    
-        
-/// Runs container for each incoming message
-type internal ContainerMessageHandler(container : Container) =
-    let mutable batchCount = 0
-    let mutable messageCount = 0
-    let receiver = container.GetInstance<MessageReceiver>()
-    let sender = container.GetInstance<MessageSender>()
-    interface IMessageHandler with
-        member c.Handle e =
-            // assign outbox for duration of call
-            use s = sender.PushOutbox(e.outbox)
-            let channel = container.GetChannel<'a>()
-            let addresses = e.addresses
-            for msg in e.message do
-                let mapped = receiver.Map msg addresses
-                channel.Send mapped
-            batchCount <- batchCount + 1
-            messageCount <- messageCount + e.message.Count
-            container.Run()
-    override c.ToString() =
-        sprintf "Handler: %d batches, %d messages" batchCount messageCount
-
-module ActorDefinition =
-    let container c =
-        ContainerMessageHandler(c) |> ActorDefinition.init

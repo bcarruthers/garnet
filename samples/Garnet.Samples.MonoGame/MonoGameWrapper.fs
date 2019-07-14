@@ -67,7 +67,7 @@ module SpriteSystems =
         Disposable.empty
 
     let registerDrawSprites (c : Container) =
-        c.OnAll<Sprite> <| fun list ->
+        c.OnAll<Sprite> <| fun e ->
             let zoom = 1.0f
             let vs = c.GetInstance<ref<ViewSize>>()
             let sb = c.GetInstance<SpriteBatch>()
@@ -79,7 +79,7 @@ module SpriteSystems =
                 samplerState = SamplerState.LinearClamp, 
                 blendState = BlendState.Additive,
                 transformMatrix = Nullable xf)
-            for sprite in list do
+            for sprite in e.message do
                 tileSet.Draw(sb, sprite)
             sb.End()
 

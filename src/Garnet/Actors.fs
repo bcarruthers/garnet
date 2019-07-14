@@ -58,11 +58,11 @@ module ActorOptions =
 module internal Internal =
     type IMessage =
         inherit IDisposable
-        abstract member Handle : IOutbox -> ActorId -> IMessageHandler -> unit
+        abstract member Receive : IOutbox -> ActorId -> IInbox -> unit
 
     type NullMessage() =
         interface IMessage with
-            member c.Handle outbox destId handler = ()
+            member c.Receive outbox destId handler = ()
         interface IDisposable with
             member c.Dispose() = ()
         
@@ -131,8 +131,8 @@ module internal Internal =
                         message = c :> IMessage }
             newState.Clear()
         interface IMessage with
-            member c.Handle outbox destId handler =
-                handler.Handle {
+            member c.Receive outbox destId handler =
+                handler.Receive {
                     outbox = outbox
                     sourceId = state.sourceId
                     channelId = state.channelId
@@ -196,7 +196,7 @@ module internal Internal =
             let batch = pool.Get()
             batch.Send(state, send)
             builders.Push(builder))
-        member c.StartBatch(sourceId) = 
+        member c.BeginSend(sourceId) = 
             let b =
                 if builders.Count = 0 then new MessageWriter<'a>(sendBatch)
                 else builders.Pop()
@@ -231,13 +231,13 @@ module internal Internal =
                     dict.Add(t, pool)
                     pool
             pool
-        member c.StartBatch() =
-            c.Get<'a>().StartBatch(sourceId)
+        member c.BeginSend() =
+            c.Get<'a>().BeginSend(sourceId)
         // Should be called on worker thread
         interface IActorOutbox with
             member c.SetSource id = sourceId <- id
-            member c.StartBatch() =
-                c.StartBatch()
+            member c.BeginSend() =
+                c.BeginSend()
         override c.ToString() =
             formatList "Outboxes" dict.Count
                 (String.Join("\n", dict |> Seq.map (fun kvp -> 
@@ -258,8 +258,8 @@ module internal Internal =
         interface IActorOutbox with
             member c.SetSource id = 
                 (outbox :> IActorOutbox).SetSource id
-            member c.StartBatch() =
-                outbox.StartBatch()
+            member c.BeginSend() =
+                outbox.BeginSend()
         override c.ToString() =
             sprintf "Queue: %s\n%s" (sendQueue.ToString()) (outbox.ToString())
  
@@ -290,7 +290,7 @@ module internal Internal =
                 while processed < options.processLimit && receiveQueue.TryDequeue(&msg) do
                     let ex =
                         try
-                            msg.message.Handle outbox msg.destId definition.handler
+                            msg.message.Receive outbox msg.destId definition.handler
                             processed <- processed + 1
                             onProcess.Invoke()
                             null
@@ -504,8 +504,8 @@ type ActorSystem(options) =
         sender.SentCount - receiver.DisposedCount
     member c.Register desc =
         actors.Register desc
-    member c.StartBatch() =
-        fgOutbox.StartBatch()
+    member c.BeginSend() =
+        fgOutbox.BeginSend()
     member c.Create(destId) =
         // Send an empty message just to force creation of actor
         send.Invoke { destinationId = destId; message = nullMessage }
@@ -528,8 +528,8 @@ type ActorSystem(options) =
     interface IMessagePump with
         member c.Run() = c.Run()
         member c.RunAll() = c.RunAll()
-        member c.StartBatch() =
-            c.StartBatch()
+        member c.BeginSend() =
+            c.BeginSend()
     interface IDisposable with
         member c.Dispose() = c.Dispose()
     override c.ToString() =
@@ -547,31 +547,6 @@ type ActorReference = {
 
 [<AutoOpen>]
 module ActorSystem =
-    type IOutbox with
-        member c.StartBatch<'a>(destId) =
-            let batch = c.StartBatch<'a>()
-            batch.AddRecipient destId
-            batch
-        member c.Send<'a>(destId, msg) =
-            c.Send<'a>(destId, msg, ActorId.undefined)
-        member c.Send<'a>(destId, msg, sourceId) =
-            c.Send<'a>(destId, msg, sourceId, 0)
-        member c.Send<'a>(destId, msg, sourceId, channelId) =
-            use batch = c.StartBatch<'a>(destId)
-            batch.SetSource sourceId
-            batch.SetChannel channelId
-            batch.AddMessage msg
-        member c.SendAll<'a>(destId, msgs : List<'a>) =
-            c.SendAll<'a>(destId, msgs, ActorId.undefined)
-        member c.SendAll<'a>(destId, msgs : List<'a>, sourceId) =
-            c.SendAll<'a>(destId, msgs, sourceId, 0)
-        member c.SendAll<'a>(destId, msgs : List<'a>, sourceId, channelId) =
-            use batch = c.StartBatch<'a>(destId)
-            batch.SetSource sourceId
-            batch.SetChannel channelId
-            for msg in msgs do
-                batch.AddMessage msg
-
     type IMessagePump with
         member c.Get id = {
             actorId = id
@@ -592,11 +567,15 @@ module ActorSystem =
                 c.Register(desc)
 
         member c.Register(actorId, register) =
-            c.Register(ActorFactory.init true ((=)actorId) (fun id -> 
+            c.Register(ActorFactory.init actorId (fun () -> 
                 ActorDefinition.handler register))
 
+        member c.Register(actorId, handler) =
+            c.Register(ActorFactory.init actorId (fun () -> 
+                ActorDefinition.init handler))
+
         member c.Register(canCreate, register) =
-            c.Register(ActorFactory.init true canCreate (fun id -> 
+            c.Register(ActorFactory.initRange canCreate (fun id -> 
                 ActorDefinition.handler (fun h -> register id h)))
 
     type ActorReference with
@@ -620,10 +599,10 @@ type QueueingMessagePump(enqueue) =
         member c.Run() = ()
         member c.RunAll() = ()
         member c.Dispose() = ()
-        member c.StartBatch<'a>() =
+        member c.BeginSend<'a>() =
             new MessageWriter<'a>(fun writer ->
                 enqueue (fun (c : IOutbox) -> 
-                    use batch = c.StartBatch()
+                    use batch = c.BeginSend()
                     writer.State.CopyTo batch))
             :> IMessageWriter<'a>
 
@@ -632,7 +611,7 @@ type BackgroundMessagePump(system : IMessagePump, update) =
     let mutable isRunning = true
     let nullCommand a = ()
     let queue = ConcurrentQueue<IOutbox -> unit>()
-    let dispatcher = 
+    let pump = 
         new QueueingMessagePump(queue.Enqueue)
         :> IMessagePump
     let thread = 
@@ -650,11 +629,11 @@ type BackgroundMessagePump(system : IMessagePump, update) =
     member c.Dispose() = 
         isRunning <- false
         thread.Join()
-        dispatcher.Dispose()
+        pump.Dispose()
     interface IMessagePump with
-        member c.Run() = dispatcher.Run()
-        member c.RunAll() = dispatcher.RunAll()
-        member c.StartBatch<'a>() = dispatcher.StartBatch<'a>()
+        member c.Run() = pump.Run()
+        member c.RunAll() = pump.RunAll()
+        member c.BeginSend<'a>() = pump.BeginSend<'a>()
         member c.Dispose() = c.Dispose()
     
 type Sender = IOutbox -> unit

@@ -12,9 +12,12 @@ type Ping = struct end
 type Pong = struct end
 
 module ActorFactory =
-    let single bg actorId register = 
-        ActorFactory.init bg ((=)actorId) (fun id -> ActorDefinition.handler register)
-        
+    let single bg actorId register = ActorFactory {
+        isBackground = bg
+        canCreate = ((=)actorId)
+        create = (fun id -> ActorDefinition.handler register)
+        }
+
     let fg actorId register = single false actorId register
     let bg actorId register = single true actorId register
     
@@ -25,12 +28,12 @@ let tests =
             let msgs = List<obj>()
             use a = new ActorSystem()
             a.Register(ActorId 1, fun c ->
-                c.On<Ping> <| fun e -> 
+                c.OnInbound<Ping> <| fun e -> 
                     msgs.Add e.message
                     e.Respond(Pong())
                 )
             a.Register(ActorId 2, fun c ->
-                c.On<Pong> <| fun e -> 
+                c.OnInbound<Pong> <| fun e -> 
                     msgs.Add e.message
                 )
             a.Send(ActorId 1, Ping(), sourceId = ActorId 2)
@@ -42,7 +45,7 @@ let tests =
             use a = new ActorSystem(0)
             a.RegisterAll [
                 ActorFactory.fg (ActorId 1) <| fun c ->
-                    c.On<int> <| fun e ->
+                    c.OnInbound<int> <| fun e ->
                         if e.message < 10 then
                             count <- count + 1
                             e.outbox.Send(ActorId 1, e.message + 1)
@@ -57,12 +60,12 @@ let tests =
             use a = new ActorSystem(0)
             a.RegisterAll [
                 ActorFactory.fg (ActorId 1) <| fun c ->
-                    c.On<int> <| fun e ->
+                    c.OnInbound<int> <| fun e ->
                         if e.message < 10 then
                             count1 <- count1 + 1
                             e.outbox.Send(ActorId 2, e.message + 1)
                 ActorFactory.fg (ActorId 2) <| fun c ->
-                    c.On<int> <| fun e ->
+                    c.OnInbound<int> <| fun e ->
                         if e.message < 10 then
                             count2 <- count2 + 1
                             e.outbox.Send(ActorId 1, e.message + 1)
@@ -78,16 +81,16 @@ let tests =
             use a = new ActorSystem(1)
             a.RegisterAll [
                 ActorFactory.fg (ActorId 1) <| fun c ->
-                    c.On<Thread> <| fun e ->
+                    c.OnInbound<Thread> <| fun e ->
                         // bg thread should be different
                         Expect.notEqual Thread.CurrentThread.ManagedThreadId e.message.ManagedThreadId ""
-                    c.On<int> <| fun e ->
+                    c.OnInbound<int> <| fun e ->
                         if e.message < 10 then
                             count1 <- count1 + 1
                             //printfn "FG: %d" Thread.CurrentThread.ManagedThreadId
                             e.outbox.Send(ActorId 2, e.message + 1)
                 ActorFactory.bg (ActorId 2) <| fun c ->
-                    c.On<int> <| fun e ->
+                    c.OnInbound<int> <| fun e ->
                         if e.message < 10 then
                             count2 <- count2 + 1
                             //printfn "BG: %d" Thread.CurrentThread.ManagedThreadId
@@ -109,7 +112,7 @@ let tests =
                     canCreate = fun id -> true
                     create = ActorDefinition.handlerId <| fun id c -> 
                         let rand = Random(id.value)
-                        c.On<int> <| fun e -> 
+                        c.OnInbound<int> <| fun e -> 
                             //printfn "%d: %d" id.id e.message
                             if e.message < 1000 then
                                 let nextId = rand.Next(1, 256)
@@ -134,32 +137,32 @@ let tests =
             let rules = 
                 [
                 ActorFactory.bg (ActorId 1) <| fun c ->
-                    c.On<int> <| fun e ->
+                    c.OnInbound<int> <| fun e ->
                         for i = 1 to 1000 do
                             e.outbox.Send(ActorId 2, uint32 i)
                             e.outbox.Send(ActorId 2, uint16 i)
                 ActorFactory.bg (ActorId 2) <| fun c ->
-                    c.On<int> <| fun e ->
+                    c.OnInbound<int> <| fun e ->
                         for i = 1 to 1 do
                             e.outbox.Send(ActorId 3, uint32 i)
                             e.outbox.Send(ActorId 4, uint16 i)
-                    c.On<uint32> <| fun e ->
+                    c.OnInbound<uint32> <| fun e ->
                         for i = 1 to 1 do
                             e.outbox.Send(ActorId 3, uint8 i)
                 ActorFactory.bg (ActorId 3) <| fun c ->
-                    c.On<uint8> <| fun e ->
+                    c.OnInbound<uint8> <| fun e ->
                         for i = 1 to 1 do
                             e.outbox.Send(ActorId 4, int8 i)
-                    c.On<uint16> <| fun e ->
+                    c.OnInbound<uint16> <| fun e ->
                         for i = 1 to 1 do
                             e.outbox.Send(ActorId 4, int8 i)
-                    c.On<uint32> <| fun e ->
+                    c.OnInbound<uint32> <| fun e ->
                         Interlocked.Increment(&count) |> ignore
                 ActorFactory.bg (ActorId 4) <| fun c ->
-                    c.On<int8> <| fun e ->
+                    c.OnInbound<int8> <| fun e ->
                         for i = 1 to 1 do
                             e.outbox.Send(ActorId 2, int i)
-                    c.On<uint16> <| fun e ->
+                    c.OnInbound<uint16> <| fun e ->
                         Interlocked.Increment(&count) |> ignore
                 ]     
                 |> List.map (ActorFactory.withLogging createRegistry log.OpenWrite)
@@ -192,11 +195,11 @@ let tests =
             let rules = 
                 [
                 ActorFactory.bg (ActorId 1) <| fun c ->
-                    c.On<int> <| fun e ->
+                    c.OnInbound<int> <| fun e ->
                         for i = 1 to 100 do
                             e.outbox.Send(ActorId 2, uint32 i)
                 ActorFactory.bg (ActorId 2) <| fun c ->
-                    c.On<uint32> <| fun e ->
+                    c.OnInbound<uint32> <| fun e ->
                         for i = 1 to 1 do
                             e.outbox.Send(ActorId 3, uint8 i)
                 ]     
@@ -234,9 +237,9 @@ let tests =
                 isBackground = false
                 canCreate = fun id -> id = ActorId 15
                 create = fun id -> 
-                    let h = MessageHandler()
-                    h.On<int> <| fun e -> e.outbox.Send(ActorId 25, "msg" + e.message.ToString())
-                    LogMessageHandler(id, h, StreamMessageHandler(reg, ms)) |> ActorDefinition.init
+                    let h = Inbox()
+                    h.OnInbound<int> <| fun e -> e.outbox.Send(ActorId 25, "msg" + e.message.ToString())
+                    LogInbox(id, h, StreamInbox(reg, ms)) |> ActorDefinition.init
                 }
             a.Run(ActorId 15, 100)
             ms.Position <- 0L
@@ -244,7 +247,7 @@ let tests =
             a2.Register <| ActorFactory {
                 isBackground = false
                 canCreate = fun id -> true
-                create = fun id -> PrintMessageHandler(id, Formatter(), ref 0, ignore) |> ActorDefinition.init
+                create = fun id -> PrintInbox(id, Formatter(), ref 0, ignore) |> ActorDefinition.init
                 }
             a2.Run(ActorId 15, { enableActorLog = true })
             a2.Run(ActorId 25, { enableActorLog = true })

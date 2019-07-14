@@ -8,18 +8,18 @@ open Garnet.Formatting
 open Garnet.Actors
 
 /// Logs incoming and outgoing messages
-type LogMessageHandler(actorId : ActorId, baseHandler : IMessageHandler, logger : IMessageHandler) =
+type LogInbox(actorId : ActorId, baseHandler : IInbox, logger : IInbox) =
     let nullOutbox = NullOutbox() :> IOutbox
     let outbox = LogMessageOutbox(actorId, logger)
-    interface IMessageHandler with
-        member c.Handle e =
+    interface IInbox with
+        member c.Receive e =
             // log incoming message
-            logger.Handle e
+            logger.Receive e
             // redirect logging outbox
             outbox.SetOutbox e.outbox
             // handle message using logging outbox
             // so outgoing messages will go to log first, then to actual outbox
-            try baseHandler.Handle { e with outbox = outbox }
+            try baseHandler.Receive { e with outbox = outbox }
             // revert logging outbox
             finally outbox.SetOutbox nullOutbox
 
@@ -209,24 +209,24 @@ type MemoryActorStreamSource() =
 type ActorLogCommand = {
     enableActorLog : bool }
     
-type PrintMessageHandler(id : ActorId, formatter : IFormatter, counter : ref<int>, print) =
+type PrintInbox(id : ActorId, formatter : IFormatter, counter : ref<int>, print) =
     let sb = System.Text.StringBuilder()
     let mutable batchCount = 0
     let mutable messageCount = 0
     let mutable isEnabled = false
     let mutable maxMessages = 10
     let handler = 
-        let h = MessageHandler()
-        h.On<ActorLogCommand> <| fun e -> isEnabled <- e.message.enableActorLog
-        h :> IMessageHandler
+        let h = Inbox()
+        h.OnInbound<ActorLogCommand> <| fun e -> isEnabled <- e.message.enableActorLog
+        h :> IInbox
     member c.IsEnabled 
         with get() = isEnabled
         and set value = isEnabled <- value
-    interface IMessageHandler with
-        member c.Handle<'a> (e : Envelope<List<'a>>) =
+    interface IInbox with
+        member c.Receive<'a> (e : Envelope<List<'a>>) =
             // print if enabled before or after
             let isEnabledBefore = isEnabled
-            handler.Handle e
+            handler.Receive e
             let isEnabledAfter = isEnabled
             if (isEnabledBefore || isEnabledAfter) && formatter.CanFormat<'a>() then 
                 sb.Append(sprintf "%d: %d->%d (ch%d) %d/%d/%d: %dx %s" 
@@ -272,7 +272,7 @@ module internal RecordingInternal =
             isBackground = false
             canCreate = options.filter.destinationFilter
             create = fun id ->
-                let h = PrintMessageHandler(id, formatter, counter, options.print) 
+                let h = PrintInbox(id, formatter, counter, options.print) 
                 h.IsEnabled <- true
                 h |> ActorDefinition.init
             } 
@@ -282,7 +282,7 @@ module internal RecordingInternal =
 module Recording =          
     module ActorDefinition =        
         let print id formatter =
-            PrintMessageHandler(id, formatter, ref 0, printfn "%s") 
+            PrintInbox(id, formatter, ref 0, printfn "%s") 
             |> ActorDefinition.init
     
     module ActorFactory =
@@ -296,7 +296,7 @@ module Recording =
                 factory with
                     create = fun id ->
                         let formatter = createFormatter()
-                        let h = PrintMessageHandler(id, formatter, ref 0, print) 
+                        let h = PrintInbox(id, formatter, ref 0, print) 
                         h.IsEnabled <- true
                         ActorDefinition.combine [
                             factory.create id
@@ -311,13 +311,13 @@ module Recording =
                         let def = factory.create id
                         let stream = openStream id
                         let registry = createRegistry()
-                        let logHandler = StreamMessageHandler(registry, stream)
+                        let logHandler = StreamInbox(registry, stream)
                         {   dispose = fun () ->
                                 def.dispose()
                                 stream.Dispose()
                             handler = 
-                                LogMessageHandler(id, def.handler, logHandler)
-                                :> IMessageHandler
+                                LogInbox(id, def.handler, logHandler)
+                                :> IInbox
                             }
                 })
 

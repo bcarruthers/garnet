@@ -109,7 +109,7 @@ module internal Internal =
             // - don't want enumerators to execute
             canPrint = not (isLoggingType<'a> || isEnumerable<'a>) 
             canSendTimings = not (obj.ReferenceEquals(typeof<'a>, typeof<Timing>))
-            typeName = "Dispatch " + typeToString typeof<'a>
+            typeName = "Handle " + typeToString typeof<'a>
             isEmpty = isEmptyType typeof<'a>
             }
 

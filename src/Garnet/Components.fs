@@ -86,8 +86,6 @@ type ComponentStore<'k, 'c
         Components(segs.GetSegments<'a>(), idToKey)
     member c.Clear() =
         segs.Clear()
-    member c.Remove(sid, mask) =
-        segs.Remove(sid, mask)
     member c.Handle(id, handler) =        
         let struct(sid, ci) = idToKey id
         let mask = 1UL <<< ci
@@ -95,7 +93,7 @@ type ComponentStore<'k, 'c
     /// Removes all components associated with a given ID
     member c.Destroy(id) =
         let struct(sid, ci) = idToKey id
-        c.Remove(sid, 1UL <<< ci)
+        segs.Remove(sid, 1UL <<< ci)
     member c.Commit() =
         segs.Commit()
     interface IComponentStore<'k, 'c> with
