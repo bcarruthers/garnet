@@ -96,7 +96,7 @@ type Segment<'k, 'a when 'k :> IComparable<'k>> = {
     id : 'k
     mask : uint64
     } with
-    override s.ToString() = sprintf "%A %s" s.id (maskToString 64 s.mask)
+    override s.ToString() = sprintf "%s %s" (s.id.ToString()) (maskToString 64 s.mask)
     member c.Get(i, fallback) =
         if c.mask &&& (1UL <<< i) <> 0UL then c.data.[i]
         else fallback    
@@ -107,7 +107,7 @@ type BitSegment<'k when 'k :> IComparable<'k>> = {
     mask : uint64
     } with
     static member IsEmpty = Predicate<BitSegment<'k>>(fun s -> s.mask = 0UL)
-    override s.ToString() = sprintf "%A %s" s.id (maskToString 64 s.mask)
+    override s.ToString() = sprintf "%s %s" (s.id.ToString()) (maskToString 64 s.mask)
 
 module Segment =
     let segmentBits = 6

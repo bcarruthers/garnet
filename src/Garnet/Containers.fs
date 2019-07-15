@@ -194,6 +194,9 @@ type Container() =
     //let mailbox = reg.GetInstance<Mailbox>()
     let eidPools = reg.GetInstance<EidPools>()
     let eids = components.Get<Eid>()
+    let recycle eid =
+        let partition = Eid.getPartition eid
+        eidPools.[partition].Recycle(eid)
     member c.Get<'a>() = components.Get<'a>()
     member c.GetSegments<'a>() = segments.GetSegments<'a>()
     member c.GetChannel<'a>() = channels.GetChannel<'a>()
@@ -228,6 +231,11 @@ type Container() =
             c.DispatchAll()
     member c.Contains(eid : Eid) =
         eids.Contains(eid)
+    member c.Get(eid) = { 
+        id = eid
+        container = components 
+        recycle = recycle
+        }
     member internal c.CreateEid(partition) =
         let eid = eidPools.[partition].Next()
         eids.Add(eid, eid)
@@ -236,8 +244,7 @@ type Container() =
         components.Handle(id, handler)
     member c.Destroy(id : Eid) =
         components.Destroy(id)
-        let partition = Eid.getPartition id
-        eidPools.[partition].Recycle(id)
+        recycle id
     /// Assumes eid components have been populated and restores 
     /// eid pools from that state
     member c.RestoreEids() =
@@ -277,28 +284,8 @@ type Container() =
             c.Receive(e)
     override c.ToString() = 
         reg.ToString()
-        
-[<Struct>]
-type Entity = {
-    id : Eid
-    container : Container
-    } with
-    member e.Add x = e.container.Get<_>().Add(e.id, x)
-    member e.Set x = e.container.Get<_>().Set(e.id, x)
-    member e.Remove<'a>() = e.container.Get<'a>().Remove(e.id)
-    member e.Get<'a>() = e.container.Get<'a>().Get(e.id)    
-    member e.Get<'a>(fallback) = e.container.Get<'a>().Get(e.id, fallback)
-    member e.Contains<'a>() = e.container.Get<'a>().Contains(e.id)
-    member e.Destroy() = e.container.Destroy(e.id)
-    member e.With x = e.Add x; e
-    override e.ToString() = 
-        let printer = PrintHandler(UInt64.MaxValue)
-        e.container.Handle(e.id, printer)
-        "Entity " + e.id.ToString() + ": " + printer.ToString()
 
 type Container with
-    member c.Get(eid) = { id = eid; container = c }
-
     member c.Create(partition) =
         let eid = c.CreateEid(partition)
         c.Get eid
@@ -322,7 +309,7 @@ type Container with
     
 [<AutoOpen>]
 module internal Composition =
-    let cmp c (e : Entity) = e.Add c
+    let cmp c (e : Entity<_,_>) = e.Add c
 
     let create prefab (c : Container) =
         let e = c.Create()
