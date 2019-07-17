@@ -90,6 +90,8 @@ module internal Utility =
         |> Seq.mapi (fun i x -> sprintf "%d %s" i (x.ToString()))
         |> listToString prefix ""
 
+/// Contiguous 64-element segment with a mask indicating which elements
+/// are defined and ID to identify the segment in a sparse collection
 [<Struct>]
 type Segment<'k, 'a when 'k :> IComparable<'k>> = {
     data : 'a[]
@@ -101,6 +103,7 @@ type Segment<'k, 'a when 'k :> IComparable<'k>> = {
         if c.mask &&& (1UL <<< i) <> 0UL then c.data.[i]
         else fallback    
 
+/// 64-bit mask and ID to identify the segment in a sparse collection
 [<Struct>]
 type BitSegment<'k when 'k :> IComparable<'k>> = {
     id : 'k
@@ -118,6 +121,7 @@ module Segment =
 module BitSegment =
     let init id mask = { id = id; mask = mask }
 
+/// Provides a method for accepting a generically-typed segment
 type ISegmentHandler =
     abstract member Handle<'k, 'a when 'k :> IComparable<'k>> : Segment<'k, 'a> -> unit
     

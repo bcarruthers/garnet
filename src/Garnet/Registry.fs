@@ -6,12 +6,18 @@ open Garnet.Comparisons
 open Garnet.Formatting
 open Garnet.Collections
 
+/// Provides methods to register and resolve single-instance
+/// objects by type
 type IRegistry =
+    /// Registers a factory for creating values of a specific type
     abstract member Register<'a> : (unit -> 'a) -> unit
+    /// Registers a specific instance of a type
     abstract member RegisterInstance<'a> : 'a -> unit
+    /// Attempts to resolve a type, returning true if successful
     abstract member TryGetInstance<'a> : [<Out>] value : byref<'a> -> bool
     
-/// Bag/locator of single-instance objects
+/// Provides methods to register and resolve single-instance
+/// objects by type
 type Registry() =
     let instances = IndexedLookup<Type, obj>()
     let resolvers = IndexedLookup<Type, obj>()

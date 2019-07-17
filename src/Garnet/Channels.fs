@@ -209,26 +209,6 @@ type Channel<'a>(publisher : IPublisher) =
         sprintf "%s: %dH %dP %dE %dT %dSE" (typeof<'a> |> typeToString) 
             handlers.Count pending.Count events.Count total singleEventPool.Count
 
-type internal EventHandlerCollection() =
-    let isUnsubscribed = Predicate(fun (sub : Subscription) -> sub.IsUnsubscribed)
-    let handlers = List<Subscription>()
-    member c.OnAll(handler : IEventHandler) =
-        let sub = new Subscription(handler)
-        handlers.Add(sub)
-        sub :> IDisposable
-    member c.Commit() =
-        handlers.RemoveAll(isUnsubscribed) |> ignore
-    interface IEventHandler with
-        member c.Handle(batch) =
-            for h in handlers do
-                h.Handle(batch)
-
-type internal PrintEventHandler(print) =
-    interface IEventHandler with               
-        member c.Handle batch =
-            for x in batch do
-                print (x.ToString())
-
 type IChannels =
     abstract member GetChannel<'a> : unit -> Channel<'a>
 

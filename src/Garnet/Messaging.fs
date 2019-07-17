@@ -3,7 +3,8 @@
 open System
 open System.Collections.Generic
 open Garnet.Comparisons
-          
+
+/// Identifies an actor
 [<Struct>]
 type ActorId =
     val value : int
@@ -14,16 +15,26 @@ module ActorId =
     let undefined = ActorId 0
     let isAny (id : ActorId) = true
     
+/// Provides methods for constructing a batch of messages, sending
+/// them upon disposal
 type IMessageWriter<'a> =
     inherit IDisposable
+    /// Assigns a channel, which can be an arbitrary value used to
+    /// distinguish messages in addition to their type
     abstract member SetChannel : int -> unit
+    /// Assigns the source actor ID, which is typically the actor
+    /// sending the message
     abstract member SetSource : ActorId -> unit
+    /// Adds a recipient actor ID
     abstract member AddRecipient : ActorId -> unit
+    /// Adds a message to the current batch
     abstract member AddMessage : 'a -> unit
 
+/// Provides methods for sending outgoing batches of messages
 type IOutbox =
     abstract member BeginSend<'a> : unit -> IMessageWriter<'a>
 
+/// Encloses a message with metadata
 [<Struct>]
 type Envelope<'a> = {
     outbox : IOutbox
@@ -35,6 +46,7 @@ type Envelope<'a> = {
     override c.ToString() =
         sprintf "%d->%d: %A" c.sourceId.value c.destinationId.value c.message
 
+/// Provides methods for receiving incoming batches of messages
 type IInbox =
     abstract member Receive<'a> : Envelope<List<'a>> -> unit
 
@@ -114,11 +126,16 @@ type private InboxCollection(handlers : IInbox[]) =
         member c.Receive<'a> e =
             for handler in handlers do
                 handler.Receive<'a> e
-                
+     
+/// Defines how an actor is executed or run
 type Execution =
+    /// Null endpoint which ignores all messages
     | None = 0
+    /// Routes incoming messages to another actor ID
     | Route = 1
+    /// Actor which can be run on a background thread
     | Default = 2
+    /// Actor which must be run on the main thread
     | Main = 3
 
 [<Struct>]

@@ -20,9 +20,8 @@
     <Compile Include="Numerics.fs" />
     <Compile Include="FrameworkTypes.fs" />
     <Compile Include="Flocking.fs" />
+    <Compile Include="Strategy.fs" />
   </ItemGroup>
-
-  <ItemGroup />
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Garnet\Garnet.fsproj" />

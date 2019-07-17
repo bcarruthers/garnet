@@ -180,6 +180,8 @@ type internal EidPools() =
 /// Event published when commit occurs    
 type Commit = struct end
 
+type Entity = Entity<int, Eid>
+
 /// Wrapper over resource lookup with default types for ECS
 type Container() =
     let reg = Registry()
@@ -190,8 +192,7 @@ type Container() =
     let components = 
         let store = ComponentStore(segments, Eid.eidToComponentKey)
         reg.RegisterInstance(store)
-        store        
-    //let mailbox = reg.GetInstance<Mailbox>()
+        store
     let eidPools = reg.GetInstance<EidPools>()
     let eids = components.Get<Eid>()
     let recycle eid =

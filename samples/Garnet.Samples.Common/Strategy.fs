@@ -56,7 +56,7 @@ type Ore =
 
 [<Struct>]
 type Climate = {
-    tempurature : int
+    temperature : int
     humidity : int
     }
 
@@ -119,7 +119,7 @@ module MapSystem =
                     for x = 0 to e.size.w - 1 do
                         let cell = map.Get { x = x; y = y}
                         cell.Add {
-                            tempurature = rand.Next(0, 100)
+                            temperature = rand.Next(0, 100)
                             humidity = rand.Next(0, 100)
                             }
                         cell.Add Grassland
@@ -150,11 +150,11 @@ module MapSystem =
                     // map synchronized with it.
                     map.Get(loc).Add { unitEid = entity.id }
             c.On<StepSim> (
-                // Each sim step, increase the tempurature of all
+                // Each sim step, increase the temperature of all
                 // cells with iron. Cells can be iterated over the
                 // same way as non-grid entities.
                 fun param struct(cl : Climate, _ : Ore) ->
-                    { cl with tempurature = cl.tempurature + 1 }
+                    { cl with temperature = cl.temperature + 1 }
                 |> Join.update2
                 |> Join.over map)
             c.On<PrintMap> <| fun e ->
@@ -162,7 +162,7 @@ module MapSystem =
                 for y = 0 to map.Size.h - 1 do
                     for x = 0 to map.Size.w - 1 do
                         let cell = map.Get { x = x; y = y}
-                        let occupant = cell.Get<Occupant>(Occupant.none)
+                        let occupant = cell.GetOrDefault<Occupant>(Occupant.none)
                         let ch =
                             if occupant.unitEid.IsDefined then '!'
                             elif cell.Contains<Ore>() then '$'
@@ -194,3 +194,4 @@ let run() =
     printfn "%s" <| c.Get(Eid 64).ToString()
     // print a single grid cell
     printfn "%s" <| c.GetInstance<WorldGrid>().Get({ x = 10; y = 15 }).ToString()
+

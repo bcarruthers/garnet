@@ -119,7 +119,7 @@ type Entity<'k, 'c
     member c.Set x = c.container.Get<_>().Set(c.id, x)
     member c.Remove<'a>() = c.container.Get<'a>().Remove(c.id)
     member c.Get<'a>() = c.container.Get<'a>().Get(c.id)    
-    member c.Get<'a>(fallback) = c.container.Get<'a>().Get(c.id, fallback)
+    member c.GetOrDefault<'a>(fallback) = c.container.Get<'a>().Get(c.id, fallback)
     member c.Contains<'a>() = c.container.Get<'a>().Contains(c.id)
     member c.Destroy() = c.container.Destroy(c.id)
     member c.With x = c.Add x; c
@@ -127,3 +127,14 @@ type Entity<'k, 'c
         let printer = PrintHandler(UInt64.MaxValue)
         c.container.Handle(c.id, printer)
         "Entity " + c.id.ToString() + ": " + printer.ToString()
+
+type ComponentStore<'k, 'c
+    when 'k :> IComparable<'k> 
+    and 'k :> IEquatable<'k> 
+    and 'k : equality
+    and 'c :> IComparable<'c>> with
+    member c.Get(id) = {
+        id = id
+        container = c 
+        recycle = ignore
+        }

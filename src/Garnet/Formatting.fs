@@ -7,10 +7,12 @@ open System.Text
 open Garnet.Comparisons
 open Garnet.Metrics
 
+/// Provides debug formatting for specific types
 type IFormatter =
     abstract member Format<'a> : 'a -> string
     abstract member CanFormat<'a> : unit -> bool
         
+/// Provides debug formatting for specific types
 type Formatter() =
     let skippedTypes = HashSet<Type>()
     let dict = Dictionary<Type, obj>()

@@ -7,6 +7,27 @@ open Garnet.Ecs
 [<Tests>]
 let tests =
     testList "segments" [
+        testCase "add" <| fun () ->
+            let s = Segments()
+            s.Add(1, 0b111000UL).[5] <- 10
+            s.Count |> shouldEqual 0
+            s.Commit()
+            s.Count |> shouldEqual 1
+            s.[0].id |> shouldEqual 1
+            s.[0].mask |> shouldEqual 0b111000UL
+            s.[0].data.[5] |> shouldEqual 10
+
+        testCase "remove" <| fun () ->
+            let s = Segments()
+            s.Add(1, 0b111000UL).[4] <- 10
+            s.Commit()
+            s.Remove(1, 0b101000UL)
+            s.[0].mask |> shouldEqual 0b111000UL
+            s.Commit()
+            s.Count |> shouldEqual 1
+            s.[0].mask |> shouldEqual 0b010000UL
+            s.[0].data.[4] |> shouldEqual 10
+
         testCase "clear immediately" <| fun () ->
             let s = Segments<int, int>()
             s.Add(1, UInt64.MaxValue) |> ignore
