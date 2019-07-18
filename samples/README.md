@@ -41,7 +41,9 @@ type WorldGrid() =
 You can iterate over world cells similarly to entities. However, to use location you would need to explicitly store it as a component or define join operations that implicitly calculate it on the fly.
 
 ```fsharp
-fun param struct(p : Loc, cl : Climate, _ : Volcano) ->
+// increase the temperature of volcano cells by
+// joining on cell components in the map
+fun param struct(cl : Climate, p : Loc, _ : Volcano) ->
     { cl with temperature = cl.temperature + 1 }
 |> Join.update3
 |> Join.over map)
@@ -49,7 +51,7 @@ fun param struct(p : Loc, cl : Climate, _ : Volcano) ->
 
 ### Units
 
-You can store units in the typical way as entities:
+You can store units as entities:
 
 ```fsharp
 let entity =
@@ -75,18 +77,16 @@ printfn "%s" <|
         .Get({ x = 10; y = 15 })
         .ToString()
 ```
-Result:
 ``` 
 Entity (10, 15): 12 bytes
 Climate {tempurature = 79;
  humidity = 60;}
 Terrain Grassland
 ```
-Print all components:
+Printing entire container:
 ```fsharp
 printfn "%s" <| c.ToString()
 ```
-Result:
 ```
 Types
   Channels

@@ -154,6 +154,22 @@ Component storage could become inefficient if it grows too sparse (i.e. the aver
 
 Storage should work well for both sequential and sparse data and support generic key types. Entity IDs are typically used as keys, but other types like grid location should be possible as well.
 
+### Inspecting
+
+You can print the components of an entity at any time, which is useful in REPL scenarios as an alternative to using a debugger.
+
+```fsharp
+printfn "%s" <| c.Get(Eid 64).ToString()
+```
+```
+Entity 0x40: 20 bytes
+Eid 0x40
+Loc {x = 10;
+ y = 2;}
+UnitType Archer
+UnitSize {unitSize = 5;}
+```
+
 ## Components
 
 Components are any arbitrary data type associated with an entity. Combined with systems that operate on them, components provide a way to specify behavior or capabilities of entities.

@@ -3,6 +3,7 @@ version 5.215.0
 source https://nuget.org/api/v2
 
 nuget Expecto
+nuget BenchmarkDotNet
 nuget MonoGame.Framework.DesktopGL.Core
 
 // [ FAKE GROUP ]
