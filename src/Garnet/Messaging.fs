@@ -108,6 +108,22 @@ module Envelope =
         message = msg
         }
 
+    let map f mail = {
+        outbox = mail.outbox
+        sourceId = mail.sourceId
+        destinationId = mail.destinationId
+        channelId = mail.channelId
+        message = f mail.message
+        }
+
+    let withMessage newMsg mail = {
+        outbox = mail.outbox
+        sourceId = mail.sourceId
+        destinationId = mail.destinationId
+        channelId = mail.channelId
+        message = newMsg
+        }
+
 type IDisposableInbox =
     inherit IDisposable
     inherit IInbox
@@ -254,7 +270,8 @@ module Inbox =
             batch.AddRecipient destId
             batch
         member c.Send<'a>(destId, msg) =
-            c.Send<'a>(destId, msg, ActorId.undefined)
+            use batch = c.BeginSend<'a>(destId)
+            batch.AddMessage msg
         member c.Send<'a>(destId, msg, sourceId) =
             c.Send<'a>(destId, msg, sourceId, 0)
         member c.Send<'a>(destId, msg, sourceId, channelId) =
@@ -263,7 +280,9 @@ module Inbox =
             batch.SetChannel channelId
             batch.AddMessage msg
         member c.SendAll<'a>(destId, msgs : List<'a>) =
-            c.SendAll<'a>(destId, msgs, ActorId.undefined)
+            use batch = c.BeginSend<'a>(destId)
+            for msg in msgs do
+                batch.AddMessage msg
         member c.SendAll<'a>(destId, msgs : List<'a>, sourceId) =
             c.SendAll<'a>(destId, msgs, sourceId, 0)
         member c.SendAll<'a>(destId, msgs : List<'a>, sourceId, channelId) =

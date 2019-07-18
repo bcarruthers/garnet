@@ -546,11 +546,26 @@ module ActorSystem =
             c.Register(ActorFactory.combine factories)
                 
     type ActorReference with
-        member c.Send msg =
+        member c.BeginSend<'a>() =
+            c.pump.BeginSend c.actorId
+
+        member c.Send(msg) =
             c.pump.Send(c.actorId, msg)
 
-        member c.SendAll msg =
-            c.pump.SendAll(c.actorId, msg)
+        member c.Send(msg, sourceId) =
+            c.pump.Send(c.actorId, msg, sourceId)
+
+        member c.Send(msg, sourceId, channelId) =
+            c.pump.Send(c.actorId, msg, sourceId, channelId)
+
+        member c.SendAll(msgs) =
+            c.pump.SendAll(c.actorId, msgs)
+
+        member c.SendAll<'a>(msgs : List<'a>, sourceId) =
+            c.pump.SendAll(c.actorId, msgs, sourceId)
+
+        member c.SendAll<'a>(msgs : List<'a>, sourceId, channelId) =
+            c.pump.SendAll(c.actorId, msgs, sourceId, channelId)
 
         member c.Run msg =
             c.pump.Run(c.actorId, msg)

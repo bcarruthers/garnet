@@ -8,6 +8,7 @@ open Expecto
 open Garnet.Formatting
 open Garnet.Actors
 
+type Run = struct end
 type Ping = struct end
 type Pong = struct end
 
@@ -15,6 +16,37 @@ module ActorFactory =
     let main actorId register = 
         ActorFactory.handler actorId register 
         |> ActorFactory.map Actor.execMain
+
+let runPingPong onPing onPong iterations =
+    let mutable count = 0
+    use a = new ActorSystem(0)
+    a.Register(ActorId 1, fun h ->
+        h.OnInbound<Run> <| fun e ->
+            e.outbox.Send(ActorId 2, Ping())
+        h.OnInbound<Pong> <| fun e ->
+            count <- count + 1
+            if count < iterations then
+                onPing(e)
+                e.Respond(Ping())
+        )
+    a.Register(ActorId 2, fun h -> 
+        h.OnInbound<Ping> <| fun e -> 
+            onPong e
+            e.Respond(Pong())
+        )
+    a.Run(ActorId 1, Run())
+    a.RunAll()
+    count
+
+let sendReceiveMessages send =
+    let results = List<_>()
+    use a = new ActorSystem(0)
+    a.Register(ActorId 1, fun h -> 
+        h.OnAll<int> <| fun e ->
+            results.Add(e |> Envelope.map List.ofSeq))
+    send (a.Get(ActorId 1))
+    a.RunAll()
+    results |> List.ofSeq
     
 [<Tests>]
 let tests =
@@ -23,6 +55,42 @@ let tests =
             use a = new ActorSystem()
             a.Send(ActorId 1, 10)
             a.RunAll()
+
+        testCase "send batch" <| fun () ->
+            let results = sendReceiveMessages <| fun a ->
+                a.SendAll(List<_> [ 1; 2; 3 ])                
+            let r = List.head results
+            r.sourceId |> shouldEqual (ActorId 0)
+            r.destinationId |> shouldEqual (ActorId 1)
+            r.channelId |> shouldEqual 0
+            r.message |> shouldEqual [ 1; 2; 3 ]
+
+        testCase "send single" <| fun () ->
+            let results = sendReceiveMessages <| fun a ->
+                a.Send(1)                
+            let r = List.head results
+            r.sourceId |> shouldEqual (ActorId 0)
+            r.destinationId |> shouldEqual (ActorId 1)
+            r.channelId |> shouldEqual 0
+            r.message |> shouldEqual [ 1 ]
+
+        testCase "send single with source" <| fun () ->
+            let results = sendReceiveMessages <| fun a ->
+                a.Send(1, sourceId = ActorId 2)                
+            let r = List.head results
+            r.sourceId |> shouldEqual (ActorId 2)
+            r.destinationId |> shouldEqual (ActorId 1)
+            r.channelId |> shouldEqual 0
+            r.message |> shouldEqual [ 1 ]
+
+        testCase "send single with channel" <| fun () ->
+            let results = sendReceiveMessages <| fun a ->
+                a.Send(1, sourceId = ActorId 2, channelId = 3)                
+            let r = List.head results
+            r.sourceId |> shouldEqual (ActorId 2)
+            r.destinationId |> shouldEqual (ActorId 1)
+            r.channelId |> shouldEqual 3
+            r.message |> shouldEqual [ 1 ]
 
         testCase "send to any actor" <| fun () ->
             let msgs = List<_>()
@@ -72,20 +140,8 @@ let tests =
             list2.Count |> shouldEqual 1
             
         testCase "create ping pong actors" <| fun () ->
-            let msgs = List<obj>()
-            use a = new ActorSystem()
-            a.Register(ActorId 1, fun c ->
-                c.OnInbound<Ping> <| fun e -> 
-                    msgs.Add e.message
-                    e.Respond(Pong())
-                )
-            a.Register(ActorId 2, fun c ->
-                c.OnInbound<Pong> <| fun e -> 
-                    msgs.Add e.message
-                )
-            a.Send(ActorId 1, Ping(), sourceId = ActorId 2)
-            a.RunAll()
-            msgs.Count |> shouldEqual 2
+            let iterations = 10
+            runPingPong ignore ignore iterations |> shouldEqual iterations
 
         testCase "send message to self" <| fun () ->
             let mutable count = 0
