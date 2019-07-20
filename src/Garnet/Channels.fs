@@ -291,7 +291,6 @@ module Channels =
                 for msg in e.message do
                     action { 
                         sourceId = e.sourceId
-                        channelId = e.channelId
                         destinationId = e.destinationId
                         outbox = e.outbox
                         message = msg 

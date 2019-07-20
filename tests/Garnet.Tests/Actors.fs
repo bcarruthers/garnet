@@ -62,7 +62,6 @@ let tests =
             let r = List.head results
             r.sourceId |> shouldEqual (ActorId 0)
             r.destinationId |> shouldEqual (ActorId 1)
-            r.channelId |> shouldEqual 0
             r.message |> shouldEqual [ 1; 2; 3 ]
 
         testCase "send single" <| fun () ->
@@ -71,7 +70,6 @@ let tests =
             let r = List.head results
             r.sourceId |> shouldEqual (ActorId 0)
             r.destinationId |> shouldEqual (ActorId 1)
-            r.channelId |> shouldEqual 0
             r.message |> shouldEqual [ 1 ]
 
         testCase "send single with source" <| fun () ->
@@ -80,16 +78,6 @@ let tests =
             let r = List.head results
             r.sourceId |> shouldEqual (ActorId 2)
             r.destinationId |> shouldEqual (ActorId 1)
-            r.channelId |> shouldEqual 0
-            r.message |> shouldEqual [ 1 ]
-
-        testCase "send single with channel" <| fun () ->
-            let results = sendReceiveMessages <| fun a ->
-                a.Send(1, sourceId = ActorId 2, channelId = 3)                
-            let r = List.head results
-            r.sourceId |> shouldEqual (ActorId 2)
-            r.destinationId |> shouldEqual (ActorId 1)
-            r.channelId |> shouldEqual 3
             r.message |> shouldEqual [ 1 ]
 
         testCase "send to any actor" <| fun () ->

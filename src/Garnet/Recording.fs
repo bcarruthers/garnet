@@ -229,8 +229,8 @@ type PrintInbox(id : ActorId, formatter : IFormatter, counter : ref<int>, print)
             handler.Receive e
             let isEnabledAfter = isEnabled
             if (isEnabledBefore || isEnabledAfter) && formatter.CanFormat<'a>() then 
-                sb.Append(sprintf "%d: %d->%d (ch%d) %d/%d/%d: %dx %s" 
-                    id.value e.sourceId.value e.destinationId.value e.channelId 
+                sb.Append(sprintf "%d: %d->%d %d/%d/%d: %dx %s" 
+                    id.value e.sourceId.value e.destinationId.value 
                     counter.Value batchCount messageCount
                     e.message.Count (typeof<'a> |> typeToString)) |> ignore
                 let typeInfo = CachedTypeInfo<'a>.Info

@@ -210,14 +210,10 @@ module internal Streaming =
         let recipients = List<ActorId>()
         let messages = List<'a>()
         let mutable sourceId = actorId
-        let mutable channelId = 0
         let mutable baseWriter = nullMessageWriter
         member c.SetWriter writer =
             baseWriter <- writer
         interface IMessageWriter<'a> with
-            member c.SetChannel id =
-                baseWriter.SetChannel id
-                channelId <- id
             member c.SetSource id =
                 baseWriter.SetSource id
                 sourceId <- id
@@ -232,7 +228,6 @@ module internal Streaming =
                     logger.Receive { 
                         outbox = nullOutbox
                         sourceId = sourceId
-                        channelId = channelId
                         destinationId = id
                         message = messages }
                 recipients.Clear()

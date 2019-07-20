@@ -67,7 +67,6 @@ module internal Internal =
         messages : List<'a>
         } with
         member c.CopyTo (dest : IMessageWriter<'a>) =
-            dest.SetChannel c.channelId
             dest.SetSource c.sourceId
             for id in c.recipients do dest.AddRecipient id
             for msg in c.messages do dest.AddMessage msg
@@ -118,7 +117,6 @@ module internal Internal =
                 handler.Receive {
                     outbox = outbox
                     sourceId = state.sourceId
-                    channelId = state.channelId
                     destinationId = destId 
                     message = state.messages }
         interface IDisposable with
@@ -142,7 +140,6 @@ module internal Internal =
         }
         member c.State = state
         interface IMessageWriter<'a> with
-            member c.SetChannel id = state.channelId <- id
             member c.SetSource id = state.sourceId <- id
             member c.AddRecipient id = state.recipients.Add(id)
             member c.AddMessage x = state.messages.Add(x)
@@ -555,17 +552,11 @@ module ActorSystem =
         member c.Send(msg, sourceId) =
             c.pump.Send(c.actorId, msg, sourceId)
 
-        member c.Send(msg, sourceId, channelId) =
-            c.pump.Send(c.actorId, msg, sourceId, channelId)
-
         member c.SendAll(msgs) =
             c.pump.SendAll(c.actorId, msgs)
 
         member c.SendAll<'a>(msgs : List<'a>, sourceId) =
             c.pump.SendAll(c.actorId, msgs, sourceId)
-
-        member c.SendAll<'a>(msgs : List<'a>, sourceId, channelId) =
-            c.pump.SendAll(c.actorId, msgs, sourceId, channelId)
 
         member c.Run msg =
             c.pump.Run(c.actorId, msg)

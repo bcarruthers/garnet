@@ -19,9 +19,6 @@ module ActorId =
 /// them upon disposal
 type IMessageWriter<'a> =
     inherit IDisposable
-    /// Assigns a channel, which can be an arbitrary value used to
-    /// distinguish messages in addition to their type
-    abstract member SetChannel : int -> unit
     /// Assigns the source actor ID, which is typically the actor
     /// sending the message
     abstract member SetSource : ActorId -> unit
@@ -40,7 +37,6 @@ type Mail<'a> = {
     outbox : IOutbox
     sourceId : ActorId
     destinationId : ActorId
-    channelId : int
     message : 'a
     } with
     override c.ToString() =
@@ -83,7 +79,6 @@ type Disposable =
 
 type private NullMessageWriter<'a>() =
     interface IMessageWriter<'a> with
-        member c.SetChannel id = ()
         member c.SetSource id = ()
         member c.AddRecipient id = ()
         member c.AddMessage msg = ()
@@ -104,7 +99,6 @@ module Mail =
         outbox = nullOutbox
         sourceId = ActorId.undefined
         destinationId = ActorId.undefined
-        channelId = 0
         message = msg
         }
 
@@ -112,7 +106,6 @@ module Mail =
         outbox = mail.outbox
         sourceId = mail.sourceId
         destinationId = mail.destinationId
-        channelId = mail.channelId
         message = f mail.message
         }
 
@@ -120,7 +113,6 @@ module Mail =
         outbox = mail.outbox
         sourceId = mail.sourceId
         destinationId = mail.destinationId
-        channelId = mail.channelId
         message = newMsg
         }
 
@@ -259,7 +251,6 @@ module Inbox =
                 for msg in e.message do
                     action { 
                         sourceId = e.sourceId
-                        channelId = e.channelId
                         destinationId = e.destinationId
                         outbox = e.outbox
                         message = msg }
@@ -273,22 +264,16 @@ module Inbox =
             use batch = c.BeginSend<'a>(destId)
             batch.AddMessage msg
         member c.Send<'a>(destId, msg, sourceId) =
-            c.Send<'a>(destId, msg, sourceId, 0)
-        member c.Send<'a>(destId, msg, sourceId, channelId) =
             use batch = c.BeginSend<'a>(destId)
             batch.SetSource sourceId
-            batch.SetChannel channelId
             batch.AddMessage msg
         member c.SendAll<'a>(destId, msgs : List<'a>) =
             use batch = c.BeginSend<'a>(destId)
             for msg in msgs do
                 batch.AddMessage msg
         member c.SendAll<'a>(destId, msgs : List<'a>, sourceId) =
-            c.SendAll<'a>(destId, msgs, sourceId, 0)
-        member c.SendAll<'a>(destId, msgs : List<'a>, sourceId, channelId) =
             use batch = c.BeginSend<'a>(destId)
             batch.SetSource sourceId
-            batch.SetChannel channelId
             for msg in msgs do
                 batch.AddMessage msg
     
