@@ -21,6 +21,7 @@
     <Compile Include="Examples.fs" />
     <Compile Include="Main.fs" />
     <None Include="Scratch.fsx" />
+    <None Include="ActorProto.fsx" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Expecto" Version="8.*" />

@@ -9,7 +9,7 @@ open Garnet.Metrics
 open Garnet.Collections
 open Garnet.Actors
     
-type EventHandler<'a> = Envelope<List<'a>> -> unit
+type EventHandler<'a> = Mail<List<'a>> -> unit
 
 type IEventHandler =
     abstract member Handle<'a> : List<'a> -> unit
@@ -31,7 +31,7 @@ type internal Subscription(handler : IEventHandler) =
         member c.Dispose() = isDisposed <- true
     
 type IPublisher =
-    abstract member PublishAll<'a> : Envelope<List<'a>> -> List<Subscription<'a>> -> unit
+    abstract member PublishAll<'a> : Mail<List<'a>> -> List<Subscription<'a>> -> unit
 
 type internal IChannel =
     abstract member Clear : unit -> unit
@@ -58,7 +58,7 @@ type Publisher() =
     static member Null = NullPublisher() :> IPublisher
 
     interface IPublisher with
-        member c.PublishAll<'a> (batch : Envelope<List<'a>>) handlers =
+        member c.PublishAll<'a> (batch : Mail<List<'a>>) handlers =
             let count = handlers.Count
             for i = 0 to count - 1 do
                 let handler = handlers.[i]
@@ -106,7 +106,7 @@ type PrintPublisher(publisher : IPublisher, formatter : IFormatter) =
     member c.Disable t =
         enabledTypes.Remove t |> ignore
     interface IPublisher with        
-        member c.PublishAll<'a> (batch : Envelope<List<'a>>) handlers =
+        member c.PublishAll<'a> (batch : Mail<List<'a>>) handlers =
             let options = options
             let start = Timing.getTimestamp()
             let handlerCount = handlers.Count
@@ -173,7 +173,7 @@ type Channel<'a>(publisher : IPublisher) =
                 list
         batch.Add(event)
         // run on all handlers
-        c.PublishAll (Envelope.empty batch)
+        c.PublishAll (Mail.empty batch)
         // return batch to pool
         batch.Clear()
         singleEventPool.Add(batch)
@@ -192,7 +192,7 @@ type Channel<'a>(publisher : IPublisher) =
     member c.Publish() =
         if events.Count = 0 then false
         else
-            c.PublishAll (Envelope.empty events)
+            c.PublishAll (Mail.empty events)
             true
     interface IChannel with
         member c.Clear() = c.Clear()
@@ -286,7 +286,7 @@ module Channels =
                     for i = 0 to batch.message.Count - 1 do
                         handler (batch.message.[i]))
 
-        member c.OnInbound<'a>(action) =
+        member c.OnMail<'a>(action) =
             c.OnAll<'a> <| fun e -> 
                 for msg in e.message do
                     action { 

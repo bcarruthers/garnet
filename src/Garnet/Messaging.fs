@@ -36,7 +36,7 @@ type IOutbox =
 
 /// Encloses a message with metadata
 [<Struct>]
-type Envelope<'a> = {
+type Mail<'a> = {
     outbox : IOutbox
     sourceId : ActorId
     destinationId : ActorId
@@ -48,17 +48,17 @@ type Envelope<'a> = {
 
 /// Provides methods for receiving incoming batches of messages
 type IInbox =
-    abstract member Receive<'a> : Envelope<List<'a>> -> unit
+    abstract member Receive<'a> : Mail<List<'a>> -> unit
 
 type Inbox() =
     let dict = Dictionary<Type, obj>()
-    member c.OnAll<'a>(action : Envelope<List<'a>> -> unit) =
+    member c.OnAll<'a>(action : Mail<List<'a>> -> unit) =
         let t = typeof<'a>
         let combined =
             match dict.TryGetValue t with
             | false, _ -> action
             | true, existing -> 
-                let existing = existing :?> (Envelope<List<'a>> -> unit)
+                let existing = existing :?> (Mail<List<'a>> -> unit)
                 fun e -> 
                     existing e
                     action e        
@@ -66,7 +66,7 @@ type Inbox() =
     member c.TryReceive<'a> e =
         match dict.TryGetValue(typeof<'a>) with
         | true, x -> 
-            let handle = x :?> (Envelope<List<'a>> -> unit)
+            let handle = x :?> (Mail<List<'a>> -> unit)
             handle e
             true
         | false, _ -> false
@@ -97,7 +97,7 @@ type NullOutbox() =
     interface IOutbox with
         member c.BeginSend() = nullBatch<'a>
         
-module Envelope =
+module Mail =
     let private nullOutbox = NullOutbox()
 
     let empty msg = {
@@ -254,7 +254,7 @@ module Inbox =
                 for i = 0 to e.message.Count - 1 do
                     handler (e.message.[i])
 
-        member c.OnInbound<'a>(action) =
+        member c.OnMail<'a>(action) =
             c.OnAll<'a> <| fun e -> 
                 for msg in e.message do
                     action { 

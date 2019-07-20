@@ -62,15 +62,15 @@ type PingPongBenchmark() =
     [<GlobalSetup>]
     member this.Setup() =
         a.Register(ActorId 1, fun h ->
-            h.OnInbound<Run> <| fun e ->
+            h.OnMail<Run> <| fun e ->
                 e.outbox.Send(ActorId 2, Ping())
-            h.OnInbound<Pong> <| fun e ->
+            h.OnMail<Pong> <| fun e ->
                 count <- count + 1
                 if count < this.N then
                     e.Respond(Ping())
             )
         a.Register(ActorId 2, fun h -> 
-            h.OnInbound<Ping> <| fun e -> 
+            h.OnMail<Ping> <| fun e -> 
                 e.Respond(Pong())
             )
     [<Benchmark>]

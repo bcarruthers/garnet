@@ -153,7 +153,7 @@ type Pong = struct end
 // actor definitions
 let a = new ActorSystem()
 a.Register(ActorId 1, fun c ->
-    c.OnInbound<Ping> <| fun e -> 
+    c.OnMail<Ping> <| fun e -> 
         printf "ping "
         e.Respond(Pong())
     )
@@ -188,12 +188,12 @@ let entity =
 let test() =
     use a = new ActorSystem()
     a.Register(ActorId 1, fun h ->
-        h.OnInbound<Ping> <| fun e ->
+        h.OnMail<Ping> <| fun e ->
             e.Respond(Pong()))
     a.Register(ActorId 2, 
         let c = Container()
         let sub =
-            c.OnInbound<Ping> <| fun e ->
+            c.OnMail<Ping> <| fun e ->
                 e.Respond(Pong())        
         c)
     a.Send(ActorId 1, Ping())

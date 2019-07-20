@@ -570,7 +570,7 @@ module ActorSystem =
         member c.Run msg =
             c.pump.Run(c.actorId, msg)
 
-    type Envelope<'a> with
+    type Mail<'a> with
         member c.Respond(msg) =
             c.outbox.Send(c.sourceId, msg)
     

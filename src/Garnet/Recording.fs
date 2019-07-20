@@ -217,13 +217,13 @@ type PrintInbox(id : ActorId, formatter : IFormatter, counter : ref<int>, print)
     let mutable maxMessages = 10
     let handler = 
         let h = Inbox()
-        h.OnInbound<ActorLogCommand> <| fun e -> isEnabled <- e.message.enableActorLog
+        h.OnMail<ActorLogCommand> <| fun e -> isEnabled <- e.message.enableActorLog
         h :> IInbox
     member c.IsEnabled 
         with get() = isEnabled
         and set value = isEnabled <- value
     interface IInbox with
-        member c.Receive<'a> (e : Envelope<List<'a>>) =
+        member c.Receive<'a> (e : Mail<List<'a>>) =
             // print if enabled before or after
             let isEnabledBefore = isEnabled
             handler.Receive e
