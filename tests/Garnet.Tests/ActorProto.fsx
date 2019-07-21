@@ -263,8 +263,13 @@ module Proto3 =
         runPingPong ignore ignore 5000000
         //runPingPong (printfn "Ping %A") (printfn "Pong %A") 10
 
-// Impact of uncontested locks on perf
 module Proto4 =
+    [<Struct>]
+    type Buffer<'a> = {
+        data : 'a[]
+        count : int
+        }
+
     [<Struct>]
     type Addresses = {
         sourceId : int
@@ -278,11 +283,24 @@ module Proto4 =
             }
 
     type IBatch<'a> =
-        inherit IDisposable
         abstract Add : 'a -> unit 
+        abstract Send : Addresses -> unit
+        
+    [<Struct>]
+    type BatchBuilder<'a> =
+        val batch : IBatch<'a>
+        val addresses : Addresses
+        new(x, y) = { batch = x; addresses = y }
+        member c.Add x =
+            c.batch.Add x
+        member c.Dispose() =
+            c.batch.Send c.addresses
+        interface IDisposable with
+            member c.Dispose() =
+                c.Dispose()
 
     type IOutbox =
-        abstract BeginSend<'a> : Addresses -> IBatch<'a>
+        abstract BeginSend<'a> : Addresses -> BatchBuilder<'a>
 
     [<AutoOpen>]
     module Outbox =
@@ -296,8 +314,7 @@ module Proto4 =
         actorId : int
         addresses : Addresses
         message : 'a
-        system : IOutbox 
-        //dispose : 'a -> unit
+        system : IOutbox
         }
         
     type Mail<'a> with
@@ -316,16 +333,16 @@ module Proto4 =
         abstract Process : int * IOutbox -> bool
 
     type ISubscribable =
-        abstract OnAll<'a> : (Mail<List<'a>> -> unit) -> unit
+        abstract OnAll<'a> : (Mail<Buffer<'a>> -> unit) -> unit
 
     [<AutoOpen>]
     module Subscribable =
         type ISubscribable with
             member c.On<'a>(handle : Mail<'a> -> unit) =
                 c.OnAll<'a>(fun mail ->
-                    for msg in mail.message do
+                    for i = 0 to mail.message.count - 1 do
                         handle {
-                            message = msg
+                            message = mail.message.data.[i]
                             actorId = mail.actorId
                             addresses = mail.addresses
                             system = mail.system
@@ -344,55 +361,69 @@ module Proto4 =
         static member Batch = new NullBatch<'a>() :> IBatch<'a>
         interface IBatch<'a> with
             member c.Add msg = ()
-            member c.Dispose() = ()
-        
+            member c.Send addr = ()
+
     type private Handler<'a>(queueSync : obj, queue : Queue<_>, handle) =
-        let inbox = Queue<List<'a>>()
-        let pool = Stack<List<'a>>()
-
-        let mutable addresses = Addresses.init 0 0
-        let mutable batch : List<'a> = null
-        member c.BeginSend(addr) =
+        let inbox = Queue<Batch<'a>>()
+        let pool = Stack<Batch<'a>>()
+        let poolSync = obj()
+        member c.BeginSend(addresses) =
+            // rent from pool
+            Monitor.Enter poolSync
+            let batch = if pool.Count > 0 then pool.Pop() else Batch<'a>(c)
+            Monitor.Exit poolSync
+            new BatchBuilder<'a>(batch :> IBatch<'a>, addresses)
+        member c.Enqueue(addresses, batch : Batch<'a>) =
             Monitor.Enter queueSync
-            addresses <- addr
-            batch <- if pool.Count > 0 then pool.Pop() else List<'a>()
-            c :> IBatch<'a>
-        interface IBatch<'a> with
-            member c.Add msg =
-                batch.Add msg
-            member c.Dispose() =
-                inbox.Enqueue batch
-                queue.Enqueue {
-                    addresses = addresses
-                    typeHandler = c
-                    }
-                batch <- null
-                addresses <- Addresses.init 0 0
-                Monitor.Exit queueSync
-
+            inbox.Enqueue batch
+            queue.Enqueue {
+                addresses = addresses
+                typeHandler = c
+                }
+            Monitor.Exit queueSync
         interface ITypeHandler with
             member c.Process(actorId, addresses, send) =
+                // finish dequeuing
                 let batch = inbox.Dequeue()
                 Monitor.Exit queueSync
+                // process message
                 handle { 
                     actorId = actorId
                     addresses = addresses
-                    message = batch
+                    message = batch.Messages
                     system = send 
-                    //dispose = ignore
                     }
-                batch.Clear()
                 // recycle batch
-                Monitor.Enter queueSync
+                batch.Clear()
+                Monitor.Enter poolSync
                 pool.Push batch
-                Monitor.Exit queueSync
+                Monitor.Exit poolSync
+
+    and private Batch<'a>(handler : Handler<'a>) =
+        let mutable data = Array.zeroCreate 128
+        let mutable count = 0
+        member c.Messages = {
+            data = data
+            count = count }
+        member c.Clear() =
+            count <- 0
+        interface IBatch<'a> with
+            member c.Add msg =
+                if count = data.Length then
+                    let newData = Array.zeroCreate (data.Length * 2)
+                    data.CopyTo(newData, 0)
+                    data <- newData
+                data.[count] <- msg
+                count <- count + 1
+            member c.Send addr =
+                handler.Enqueue(addr, c)
 
     type private Handler() =
         let handlers = Dictionary<Type, ITypeHandler>()
         let queue = Queue<QueuedBatch>()
         let queueSync = obj()           
         interface ISubscribable with
-            member c.OnAll<'a>(handle : Mail<List<'a>> -> unit) =
+            member c.OnAll<'a>(handle) =
                 let handler = new Handler<'a>(queueSync, queue, handle)
                 handlers.Add(typeof<'a>, handler :> ITypeHandler)
         interface IHandler with
@@ -402,7 +433,7 @@ module Proto4 =
                     let handler = h :?> Handler<'a>
                     handler.BeginSend(addresses)                
                 | false, _ ->
-                    NullBatch<'a>.Batch
+                    new BatchBuilder<'a>(NullBatch<'a>.Batch, addresses)
             member c.Process(actorId, send : IOutbox) =
                 // lock for duration of dequeue, which ends
                 // in handler process method
@@ -448,7 +479,7 @@ module Proto4 =
             let mappedId = mapId addresses.destinationId
             match actors.TryGetValue(mappedId) with
             | true, actor -> actor.BeginSend(addresses)
-            | false, _ -> NullBatch<'a>.Batch
+            | false, _ -> new BatchBuilder<'a>(NullBatch<'a>.Batch, addresses)
         member c.RunOnce() =
             let mutable handled = false
             for actor in actors.Values do
@@ -499,39 +530,48 @@ module Proto4 =
         a.Run()
         total
 
-    let runPingPongBatch onPing onPong initialCount batchSize throughput iterations =
+    let runPingPongBatch onPing onPong pairCount initialCount batchSize throughput iterations =
         let ping = { x0 = 1; x1 = 1 }
         let pong = { y0 = 1; y1 = 1 }
-        let mutable count = 0
         let mutable total = 0
         let a = ActorSet()
-        a.Register(1, throughput, fun h ->
-            h.On<Run> <| fun e ->
-                for i = 1 to initialCount do
-                    use b = e.BeginSend(2)
-                    for i = 1 to batchSize do
-                        b.Add ping
-            h.OnAll<Pong8> <| fun e ->
-                use b = e.BeginRespond()
-                for msg in e.message do
-                    total <- total + 1
-                    onPing msg
-                    b.Add ping)
-        a.Register(2, throughput, fun h ->
-            h.OnAll<Ping8> <| fun e -> 
-                count <- count + 1
-                if count <= iterations then
+        for i = 1 to pairCount do
+            let mutable count = 0
+            let actor1 = i * 2 - 1
+            let actor2 = i * 2
+            a.Register(actor1, throughput, fun h ->
+                h.On<Run> <| fun e ->
+                    for i = 1 to initialCount do
+                        use b = e.BeginSend(actor2)
+                        for i = 1 to batchSize do
+                            b.Add ping
+                h.OnAll<Pong8> <| fun e ->
                     use b = e.BeginRespond()
-                    for msg in e.message do
+                    for i = 0 to e.message.count - 1 do
+                        let msg = e.message.data.[i]
                         total <- total + 1
-                        onPong msg
-                        b.Add pong)
-        a.Send(Addresses.init 0 1, Run())
+                        onPing msg
+                        b.Add ping)
+            a.Register(actor2, throughput, fun h ->
+                h.OnAll<Ping8> <| fun e -> 
+                    count <- count + 1
+                    if count <= iterations then
+                        use b = e.BeginRespond()
+                        for i = 0 to e.message.count - 1 do
+                            let msg = e.message.data.[i]
+                            total <- total + 1
+                            onPong msg
+                            b.Add pong)
+            a.Send(Addresses.init 0 actor1, Run())
         a.Run()
         total
     
     let test() =
-        printfn "%d" <| runPingPongBatch ignore ignore 100 100 100 500000
+        printfn "%d" <| runPingPongBatch ignore ignore 10 100 100 100 50000
+        printfn "%d" <| runPingPongBatch ignore ignore 10 100 1 100 500000
+        printfn "%d" <| runPingPongBatch ignore ignore 10 1 1 1 300000
+        printfn "%d" <| runPingPongBatch ignore ignore 1 1 1 1 5000000
+        printfn "%d" <| runPingPongBatch ignore ignore 1 100 1 100 5000000
         printfn "%d" <|runPingPong ignore ignore 1 1 3000000
         printfn "%d" <|runPingPong ignore ignore 100 10 3000000
         printfn "%d" <|runPingPong (printfn "Ping %A") (printfn "Pong %A") 1 1 10
