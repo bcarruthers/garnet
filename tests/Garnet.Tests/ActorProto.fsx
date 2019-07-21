@@ -265,71 +265,190 @@ module Proto3 =
 
 // Impact of uncontested locks on perf
 module Proto4 =
-    type ISender =
-        abstract Send<'a> : int * 'a -> unit
+    [<Struct>]
+    type Addresses = {
+        sourceId : int
+        destinationId : int
+        }
 
-    type IProcessor =
-        abstract Process : obj * ISender -> unit
+    module Addresses =
+        let init s r = {
+            sourceId = s
+            destinationId = r
+            }
+
+    type IBatch<'a> =
+        inherit IDisposable
+        abstract Add : 'a -> unit 
+
+    type IOutbox =
+        abstract BeginSend<'a> : Addresses -> IBatch<'a>
+
+    [<AutoOpen>]
+    module Outbox =
+        type IOutbox with
+            member c.Send<'a>(addresses, msg : 'a) =
+                use batch = c.BeginSend<'a> addresses
+                batch.Add msg
 
     [<Struct>]
     type Mail<'a> = {
+        actorId : int
+        addresses : Addresses
         message : 'a
-        system : ISender 
+        system : IOutbox 
+        //dispose : 'a -> unit
         }
         
-    type Handler<'a>(handle) =
-        let inbox = Queue<'a>()
-        member c.Enqueue msg =
-            inbox.Enqueue msg
-        interface IProcessor with
-            member c.Process(sync, send) =
-                let msg = inbox.Dequeue()
-                Monitor.Exit sync
-                handle { message = msg; system = send }
+    type Mail<'a> with
+        member c.BeginSend(destId) =
+            c.system.BeginSend(Addresses.init c.addresses.destinationId destId)
+        member c.BeginRespond() =
+            c.BeginSend(c.addresses.sourceId)
+        member c.Send(destId, msg) =
+            use batch = c.BeginSend destId
+            batch.Add msg
+        member c.Respond(msg) =
+            c.Send(c.addresses.sourceId, msg)
 
-    type Actor(handlers : Dictionary<Type, IProcessor>) =
-        let queue = Queue<_>()
-        let queueSync = obj()
-        let procSync = obj()
-        member c.Enqueue<'a> (msg : 'a) =
-            match handlers.TryGetValue(typeof<'a>) with
-            | true, h -> 
-                let handler = h :?> Handler<'a>
-                Monitor.Enter queueSync
-                handler.Enqueue msg
-                queue.Enqueue (handler :> IProcessor)
-                Monitor.Exit queueSync
-            | false, _ -> ()
-        member private c.ProcessOne (send : ISender) =
-            // lock for duration of dequeue, which ends
-            // in handler process method
+    type IHandler =
+        inherit IOutbox
+        abstract Process : int * IOutbox -> bool
+
+    type ISubscribable =
+        abstract OnAll<'a> : (Mail<List<'a>> -> unit) -> unit
+
+    [<AutoOpen>]
+    module Subscribable =
+        type ISubscribable with
+            member c.On<'a>(handle : Mail<'a> -> unit) =
+                c.OnAll<'a>(fun mail ->
+                    for msg in mail.message do
+                        handle {
+                            message = msg
+                            actorId = mail.actorId
+                            addresses = mail.addresses
+                            system = mail.system
+                            })
+
+    type private ITypeHandler =
+        abstract Process : int * Addresses * IOutbox -> unit
+        
+    [<Struct>]
+    type private QueuedBatch = {
+        addresses : Addresses
+        typeHandler : ITypeHandler
+        }
+
+    type NullBatch<'a>() =
+        static member Batch = new NullBatch<'a>() :> IBatch<'a>
+        interface IBatch<'a> with
+            member c.Add msg = ()
+            member c.Dispose() = ()
+        
+    type private Handler<'a>(queueSync : obj, queue : Queue<_>, handle) =
+        let inbox = Queue<List<'a>>()
+        let pool = Stack<List<'a>>()
+
+        let mutable addresses = Addresses.init 0 0
+        let mutable batch : List<'a> = null
+        member c.BeginSend(addr) =
             Monitor.Enter queueSync
-            if queue.Count > 0 then
-                let proc = queue.Dequeue()
-                proc.Process(queueSync, send)
-                true
-            else
+            addresses <- addr
+            batch <- if pool.Count > 0 then pool.Pop() else List<'a>()
+            c :> IBatch<'a>
+        interface IBatch<'a> with
+            member c.Add msg =
+                batch.Add msg
+            member c.Dispose() =
+                inbox.Enqueue batch
+                queue.Enqueue {
+                    addresses = addresses
+                    typeHandler = c
+                    }
+                batch <- null
+                addresses <- Addresses.init 0 0
                 Monitor.Exit queueSync
-                false
-        member c.Process (sender : ISender) =
+
+        interface ITypeHandler with
+            member c.Process(actorId, addresses, send) =
+                let batch = inbox.Dequeue()
+                Monitor.Exit queueSync
+                handle { 
+                    actorId = actorId
+                    addresses = addresses
+                    message = batch
+                    system = send 
+                    //dispose = ignore
+                    }
+                batch.Clear()
+                // recycle batch
+                Monitor.Enter queueSync
+                pool.Push batch
+                Monitor.Exit queueSync
+
+    type private Handler() =
+        let handlers = Dictionary<Type, ITypeHandler>()
+        let queue = Queue<QueuedBatch>()
+        let queueSync = obj()           
+        interface ISubscribable with
+            member c.OnAll<'a>(handle : Mail<List<'a>> -> unit) =
+                let handler = new Handler<'a>(queueSync, queue, handle)
+                handlers.Add(typeof<'a>, handler :> ITypeHandler)
+        interface IHandler with
+            member c.BeginSend<'a>(addresses) =
+                match handlers.TryGetValue(typeof<'a>) with
+                | true, h ->
+                    let handler = h :?> Handler<'a>
+                    handler.BeginSend(addresses)                
+                | false, _ ->
+                    NullBatch<'a>.Batch
+            member c.Process(actorId, send : IOutbox) =
+                // lock for duration of dequeue, which ends
+                // in handler process method
+                Monitor.Enter queueSync
+                if queue.Count > 0 then
+                    let item = queue.Dequeue()
+                    item.typeHandler.Process(actorId, item.addresses, send)
+                    true
+                else
+                    Monitor.Exit queueSync
+                    false
+                    
+    // throughput limits how many messages we can process at a time before
+    // going to another actor
+    type Actor(actorId, logId, throughput, handler : IHandler) =
+        let procSync = obj()
+        member c.BeginSend addresses =
+            handler.BeginSend addresses
+        member c.Process (sender : IOutbox) =
             let mutable count = 0
             try
                 Monitor.Enter procSync
                 try
-                    while c.ProcessOne sender do
+                    while count < throughput && handler.Process(actorId, sender) do
                         count <- count + 1
                 finally
                     Monitor.Exit procSync
             with ex ->
-                sender.Send(0, ex)                
+                sender.Send(Addresses.init actorId logId, ex)                
             count > 0
 
-    type ActorSet(mapId, actors : Dictionary<int, Actor>) =
-        member c.Send<'a>(destId, msg : 'a) =
-            let mappedId = mapId destId
+    type ActorSet() =
+        let actors = Dictionary<int, Actor>()
+        let logId = 0
+        let mutable mapId = id
+        member c.Register(newMapId) =
+            mapId <- newMapId << mapId
+        member c.Register(actorId, throughput, register) =
+            let builder = Handler()
+            register (builder :> ISubscribable)
+            actors.Add(actorId, Actor(actorId, logId, throughput, builder))
+        member c.BeginSend<'a> addresses =
+            let mappedId = mapId addresses.destinationId
             match actors.TryGetValue(mappedId) with
-            | true, actor -> actor.Enqueue msg
-            | false, _ -> ()
+            | true, actor -> actor.BeginSend(addresses)
+            | false, _ -> NullBatch<'a>.Batch
         member c.RunOnce() =
             let mutable handled = false
             for actor in actors.Values do
@@ -337,57 +456,85 @@ module Proto4 =
             handled
         member c.Run() =
             while c.RunOnce() do ()
-        interface ISender with
-            member c.Send(destId, msg) = c.Send(destId, msg)
+        interface IOutbox with
+            member c.BeginSend<'a> addresses =
+                c.BeginSend<'a> addresses
+            
+    type Run = struct end
 
-    type ActorBuilder() =
-        let mutable handlers = Dictionary<Type, IProcessor>()
-        member c.On<'a>(handle : Mail<'a> -> unit) =
-            let handler = Handler<'a>(handle)
-            handlers.Add(typeof<'a>, handler :> IProcessor)
-        member c.Build() =
-            let a = Actor(handlers)
-            handlers <- Dictionary<_,_>()
-            a
+    [<Struct>]
+    type Ping8 = {
+        x0 : int
+        x1 : int
+        }
 
-    type ActorSetBuilder() =
-        let mutable actors = Dictionary<int, Actor>()
-        let mutable mapId = id
-        member c.Register(newMapId) =
-            mapId <- newMapId << mapId
-        member c.Register(id, actor : Actor) =
-            actors.Add(id, actor)
-        member c.Build() =
-            let a = ActorSet(mapId, actors)
-            actors <- Dictionary<_,_>()
-            a
+    [<Struct>]
+    type Pong8 = {
+        y0 : int
+        y1 : int
+        }
 
-    let runPingPong onPing onPong iterations =
+    let runPingPong onPing onPong initialCount throughput iterations =
+        let ping = { x0 = 1; x1 = 1 }
+        let pong = { y0 = 1; y1 = 1 }
         let mutable count = 0
-        let a = ActorSetBuilder()
-        a.Register(1, 
-            let h = ActorBuilder()
+        let mutable total = 0
+        let a = ActorSet()
+        a.Register(1, throughput, fun h ->
             h.On<Run> <| fun e ->
-                e.system.Send(2, Ping())
-            h.On<Pong> <| fun e ->
+                for i = 1 to initialCount do
+                    e.Send(2, ping)
+            h.On<Pong8> <| fun e ->
+                total <- total + 1
+                onPing(e)
+                e.Respond(ping))
+        a.Register(2, throughput, fun h ->
+            h.On<Ping8> <| fun e -> 
                 count <- count + 1
-                if count < iterations then
-                    onPing(e)
-                    e.system.Send(2, Ping())
-            h.Build())
-        a.Register(2,
-            let h = ActorBuilder()
-            h.On<Ping> <| fun e -> 
-                onPong e
-                e.system.Send(1, Pong())
-            h.Build())
-        let a = a.Build()
-        a.Send(1, Run())
+                if count <= iterations then
+                    total <- total + 1
+                    onPong e
+                    e.Respond(pong))
+        a.Send(Addresses.init 0 1, Run())
         a.Run()
+        total
+
+    let runPingPongBatch onPing onPong initialCount batchSize throughput iterations =
+        let ping = { x0 = 1; x1 = 1 }
+        let pong = { y0 = 1; y1 = 1 }
+        let mutable count = 0
+        let mutable total = 0
+        let a = ActorSet()
+        a.Register(1, throughput, fun h ->
+            h.On<Run> <| fun e ->
+                for i = 1 to initialCount do
+                    use b = e.BeginSend(2)
+                    for i = 1 to batchSize do
+                        b.Add ping
+            h.OnAll<Pong8> <| fun e ->
+                use b = e.BeginRespond()
+                for msg in e.message do
+                    total <- total + 1
+                    onPing msg
+                    b.Add ping)
+        a.Register(2, throughput, fun h ->
+            h.OnAll<Ping8> <| fun e -> 
+                count <- count + 1
+                if count <= iterations then
+                    use b = e.BeginRespond()
+                    for msg in e.message do
+                        total <- total + 1
+                        onPong msg
+                        b.Add pong)
+        a.Send(Addresses.init 0 1, Run())
+        a.Run()
+        total
     
     let test() =
-        runPingPong ignore ignore 5000000
-        //runPingPong (printfn "Ping %A") (printfn "Pong %A") 10
+        printfn "%d" <| runPingPongBatch ignore ignore 100 100 100 500000
+        printfn "%d" <|runPingPong ignore ignore 1 1 3000000
+        printfn "%d" <|runPingPong ignore ignore 100 10 3000000
+        printfn "%d" <|runPingPong (printfn "Ping %A") (printfn "Pong %A") 1 1 10
 
 #time
 Proto4.test()
