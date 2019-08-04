@@ -3,6 +3,7 @@ namespace Garnet.Actors
 open System
 open System.IO
 open System.Collections.Generic
+open Garnet
 open Garnet.Comparisons
 open Garnet.Formatting
 open Garnet.Actors
@@ -223,7 +224,7 @@ type PrintInbox(id : ActorId, formatter : IFormatter, counter : ref<int>, print)
         with get() = isEnabled
         and set value = isEnabled <- value
     interface IInbox with
-        member c.Receive<'a> (e : Mail<List<'a>>) =
+        member c.Receive<'a> (e : Mail<Buffer<'a>>) =
             // print if enabled before or after
             let isEnabledBefore = isEnabled
             handler.Receive e

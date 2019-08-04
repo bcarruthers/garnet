@@ -4,6 +4,7 @@ open System
 open System.Collections
 open System.Collections.Generic
 open System.Text
+open Garnet
 open Garnet.Comparisons
 open Garnet.Metrics
 
@@ -115,7 +116,7 @@ module internal Internal =
             isEmpty = isEmptyType typeof<'a>
             }
 
-    let formatMessagesTo (sb : StringBuilder) (formatMsg : _ -> string) (batch : List<_>) maxCount =
+    let formatMessagesTo (sb : StringBuilder) (formatMsg : _ -> string) (batch : Buffer<_>) maxCount =
         let printCount = min batch.Count maxCount
         for i = 0 to printCount - 1 do
             let msg = batch.[i]

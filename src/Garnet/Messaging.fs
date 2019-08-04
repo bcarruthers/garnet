@@ -2,6 +2,7 @@
 
 open System
 open System.Collections.Generic
+open Garnet
 open Garnet.Comparisons
 
 /// Identifies an actor
@@ -44,17 +45,17 @@ type Mail<'a> = {
 
 /// Provides methods for receiving incoming batches of messages
 type IInbox =
-    abstract member Receive<'a> : Mail<List<'a>> -> unit
+    abstract member Receive<'a> : Mail<Buffer<'a>> -> unit
 
 type Inbox() =
     let dict = Dictionary<Type, obj>()
-    member c.OnAll<'a>(action : Mail<List<'a>> -> unit) =
+    member c.OnAll<'a>(action : Mail<Buffer<'a>> -> unit) =
         let t = typeof<'a>
         let combined =
             match dict.TryGetValue t with
             | false, _ -> action
             | true, existing -> 
-                let existing = existing :?> (Mail<List<'a>> -> unit)
+                let existing = existing :?> (Mail<Buffer<'a>> -> unit)
                 fun e -> 
                     existing e
                     action e        
@@ -62,7 +63,7 @@ type Inbox() =
     member c.TryReceive<'a> e =
         match dict.TryGetValue(typeof<'a>) with
         | true, x -> 
-            let handle = x :?> (Mail<List<'a>> -> unit)
+            let handle = x :?> (Mail<Buffer<'a>> -> unit)
             handle e
             true
         | false, _ -> false
@@ -267,11 +268,11 @@ module Inbox =
             use batch = c.BeginSend<'a>(destId)
             batch.SetSource sourceId
             batch.AddMessage msg
-        member c.SendAll<'a>(destId, msgs : List<'a>) =
+        member c.SendAll<'a>(destId, msgs : Buffer<'a>) =
             use batch = c.BeginSend<'a>(destId)
             for msg in msgs do
                 batch.AddMessage msg
-        member c.SendAll<'a>(destId, msgs : List<'a>, sourceId) =
+        member c.SendAll<'a>(destId, msgs : Buffer<'a>, sourceId) =
             use batch = c.BeginSend<'a>(destId)
             batch.SetSource sourceId
             for msg in msgs do

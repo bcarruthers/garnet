@@ -3,13 +3,14 @@
 open System
 open System.Collections.Generic
 open System.Text
+open Garnet
 open Garnet.Comparisons
 open Garnet.Formatting
 open Garnet.Metrics
 open Garnet.Collections
 open Garnet.Actors
     
-type EventHandler<'a> = Mail<List<'a>> -> unit
+type EventHandler<'a> = Mail<Buffer<'a>> -> unit
 
 type IEventHandler =
     abstract member Handle<'a> : List<'a> -> unit
@@ -31,7 +32,7 @@ type internal Subscription(handler : IEventHandler) =
         member c.Dispose() = isDisposed <- true
     
 type IPublisher =
-    abstract member PublishAll<'a> : Mail<List<'a>> -> List<Subscription<'a>> -> unit
+    abstract member PublishAll<'a> : Mail<Buffer<'a>> -> List<Subscription<'a>> -> unit
 
 type internal IChannel =
     abstract member Clear : unit -> unit
@@ -43,7 +44,7 @@ type internal NullPublisher() =
         member c.PublishAll batch handlers = ()
 
 type Publisher() =
-    let formatBatch (messages : List<_>) =
+    let formatBatch (messages : Buffer<_>) =
         let sb = System.Text.StringBuilder()
         let count = min 20 messages.Count
         for i = 0 to count - 1 do 
@@ -58,7 +59,7 @@ type Publisher() =
     static member Null = NullPublisher() :> IPublisher
 
     interface IPublisher with
-        member c.PublishAll<'a> (batch : Mail<List<'a>>) handlers =
+        member c.PublishAll<'a> (batch : Mail<Buffer<'a>>) handlers =
             let count = handlers.Count
             for i = 0 to count - 1 do
                 let handler = handlers.[i]
@@ -106,7 +107,7 @@ type PrintPublisher(publisher : IPublisher, formatter : IFormatter) =
     member c.Disable t =
         enabledTypes.Remove t |> ignore
     interface IPublisher with        
-        member c.PublishAll<'a> (batch : Mail<List<'a>>) handlers =
+        member c.PublishAll<'a> (batch : Mail<Buffer<'a>>) handlers =
             let options = options
             let start = Timing.getTimestamp()
             let handlerCount = handlers.Count
@@ -151,9 +152,9 @@ type PrintPublisher(publisher : IPublisher, formatter : IFormatter) =
 type Channel<'a>(publisher : IPublisher) =
     let isUnsubscribed = Predicate(fun (sub : Subscription<'a>) -> sub.IsUnsubscribed)
     let handlers = List<Subscription<'a>>()
-    let singleEventPool = List<List<'a>>()
-    let mutable events = List<'a>()
-    let mutable pending = List<'a>()
+    let singleEventPool = List<Buffer<'a>>()
+    let mutable events = ResizableBuffer<'a>(8)
+    let mutable pending = ResizableBuffer<'a>(8)
     let mutable total = 0
     member c.Clear() =
         events.Clear()
@@ -164,14 +165,14 @@ type Channel<'a>(publisher : IPublisher) =
     /// Dispatches event immediately/synchronously
     member c.Publish event =
         // create a batch consisting of single item
-        let batch = 
-            if singleEventPool.Count = 0 then List<'a>(1) 
+        let mutable batch = 
+            if singleEventPool.Count = 0 then Buffer.zeroCreate<'a> 1 
             else 
                 let i = singleEventPool.Count - 1
                 let list = singleEventPool.[i]
                 singleEventPool.RemoveAt(i)
                 list
-        batch.Add(event)
+        batch.[0] <- event
         // run on all handlers
         c.PublishAll (Mail.empty batch)
         // return batch to pool
@@ -192,7 +193,7 @@ type Channel<'a>(publisher : IPublisher) =
     member c.Publish() =
         if events.Count = 0 then false
         else
-            c.PublishAll (Mail.empty events)
+            c.PublishAll (Mail.empty events.Buffer)
             true
     interface IChannel with
         member c.Clear() = c.Clear()
@@ -201,7 +202,7 @@ type Channel<'a>(publisher : IPublisher) =
         /// Commit pending events to publish list and resets
         member c.Commit() =
             handlers.RemoveAll(isUnsubscribed) |> ignore
-            events.Clear()            
+            events.Clear()
             let temp = pending
             pending <- events
             events <- temp
@@ -293,7 +294,7 @@ module Channels =
                         sourceId = e.sourceId
                         destinationId = e.destinationId
                         outbox = e.outbox
-                        message = msg 
+                        message = msg
                         }
 
     type Channel<'a> with    

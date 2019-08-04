@@ -4,6 +4,7 @@ open System
 open System.Threading
 open System.Collections.Generic
 open System.Collections.Concurrent
+open Garnet
 open Garnet.Comparisons
 open Garnet.Collections
 
@@ -64,7 +65,7 @@ module internal Internal =
         mutable sourceId : ActorId
         mutable channelId : int
         recipients : List<ActorId>
-        messages : List<'a>
+        messages : ResizableBuffer<'a>
         } with
         member c.CopyTo (dest : IMessageWriter<'a>) =
             dest.SetSource c.sourceId
@@ -99,7 +100,7 @@ module internal Internal =
             sourceId = ActorId.undefined
             channelId = 0
             recipients = List<ActorId>()
-            messages = List<'a>(capacity)
+            messages = ResizableBuffer<'a>(capacity)
         }
         member c.Send(newState, send : Action<_>) = 
             state.CopyFrom newState
@@ -118,7 +119,8 @@ module internal Internal =
                     outbox = outbox
                     sourceId = state.sourceId
                     destinationId = destId 
-                    message = state.messages }
+                    message = state.messages.Buffer
+                    }
         interface IDisposable with
             member c.Dispose() =
                 // This is called once receiver has handled message or message
@@ -136,7 +138,7 @@ module internal Internal =
             sourceId = ActorId.undefined
             channelId = 0
             recipients = List<ActorId>()
-            messages = List<'a>()
+            messages = ResizableBuffer<'a>(1)
         }
         member c.State = state
         interface IMessageWriter<'a> with
@@ -555,7 +557,7 @@ module ActorSystem =
         member c.SendAll(msgs) =
             c.pump.SendAll(c.actorId, msgs)
 
-        member c.SendAll<'a>(msgs : List<'a>, sourceId) =
+        member c.SendAll<'a>(msgs : Buffer<'a>, sourceId) =
             c.pump.SendAll(c.actorId, msgs, sourceId)
 
         member c.Run msg =

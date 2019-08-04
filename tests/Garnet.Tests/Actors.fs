@@ -5,6 +5,7 @@ open System.Collections.Generic
 open System.IO
 open System.Threading
 open Expecto
+open Garnet
 open Garnet.Formatting
 open Garnet.Actors
 
@@ -58,7 +59,7 @@ let tests =
 
         testCase "send batch" <| fun () ->
             let results = sendReceiveMessages <| fun a ->
-                a.SendAll(List<_> [ 1; 2; 3 ])                
+                a.SendAll(Buffer.ofSeq [ 1; 2; 3 ])                
             let r = List.head results
             r.sourceId |> shouldEqual (ActorId 0)
             r.destinationId |> shouldEqual (ActorId 1)

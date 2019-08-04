@@ -9,6 +9,7 @@
     <Compile Include="VisibleTo.fs" />
     <Compile Include="Comparisons.fs" />
     <Compile Include="Timing.fs" />
+    <Compile Include="Buffers.fs" />
     <Compile Include="Formatting.fs" />
     <Compile Include="Messaging.fs" />
     <Compile Include="Collections.fs" />
