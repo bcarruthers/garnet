@@ -207,7 +207,7 @@ module internal Streaming =
 
     type LogMessageWriter<'a>(actorId : ActorId, logger : IInbox, onDispose : Action<_>) =
         let nullOutbox = NullOutbox()
-        let nullMessageWriter = new NullMessageWriter<'a>() :> IMessageWriter<'a>
+        let nullMessageWriter = NullMessageWriter<'a>.Instance
         let recipients = List<ActorId>()
         let messages = ResizableBuffer<'a>(8)
         let mutable sourceId = actorId
@@ -269,7 +269,7 @@ module internal Streaming =
             member c.BeginSend() = 
                 let writer = baseOutbox.BeginSend()
                 c.Get().BeginSend writer
-                
+
 type MessageStreamReaderPool(registry : MessageRegistry) =
     let dict = Dictionary<int, obj>()
     interface IFactory with

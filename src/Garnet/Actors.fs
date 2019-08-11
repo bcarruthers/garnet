@@ -3,446 +3,691 @@
 open System
 open System.Threading
 open System.Collections.Generic
-open System.Collections.Concurrent
+open System.Runtime.InteropServices
 open Garnet
-open Garnet.Comparisons
-open Garnet.Collections
+open Garnet.Formatting
 
 [<AutoOpen>]
-module private Utility =
-    let inline isNull x = obj.ReferenceEquals(x, null)
-    let inline isNotNull x = not (isNull x)
+module internal Sending =           
+    type internal IOutboxSender =
+        abstract member Send<'a> : Message<'a> -> unit
 
-    let dispose (d : IDisposable) = d.Dispose()
-
-    let private getNonGenericTypeName (name : string) =
-        let last = name.LastIndexOf('`')
-        if last < 0 then name else name.Substring(0, last)
-
-    let rec typeToString (t : Type) =
-        let name = getNonGenericTypeName t.Name
-        let args = t.GetGenericArguments()
-        if args.Length = 0 then name
-        else sprintf "%s<%s>" name (String.Join(",", args
-            |> Seq.map typeToString |> Seq.toArray))
-    
-    let addIndent (str : string) =
-        str.Replace("\n", "\n  ")
-
-    let formatList name count (str : string) =
-        sprintf "%s (%d)%s" name count
-            (if count > 0 then ":\n  " + addIndent str else "")
-
-[<AutoOpen>]        
-module internal Internal =
-    type ActorOptions = {
-        threadCount : int
-        batchSizeLimit : int
-        }
-
-    type IMessage =
-        inherit IDisposable
-        abstract member Receive : IOutbox -> ActorId -> IInbox -> unit
-
-    type NullMessage() =
-        interface IMessage with
-            member c.Receive outbox destId handler = ()
-        interface IDisposable with
-            member c.Dispose() = ()
-        
-    [<Struct>]     
-    type MessageResult = {
-        message : IMessage
-        ex : Exception
-        }
-            
-    [<Struct>]
-    type MessageInfo = {
-        message : IMessage
-        destinationId : ActorId }
-    
-    type MessageState<'a> = {
-        mutable sourceId : ActorId
-        mutable channelId : int
-        recipients : List<ActorId>
-        messages : ResizableBuffer<'a>
-        } with
-        member c.CopyTo (dest : IMessageWriter<'a>) =
-            dest.SetSource c.sourceId
-            for id in c.recipients do dest.AddRecipient id
-            for msg in c.messages do dest.AddMessage msg
-        member c.CopyFrom (src : MessageState<'a>) =
-            c.channelId <- src.channelId
-            c.sourceId <- src.sourceId
-            for id in src.recipients do c.recipients.Add id
-            for msg in src.messages do c.messages.Add msg
-        member c.Clear() =
-            c.channelId <- 0
-            c.sourceId <- ActorId.undefined
-            c.recipients.Clear()
-            c.messages.Clear()
-        override c.ToString() =
-            let sb = System.Text.StringBuilder()
-            sb.AppendLine(sprintf "Source: %A" c.sourceId) |> ignore
-            sb.AppendLine(sprintf "Recipients (%d): %s" c.recipients.Count 
-                (String.Join(", ", c.recipients))) |> ignore
-            sb.Append(sprintf "%s batch (%d%d):" (typeof<'a> |> typeToString) 
-                c.messages.Count c.messages.Capacity) |> ignore
-            if c.messages.Count > 0 then
-                for msg in c.messages do
-                    sb.AppendLine().Append(sprintf "%A" msg) |> ignore
-            sb.ToString()
-
-    /// Supports multiple messages and multiple recipients
-    type MessageBatch<'a>(capacity : int, onDispose : Action<_>) =
-        let mutable disposeCount = 0
-        let state = {
-            sourceId = ActorId.undefined
-            channelId = 0
-            recipients = List<ActorId>()
-            messages = ResizableBuffer<'a>(capacity)
-        }
-        member c.Send(newState, send : Action<_>) = 
-            state.CopyFrom newState
-            if state.messages.Count > 0 then
-                // Iterate over original recipients, not copied value.
-                // This is because we are passing write control as soon as
-                // we invoke send, which could clear recipient list.
-                for recipientId in newState.recipients do
-                    send.Invoke { 
-                        destinationId = recipientId
-                        message = c :> IMessage }
-            newState.Clear()
-        interface IMessage with
-            member c.Receive outbox destId handler =
-                handler.Receive {
-                    outbox = outbox
-                    sourceId = state.sourceId
-                    destinationId = destId 
-                    message = state.messages.Buffer
-                    }
-        interface IDisposable with
-            member c.Dispose() =
-                // This is called once receiver has handled message or message
-                // cannot be delivered and is discarded. Multiple recipients will cause 
-                // this to be called multiple times, so we only do real disposal on
-                // last call.
-                disposeCount <- disposeCount + 1
-                if disposeCount = state.recipients.Count then
-                    disposeCount <- 0
-                    state.Clear()
-                    onDispose.Invoke c
-            
-    type MessageWriter<'a>(onDispose : Action<_>) =
-        let state = {
-            sourceId = ActorId.undefined
-            channelId = 0
-            recipients = List<ActorId>()
-            messages = ResizableBuffer<'a>(1)
-        }
-        member c.State = state
-        interface IMessageWriter<'a> with
-            member c.SetSource id = state.sourceId <- id
-            member c.AddRecipient id = state.recipients.Add(id)
-            member c.AddMessage x = state.messages.Add(x)
-            member c.Dispose() = onDispose.Invoke c
-
-    let log2 x =
-        let mutable log = 0
-        let mutable y = x
-        while y > 1 do
-            y <- y >>> 1
-            log <- log + 1;
-        log
-
-    let nextLog2 x =
-        let log = log2 x
-        if x - (1 <<< log) > 0 then 1 + log else log
-        
-    /// Owns message wrapper pool (thread-safe as single producer single consumer)
-    type Outbox<'a>(send) =
-        // accessed from sender and then from main on disposal
-        let pools = Array.init 30 (fun i -> RingBufferPool(fun onDispose -> 
-            new MessageBatch<'a>(1 <<< i, onDispose)))
-        let mutable poolMask = 0
-        let mutable sentCount = 0
-        // accessed only from thread building batch
-        let builders = Stack<_>()
-        let sendBatch = Action<MessageWriter<'a>>(fun builder ->
-            let state = builder.State
-            let pow2Size = nextLog2 state.messages.Count
-            sentCount <- sentCount + state.messages.Count
-            // mark as used
-            poolMask <- poolMask ||| (1 <<< pow2Size)
-            let pool = pools.[pow2Size]
-            let batch = pool.Get()
-            batch.Send(state, send)
-            builders.Push(builder))
-        member c.BeginSend(sourceId) = 
-            let b =
-                if builders.Count = 0 then new MessageWriter<'a>(sendBatch)
-                else builders.Pop()
-            b.State.sourceId <- sourceId
-            b :> IMessageWriter<'a>
-        override c.ToString() =
-            let usedPools = 
-                [ 0..pools.Length - 1] 
-                |> Seq.filter (fun i -> poolMask &&& (1 <<< i) <> 0)
-                |> Seq.map (fun i -> sprintf "%d: %s" i (pools.[i].ToString()))
-                |> Seq.toArray
-            let size = sizeof<'a>
-            let total = sentCount * size
-            let detail = sprintf ": %d sent * %d = %d bytes, pools" sentCount size total
-            (formatList detail usedPools.Length (String.Join("\n", usedPools)))
-
-    type IActorOutbox =
-        inherit IOutbox
-        abstract member SetSource : ActorId -> unit
-
-    /// Not thread-safe        
-    type Outbox(send) =
+    and internal NullOutboxSender() =
+        static let mutable instance = NullOutboxSender() :> IOutboxSender
+        static member Instance = instance
+        interface IOutboxSender with
+            member c.Send batch = ()
+           
+    // Not thread-safe, but intended for read-only sharing 
+    // among threads with thread-safe refcounting to ensure
+    // only one thread clears.
+    and internal Message<'a>() =
+        let mutable buffer = Array.zeroCreate<'a> 1
+        let mutable recipients = Array.zeroCreate<int> 1
+        let mutable bufferLength = 0
+        let mutable recipientCount = 0
+        let mutable receiveCount = 0
         let mutable sourceId = ActorId.undefined
-        let dict = Dictionary<Type, obj>()
-        member c.Get<'a>() =
-            let t = typeof<'a>
-            let pool =
-                match dict.TryGetValue(t) with
-                | true, x -> x :?> Outbox<'a>
-                | false, _ ->
-                    let pool = Outbox<'a>(send)
-                    dict.Add(t, pool)
-                    pool
-            pool
-        member c.BeginSend() =
-            c.Get<'a>().BeginSend(sourceId)
-        // Should be called on worker thread
-        interface IActorOutbox with
-            member c.SetSource id = sourceId <- id
-            member c.BeginSend() =
-                c.BeginSend()
-        override c.ToString() =
-            formatList "Outboxes" dict.Count
-                (String.Join("\n", dict |> Seq.map (fun kvp -> 
-                    sprintf "%s%s" (typeToString kvp.Key) (kvp.Value.ToString()))))
-            
-    type QueueOutbox() =
-        let sendQueue = RingBufferQueue<MessageInfo>()
-        let send = Action<_>(sendQueue.Enqueue)
-        let outbox = Outbox(send)
-        member c.SendAll(send : Action<_>) =
-            let mutable count = 0
-            let mutable msg = Unchecked.defaultof<_>
-            while sendQueue.TryDequeue(&msg) do
-                send.Invoke msg
-                count <- count + 1
-            count
-        // Should be called on worker thread
-        interface IActorOutbox with
+        member c.SourceId = sourceId
+        member c.Buffer = Buffer.ofArrayStart buffer bufferLength
+        member c.Recipients = Buffer.ofArrayStart recipients recipientCount
+        member val Sender = NullOutboxSender.Instance with get, set
+        member val OriginPool : obj = null with get, set
+        member val OriginStack : Stack<Message<'a>> = null with get, set
+        member c.SetSource id = 
+            sourceId <- id
+        member c.IncrementReceived() =
+            recipientCount = 1 || 
+            Interlocked.Increment(&receiveCount) = recipientCount
+        member c.Clear() =
+            receiveCount <- 0
+            c.OriginPool <- null
+            c.OriginStack <- null                    
+            c.Sender <- NullOutboxSender.Instance
+            sourceId <- ActorId.undefined
+            bufferLength <- 0
+            recipientCount <- 0
+        interface IMessageWriter<'a> with
             member c.SetSource id = 
-                (outbox :> IActorOutbox).SetSource id
-            member c.BeginSend() =
-                outbox.BeginSend()
+                sourceId <- id
+            member c.AddRecipient x =
+                Buffer.addToArray &recipientCount &recipients x.value
+            member c.AddMessage x =
+                Buffer.addToArray &bufferLength &buffer x
+            member c.Dispose() =
+                c.Sender.Send(c)            
         override c.ToString() =
-            sprintf "Queue: %s\n%s" (sendQueue.ToString()) (outbox.ToString())
- 
-    [<Struct>]
-    type QueuedMessage = {
-        message : IMessage
-        destId : ActorId
-        }
+            let strMessages = buffer |> Seq.map (sprintf "%A")
+            sprintf "Message (%s):\n  Source: %d\n  Recipients (%d): %s\n  Buffer (%d): %s" 
+                (typeToString typeof<'a>) sourceId.value
+                recipientCount (String.Join(", ", recipients |> Seq.take recipientCount))
+                bufferLength (String.Join(", ", strMessages |> Seq.take bufferLength))
 
-    type ActorRunner(actorId : ActorId, definition : Actor, onProcess : Action) =
-        let mutable lock = 0
+[<AutoOpen>]
+module internal Pooling =                            
+    module TypeInfo =
+        let mutable private count = 0
+        let next() = Interlocked.Increment(&count) - 1
+
+    type TypeInfo<'a>() =
+        static let mutable id = TypeInfo.next()
+        static member Id = id
+
+    // Thread-safe
+    type SharedPool<'a>() =
+        let pool = Stack<Message<'a>>()
+        let sync = obj()
+        member c.Rent() =
+            Monitor.Enter sync
+            if pool.Count > 0 then 
+                let r = pool.Pop()
+                Monitor.Exit sync
+                r
+            else
+                Monitor.Exit sync
+                let r = new Message<'a>()
+                r
+        member c.Return batch =
+            Monitor.Enter sync
+            pool.Push batch
+            Monitor.Exit sync
+        override c.ToString() =
+            lock sync <| fun () ->
+                let count = pool.Count
+                let total = pool |> Seq.sumBy (fun p -> p.Buffer.Array.Length)
+                let mean = if count > 0 then total / count else 0
+                sprintf "%s (%d): %d total, %d mean" 
+                    (typeToString typeof<'a>)
+                    count total mean
+
+    // Thread-safe
+    type SharedPool() =
+        let mutable pools = Array.zeroCreate<obj> 8
+        let sync = obj()
+        member c.GetPool<'a>() =
+            let id = TypeInfo<'a>.Id
+            Monitor.Enter sync
+            Buffer.resizeArray (id + 1) &pools
+            let pool = pools.[id]
+            let pool =
+                if pool <> null then pool :?> SharedPool<'a>
+                else
+                    let p = SharedPool<'a>()
+                    pools.[id] <- p :> obj
+                    p
+            Monitor.Exit sync
+            pool
+        override c.ToString() =
+            lock sync <| fun () ->
+                let pools = pools |> Seq.filter (fun p -> p <> null)
+                let count = pools |> Seq.length
+                let str = String.Join("\n", pools)
+                formatList "Shared pools" count str
+
+    // Local pool for use by a single thread to minimize
+    // accessing shared pool.
+    // Not thread-safe
+    type LocalPool<'a>(owner : obj, shared : SharedPool<'a>) =
+        let pool = Stack<Message<'a>>()
+        let mutable rentCount = 0
+        member c.Rent() =
+            let r =
+                if pool.Count > 0 then pool.Pop()
+                else 
+                    rentCount <- rentCount + 1
+                    shared.Rent()
+            r.OriginPool <- owner
+            r.OriginStack <- pool
+            r
+        member c.Return (x : Message<'a>) =
+            // Only return to local pools that have rented
+            // out this type, otherwise we could have batches
+            // accumulate that are never sent out from actors
+            // within the current dispatcher pool.
+            if pool.Count < rentCount then 
+                pool.Push x
+            else shared.Return x
+        override c.ToString() =
+            let count = pool.Count
+            let total = pool |> Seq.sumBy (fun p -> p.Buffer.Array.Length)
+            let mean = if count > 0 then total / count else 0
+            sprintf "%s (%d): %d total, %d mean" 
+                (typeToString typeof<'a>)
+                count total mean
+
+    // Not thread-safe
+    type LocalPool(shared : SharedPool) =
+        let mutable pools = Array.zeroCreate<obj> 8
+        member c.GetPool<'a>() =
+            let id = TypeInfo<'a>.Id
+            Buffer.resizeArray (id + 1) &pools
+            let pool = pools.[id]
+            if pool <> null then pool :?> LocalPool<'a>
+            else
+                let p = LocalPool<'a>(c, shared.GetPool<'a>())
+                pools.[id] <- p :> obj
+                p
+        override c.ToString() =
+            let pools = pools |> Seq.filter (fun p -> p <> null)
+            let count = pools |> Seq.length
+            let str = String.Join("\n", pools)
+            formatList "Local pools" count str
+
+    [<AutoOpen>]
+    module BatchExtensions =
+        type Message<'a> with
+            member c.Release(pool : LocalPool) =
+                if c.IncrementReceived() then
+                    let sourcePool = c.OriginPool
+                    let sourceStack = c.OriginStack
+                    c.Clear()        
+                    // Fast path: if local pool is the same as the one
+                    // batch came from, we can just return directly.
+                    if obj.ReferenceEquals(pool, sourcePool) 
+                        then sourceStack.Push c
+                        else pool.GetPool<'a>().Return c
+
+[<AutoOpen>]
+module internal Processing =
+    // Stateless
+    type IDeliverer =
+        abstract Deliver : LocalPool * IInbox * Mail<obj> -> unit        
+
+    // Stateless
+    type Deliverer<'a>() =
+        static let instance = Deliverer<'a>() :> IDeliverer
+        static member Instance = instance
+        interface IDeliverer with
+            member c.Deliver(pool, inbox, mail) =
+                let msg = mail.message :?> Message<'a>
+                try
+                    try
+                        inbox.Receive {
+                            sourceId = mail.sourceId
+                            destinationId = mail.destinationId
+                            outbox = mail.outbox
+                            message = msg.Buffer
+                            }
+                    with
+                    | ex -> 
+                        let msg = sprintf "Processing failed:\n%s" (msg.ToString())
+                        raise (exn(msg, ex))
+                finally
+                    msg.Release(pool)
+                        
+    // Thread-safe
+    type IDispatcher =
+        inherit IDisposable
+        abstract Run : bool -> bool
+        abstract Enqueue : ActorProcessor -> unit
+
+    // Thread-safe
+    and ActorProcessor(actorId, inbox : IInbox, dispose, dispatcher : IDispatcher, onError) =
+        let processSync = obj()
+        let queueSync = obj()
+        let queue = Queue<struct(int * int * IDeliverer * obj)>()
+        let mutable maxQueued = 0
         let mutable total = 0
-        let receiveQueue = RingBufferQueue<QueuedMessage>()
-        // Called by main thread when distributing messages
-        member c.Enqueue(msg, destId) =
-            receiveQueue.Enqueue {
-                message = msg
-                destId = destId
-                }
-        /// Single thread runs actor at a time, writing to send queue and returning
-        /// number of incoming messages processed.
-        member c.Run(outbox : IActorOutbox, disposeMsg : Action<_>, options) =
-            let mutable processed = 0
-            let isLocked = Interlocked.Increment(&lock) = 1
-            if isLocked then
-                outbox.SetSource actorId
-                let mutable msg = Unchecked.defaultof<QueuedMessage>
-                while processed < options.batchSizeLimit && receiveQueue.TryDequeue(&msg) do
-                    let ex =
-                        try
-                            msg.message.Receive outbox msg.destId definition.inbox
-                            processed <- processed + 1
-                            onProcess.Invoke()
-                            null
-                        with
-                        | ex -> exn(sprintf "Error running actor %d message:\n%s" actorId.value (msg.ToString()), ex) 
-                    let result = { message = msg.message; ex = ex }
-                    disposeMsg.Invoke result
-                outbox.SetSource ActorId.undefined
-            // if done, keep locked so we don't do any further processing
-            Interlocked.Decrement(&lock) |> ignore
-            total <- total + processed
-            processed
-        override c.ToString() =
-            sprintf "[%d] %d pending, %d processed, %s" actorId.value receiveQueue.Count total (receiveQueue.ToString())
-        interface IDisposable with
-            member c.Dispose() =
-                definition.dispose()
-        
-    /// Not thread-safe
-    /// All methods should be called from main thread
-    type BackgroundWorker(options, name) =
-        [<VolatileField>]
-        let mutable isRunning = true
-        let wait = new AutoResetEvent(false)
-        let outbox = QueueOutbox()
-        let disposalQueue = RingBufferQueue<MessageResult>()
-        let actorQueue = RingBufferQueue<ActorRunner>()
-        let actors = List<ActorRunner>()
-        let addActor = Action<ActorRunner>(actors.Add)
-        let enqueueDisposal = Action<_>(disposalQueue.Enqueue)
-        let runOnce() =
-            let count = actors.Count
-            let mutable processed = 0
-            for i = 0 to count - 1 do
-                let actor = actors.[i]
-                processed <- processed + actor.Run(outbox, enqueueDisposal, options)
-            processed
-        let run() =
-            while isRunning do
-                actorQueue.DequeueAll addActor |> ignore
-                /// Keep trying to run until no more messages processed
-                while runOnce() > 0 do ()
-                wait.WaitOne() |> ignore
-        let thread =
-            let t = Thread(run)
-            t.Name <- name
-            t.Start()
-            t
-        member c.Run() =        
-            wait.Set() |> ignore
-        // Called from main thread to distribute messages to other actors/workers
-        // This includes disposals, which are owned by other workers
-        member c.SendAll(send, disposeMsg) =
-            disposalQueue.DequeueAll disposeMsg
-            outbox.SendAll send
-        member c.Add(actor) =
-            actorQueue.Enqueue(actor)
-        member c.NotifyStopping() =
-            isRunning <- false
-            wait.Set() |> ignore
-        interface IDisposable with
-            member c.Dispose() =
-                isRunning <- false
-                thread.Join()
-                wait.Dispose()
-        override c.ToString() =
-            sprintf "%s\nDisposals: %s" (outbox.ToString()) (disposalQueue.ToString())
-
-    /// Not thread-safe
-    /// All methods should be called from main thread
-    type BackgroundWorkers(options) =
-        let procs = Array.init options.threadCount (fun i -> 
-            new BackgroundWorker(options, sprintf "Worker%d" i))
-        member c.Add(actor) =
-            for proc in procs do
-                proc.Add(actor)
-        member c.SendAll(send, disposeMsg) =
+        // returns number of messages before processing
+        let run outbox pool =
+            // lock for duration of dequeue, which ends
+            // in handler process method
+            Monitor.Enter queueSync
+            let remaining = queue.Count
+            if remaining = 0 then Monitor.Exit queueSync
+            else
+                let struct(sourceId, destId, deliverer, msg) = queue.Dequeue()
+                Monitor.Exit queueSync
+                try
+                    deliverer.Deliver(pool, inbox, {
+                        outbox = outbox
+                        sourceId = ActorId sourceId
+                        destinationId = ActorId destId
+                        message = msg
+                        })
+                with
+                | ex -> 
+                    let msg = sprintf "Actor %d failed" actorId
+                    onError (exn(msg, ex))
+            remaining
+        member c.ActorId = actorId
+        member c.Enqueue<'a>(sourceId, destId, message : Message<'a>) =
+            Monitor.Enter queueSync
+            queue.Enqueue(struct(sourceId, destId, Deliverer<'a>.Instance, message :> obj))
+            let r = if queue.Count = 1 then ValueSome dispatcher else ValueNone
+            maxQueued <- max maxQueued queue.Count
+            Monitor.Exit queueSync
+            r            
+        member c.Process(outbox, pool, throughput) =
             let mutable count = 0
-            for proc in procs do
-                count <- count + proc.SendAll(send, disposeMsg)
+            if Monitor.TryEnter processSync then                    
+                // using remaining count to avoid locking again
+                // when throughput >1
+                let mutable remaining = 1
+                while count < throughput && remaining > 0 do
+                    // get count in queue prior to dequeuing
+                    remaining <- run outbox pool
+                    if remaining > 0 then
+                        // count the message that was just processed
+                        count <- count + 1    
+                        remaining <- remaining - 1
+                total <- total + count
+                Monitor.Exit processSync
             count
-        member c.Run() =
-            for proc in procs do
-                proc.Run()
-        interface IDisposable with
-            member c.Dispose() =
-                for proc in procs do
-                    proc.NotifyStopping()
-                for proc in procs do
-                    (proc :> IDisposable).Dispose()
+        member c.ProcessAll(outbox, pool, throughput) =
+            let mutable count = 0
+            let mutable pending = true
+            while pending do
+                let delta = c.Process(outbox, pool, throughput)
+                count <- count + delta
+                pending <- delta > 0
+            count
+        member c.Dispose() =
+            lock processSync (fun () ->
+                lock queueSync (fun () -> queue.Clear())
+                dispose()
+                )                
         override c.ToString() =
-            (formatList "Workers" procs.Length (String.Join("\n", procs)))
-            
-    type ActorRunnerCollection(options, onProcess) =
-        let actorLookup = Dictionary<int, ActorRunner>()
-        let bgActors = List<ActorRunner>()
-        let fgActors = List<ActorRunner>()
-        let workers = new BackgroundWorkers(options)
+            sprintf "Actor %d: %d processed, %d max queued"//, inbox: %s" 
+                actorId total maxQueued
+                //(addIndent (inbox.ToString()))
+                            
+    // Thread-safe
+    type IDispatcherLookup =
+        abstract GetDispatcher : Execution -> IDispatcher
+
+    // Thread-safe
+    type SharedActorMap(lookup : IDispatcherLookup) =
+        let sync = obj()
+        let actors = Dictionary<int, ActorProcessor>()
         let factory = ActorFactoryCollection()
-        member c.Count = actorLookup.Count
-        member c.ForegroundCount = fgActors.Count
-        member c.Register f =
-            factory.Add f
-        member c.GetRunner(destId : ActorId, maxDepth) =           
-            match actorLookup.TryGetValue(destId.value) with
+        let onError ex =
+            printfn "%s" (ex.ToString())
+        let rec getProcessor destId maxDepth =
+            match actors.TryGetValue(destId) with
             | true, x -> x
             | false, _ ->
                 // limit depth for the case of repeated routing
                 let actor = 
                     if maxDepth <= 0 then Actor.none
                     else factory.Create destId
-                let runner =
+                let proc =
                     if int actor.execution = int Execution.Route 
-                    then c.GetRunner(actor.routedId, maxDepth - 1)
+                    then getProcessor actor.routedId.value (maxDepth - 1)
                     else 
-                        let runner = new ActorRunner(destId, actor, onProcess)
-                        let isDefault = int actor.execution = int Execution.Default
-                        let isBackground = isDefault && options.threadCount > 0
-                        if isBackground
-                            then 
-                                bgActors.Add runner
-                                workers.Add runner
-                            else fgActors.Add runner
-                        runner
+                        let dispatcher = lookup.GetDispatcher actor.execution
+                        new ActorProcessor(destId, 
+                            actor.inbox, 
+                            actor.dispose, 
+                            dispatcher,
+                            onError)
                 // replace existing to handle cycles
-                actorLookup.[destId.value] <- runner
-                runner
-        member c.SendAll(send, disposeMsg) =
-            // Send messages from each worker outbox to destination inbox and
-            // count how many messages have been disposed
-            workers.SendAll(send, disposeMsg)
-        member c.Run(fgOutbox, disposeMsg) =
-            workers.Run()
-            // Run foreground worker, which directly sends to inboxes
-            let count = fgActors.Count
-            let mutable processed = 0
-            for i = 0 to count - 1 do
-                let actor = fgActors.[i]
-                processed <- processed + actor.Run(fgOutbox, disposeMsg, options)
-            processed
+                actors.[destId] <- proc
+                proc
+        member c.Register f =
+            Monitor.Enter sync
+            factory.Add f
+            Monitor.Exit sync
+        member c.GetProcessor(destId) =           
+            Monitor.Enter sync
+            let r = getProcessor destId 5
+            Monitor.Exit sync
+            r
         member c.Dispose() =
-            dispose workers
-            for actor in bgActors do dispose actor
-            for actor in fgActors do dispose actor
+            lock sync <| fun () ->
+                for proc in actors.Values do
+                    proc.Dispose()
         interface IDisposable with
             member c.Dispose() = c.Dispose()
         override c.ToString() =
-            sprintf "%s\n%s\n%s"
-                (formatList "FG" fgActors.Count (String.Join("\n", fgActors)))
-                (formatList "BG" bgActors.Count (String.Join("\n", bgActors)))
-                (workers.ToString())
+            lock sync <| fun () ->
+                let count = min actors.Count 20
+                let ordered = 
+                    actors.Values 
+                    |> Seq.sortBy (fun a -> a.ActorId) 
+                    |> Seq.take count
+                formatList "Actors" actors.Count (String.Join("\n", ordered))
+                
+[<AutoOpen>]
+module internal Dispatchers =
+    // Thread-safe
+    type DispatchQueue(owner : IDispatcher) =
+        let mutable maxCount = 0
+        let queue = Queue<ActorProcessor>()
+        let sync = obj()
+        member c.GetCount() =
+            Monitor.Enter sync
+            let r = queue.Count
+            Monitor.Exit sync
+            r
+        member c.Enqueue x =
+            Monitor.Enter sync
+            queue.Enqueue x
+            maxCount <- max queue.Count maxCount
+            Monitor.Exit sync
+        member c.TryDequeue([<Out>] item : byref<_>) =
+            Monitor.Enter sync
+            let r = queue.Count > 0
+            if r then item <- queue.Dequeue()
+            Monitor.Exit sync
+            r        
+        member c.Enqueue(actor : ActorProcessor, recipientId, message : Message<'a>) =
+            match actor.Enqueue<'a>(message.SourceId.value, recipientId, message) with
+            | ValueNone -> ()
+            | ValueSome dispatcher ->
+                if obj.ReferenceEquals(dispatcher, owner) 
+                    then c.Enqueue(actor)
+                    else dispatcher.Enqueue(actor)
+        override c.ToString() =
+            lock sync <| fun () ->
+                sprintf "%d max queued" maxCount
 
-    type ActorSender(actors : ActorRunnerCollection) =
-        let mutable sentCount = 0
-        member c.SentCount = sentCount
-        member c.Send (info : MessageInfo) =
-            // should be called on main thread
-            let actor = actors.GetRunner(info.destinationId, maxDepth = 2)
-            actor.Enqueue(info.message, info.destinationId)
-            sentCount <- sentCount + 1
+    // Not thread-safe
+    type OutboxSender(queue : DispatchQueue, actorMap : SharedActorMap) =
+        let actors = Dictionary<int, ActorProcessor>()
+        member private c.Get(destId) =
+            match actors.TryGetValue(destId) with
+            | true, actor -> actor
+            | false, _ -> 
+                let actor = actorMap.GetProcessor(destId)
+                actors.Add(destId, actor)
+                actor
+        member c.Send<'a>(message : Message<'a>) =
+            // Avoiding foreach since recipients will be cleared.
+            let recipients = message.Recipients
+            for i = 0 to recipients.Count - 1 do
+                let recipientId = recipients.[i]
+                queue.Enqueue(c.Get(recipientId), recipientId, message)
+        interface IOutboxSender with
+            member c.Send<'a>(message) =
+                c.Send<'a> message
+        override c.ToString() =
+            sprintf "%d actors" actors.Count
 
-    type Disposer() =
-        let mutable receivedCount = 0
-        member c.DisposedCount = receivedCount
-        member c.Receive (result : MessageResult) =
-            // should be called on main thread
-            result.message.Dispose()
-            receivedCount <- receivedCount + 1
-            if isNotNull result.ex then 
-                exn("Error running actor", result.ex) |> raise
+    // Thread-safe
+    type SharedOutbox(pool : SharedPool, actors : SharedActorMap) =
+        member c.BeginSend<'a>() =
+            // Use shared pool here instead of going directly
+            // to worker, since its pool isn't thread-safe
+            let msg = pool.GetPool<'a>().Rent()
+            msg.Sender <- c
+            msg :> IMessageWriter<'a>
+        interface IOutbox with
+            member c.BeginSend<'a>() =
+                c.BeginSend<'a>()
+        interface IOutboxSender with
+            member c.Send<'a>(message : Message<'a>) =
+                // Avoiding foreach since recipients will be cleared.
+                let recipients = message.Recipients
+                let sourceId = message.SourceId.value
+                for i = 0 to recipients.Count - 1 do
+                    let recipientId = recipients.[i]
+                    // Using shared map here
+                    let actor = actors.GetProcessor(recipientId)
+                    match actor.Enqueue<'a>(sourceId, recipientId, message) with
+                    | ValueSome dispatcher -> dispatcher.Enqueue(actor)
+                    | ValueNone -> ()
+
+    // Not thread-safe
+    type LocalOutbox(name, pool : LocalPool, sender : OutboxSender) =
+        member val ActiveId = 0 with get, set
+        member c.BeginSend<'a>() =
+            let msg = pool.GetPool<'a>().Rent()
+            msg.Sender <- sender
+            msg.SetSource (ActorId c.ActiveId)
+            msg :> IMessageWriter<'a>
+        interface IOutbox with
+            member c.BeginSend<'a>() =
+                c.BeginSend<'a>()
+        override c.ToString() =
+            name
+
+    [<Struct>]
+    type WorkerStatus = {
+        queuedCount : int
+        processedCount : int64
+        }
+
+    module WorkerStatus =
+        let empty = {
+            queuedCount = 0
+            processedCount = 0L
+            }
+
+        let add a b = {
+            queuedCount = a.queuedCount + b.queuedCount
+            processedCount = a.processedCount + b.processedCount
+            }                
+
+        let isRunning s1 s2 =
+            s1.processedCount <> s2.processedCount ||
+            s2.queuedCount > 0
+
+    // Thread-safe
+    type private Worker(owner : IDispatcher, actorMap, sharedPool, workerId, throughput, workers : Worker[]) =
+        let pool = LocalPool(sharedPool)
+        let queue = DispatchQueue(owner)
+        let sender = OutboxSender(queue, actorMap)
+        let outbox = LocalOutbox(workerId.ToString(), pool, sender)
+        let sync = obj()
+        let mutable active = Unchecked.defaultof<ActorProcessor>
+        let mutable isRunning = true
+        let mutable waits = 0
+        let mutable total = 0L
+        let runStealing() =
+            let mutable found = false
+            if workers.Length > 0 then
+                let mutable i = 0
+                while i < workers.Length && not found do
+                    if i <> workerId then
+                        found <- workers.[i].TryDequeue(&active)
+                    i <- i + 1
+            found
+        let runDequeue() =
+            queue.TryDequeue(&active)
+        let runActive() =
+            let mutable count = 0
+            if not (obj.ReferenceEquals(active, null)) then
+                // run single actor until no messages remain, respecting
+                // throughput param
+                outbox.ActiveId <- active.ActorId
+                count <- count + active.ProcessAll(outbox, pool, throughput)
+                outbox.ActiveId <- 0
+                active <- Unchecked.defaultof<_>
+            total <- total + int64 count
+            count > 0
+        let runAll() =
+            runActive() || 
+            runDequeue() ||
+            runStealing()
+        let run() =
+            try
+                while isRunning do
+                    Monitor.Enter sync
+                    while isRunning && runAll() do ()
+                    Monitor.Exit sync
+                    Thread.Sleep 1
+                    waits <- waits + 1
+            with ex ->
+                printfn "Failed %s" <| ex.ToString()
+        let thread = 
+            let t = new Thread(run)
+            t.Name <- sprintf "Worker %d" workerId
+            t
+        member c.TryDequeue([<Out>] item : byref<_>) =
+            queue.TryDequeue(&item)
+        member c.Start() =
+            thread.Start()
+        member c.Dispose() =
+            isRunning <- false
+            thread.Join()
+        member c.GetStatus() =
+            Monitor.Enter sync
+            let r = {
+                queuedCount = queue.GetCount()
+                processedCount = total
+                }
+            Monitor.Exit sync
+            r
+        member c.Enqueue (x : ActorProcessor) =
+            queue.Enqueue x
+        override c.ToString() =
+            lock sync <| fun () ->
+                sprintf "Worker %d: %d processed, %d waits\n  %s, %s\n  %s" 
+                    workerId total waits
+                    (sender.ToString())
+                    (queue.ToString())
+                    (addIndent (pool.ToString()))
+
+    // Thread-safe
+    type WorkerDispatcher(actorMap, pool, workerCount, throughput) as c =
+        let workers = 
+            let arr = Array.zeroCreate workerCount 
+            for i = 0 to workerCount - 1 do
+                arr.[i] <- new Worker(c, actorMap, pool, i, throughput, arr)
+            // start separately since all workers must be created first
+            for worker in arr do
+                worker.Start()            
+            arr
+        let primary = workers.[0]
+        let getStatus() =
+            // get aggregate status of all workers
+            let mutable status = WorkerStatus.empty
+            for worker in workers do
+                status <- WorkerStatus.add status (worker.GetStatus())
+            status
+        interface IDispatcher with
+            member c.Run(waitThreads) = 
+                let spinPeriod = 128
+                let mutable count = 0
+                if waitThreads then
+                    // keep polling status to see if anything changed or
+                    // there are queued items outstanding
+                    let mutable s1 = getStatus()
+                    let mutable s2 = getStatus()
+                    while WorkerStatus.isRunning s1 s2 do
+                        s1 <- s2
+                        s2 <- getStatus()
+                        count <- count + 1
+                        // if we've polled a bunch of times in a row with
+                        // continued activity, sleep and then resume
+                        if count &&& (spinPeriod - 1) = 0 then
+                            Thread.Sleep 1
+                count > 0
+            member c.Enqueue(actor) =
+                primary.Enqueue(actor)
+            member c.Dispose() =
+                for worker in workers do
+                    worker.Dispose()
+        override c.ToString() =
+            (formatList "Workers" workers.Length (String.Join("\n", workers)))
+
+    // Thread-safe
+    type Dispatcher(actorMap, sharedPool, throughput) as c =
+        let pool = LocalPool(sharedPool)
+        let queue = DispatchQueue(c)
+        let sender = OutboxSender(queue, actorMap)
+        let outbox = LocalOutbox("Main", pool, sender)
+        let sync = obj()
+        let mutable total = 0L
+        interface IDispatcher with
+            member c.Run(waitThreads) =
+                // Run on current thread until queue is empty
+                Monitor.Enter sync
+                let mutable actor = Unchecked.defaultof<_>
+                let mutable count = 0
+                while queue.TryDequeue &actor do
+                    outbox.ActiveId <- actor.ActorId
+                    count <- count + actor.ProcessAll(outbox, pool, throughput)
+                    outbox.ActiveId <- 0
+                Interlocked.Add(&total, int64 count) |> ignore
+                Monitor.Exit sync
+                count > 0
+            member c.Enqueue(actor) =
+                queue.Enqueue actor
+            member c.Dispose() = ()
+        override c.ToString() =
+            sprintf "Main: %d processed\n  %s, %s\n  %s" 
+                total 
+                (sender.ToString())
+                (queue.ToString())
+                (addIndent (pool.ToString()))
+
+    // Thread-safe
+    type CurrentDispatcher(actorMap, sharedPool, throughput) =
+        let pool = LocalPool(sharedPool)
+        let outbox = SharedOutbox(sharedPool, actorMap)
+        let sync = obj()
+        let mutable total = 0L
+        interface IDispatcher with
+            member c.Run(waitThreads) = false
+            member c.Enqueue(actor) =
+                Monitor.Enter sync
+                actor.ProcessAll(outbox, pool, throughput) |> ignore
+                Monitor.Exit sync
+            member c.Dispose() = ()
+        override c.ToString() =
+            sprintf "Current: %d processed\n  %s" 
+                total (addIndent (pool.ToString()))
+
+    /// Thread-safe if dispatchers do not change
+    type DispatcherLookup() =
+        let maxExecutionCount = 8
+        let list = List<IDispatcher>()
+        let lookup = Array.zeroCreate<IDispatcher> maxExecutionCount
+        let runOnce waitThreads =
+            // go once through dispatchers, waiting until
+            // they individually have no work remaining, then
+            // return whether work was done
+            let mutable pending = false
+            for d in list do 
+                pending <- d.Run(waitThreads) || pending
+            pending
+        member c.Add(execution : Execution, dispatcher) =
+            lookup.[int execution] <- dispatcher
+            if not (list.Contains dispatcher) then
+                list.Add dispatcher
+        member c.GetDispatcher execution =
+            lookup.[int execution]
+        interface IDispatcherLookup with
+            member c.GetDispatcher execution =
+                c.GetDispatcher execution
+        member c.Run(waitThreads) =
+            // keep running until no additional work is done
+            // any blocking should be done at lower level like worker
+            let mutable s1 = runOnce(waitThreads)
+            let mutable s2 = runOnce(waitThreads)
+            while s1 || s2 do
+                s1 <- s2
+                s2 <- runOnce(waitThreads)
+        /// Runs until all foreground work is done
+        member c.Run() = 
+            c.Run(false)
+        /// Sleep/poll while background threads complete
+        member c.RunAll() = 
+            c.Run(true)
+        member c.Dispose() =
+            for d in list do 
+                d.Dispose()                    
+        interface IDisposable with
+            member c.Dispose() = c.Dispose()
+        override c.ToString() =
+            formatList "Dispatchers" list.Count (String.Join("\n", list))
+
+    type DispatcherLookup with
+        member c.AddDefaults(actors, pool, workerCount) =
+            let throughput = 100
+            let main = new Dispatcher(actors, pool, throughput)
+            let none = new CurrentDispatcher(actors, pool, throughput)
+            let workers = 
+                if workerCount <= 0 
+                then main :> IDispatcher
+                else 
+                    new WorkerDispatcher(actors, pool, workerCount, throughput) 
+                    :> IDispatcher
+            c.Add(Execution.None, none)                
+            c.Add(Execution.Main, main)                
+            c.Add(Execution.Default, workers)
 
 type IMessagePump =
     inherit IOutbox
@@ -450,64 +695,39 @@ type IMessagePump =
     abstract member Run : unit -> unit
     abstract member RunAll : unit -> unit
 
-/// Not thread-safe, specify zero threads to disable BG workers
-type ActorSystem(threadCount, batchSizeLimit) =
-    let options = { 
-        threadCount = threadCount
-        batchSizeLimit = batchSizeLimit
-        }
-    let mutable receivedCount = 0
-    let onProcess = Action(fun () -> 
-        Interlocked.Increment &receivedCount |> ignore)
-    let nullMessage = new NullMessage()
-    let actors = new ActorRunnerCollection(options, onProcess)
-    let receiver = Disposer()
-    let sender = ActorSender(actors)
-    let disposeMsg = Action<_>(receiver.Receive)
-    let send = Action<_>(sender.Send)
-    let fgOutbox = Outbox(send)
+// Thread-safe
+type ActorSystem(threadCount) =
+    let pool = SharedPool()
+    let dispatchers = new DispatcherLookup()
+    let actors = new SharedActorMap(dispatchers)
+    let outbox = SharedOutbox(pool, actors)
+    do 
+        dispatchers.AddDefaults(actors, pool, threadCount)
     new() = new ActorSystem(ActorSystem.DefaultThreadCount)
-    new(threadCount) = new ActorSystem(threadCount, Int32.MaxValue)
-    member private c.PendingCount = 
-        sender.SentCount - receiver.DisposedCount
-    member c.Register factory =
-        actors.Register factory
-    member c.BeginSend() =
-        fgOutbox.BeginSend()
-    member c.Create(destId) =
-        // Send an empty message just to force creation of actor
-        send.Invoke { destinationId = destId; message = nullMessage }
-    member c.RunOnce() =
-        let sent = actors.SendAll(send, disposeMsg)
-        // If there are outstanding messages in system, run workers
-        let processed = if c.PendingCount > 0 then actors.Run(fgOutbox, disposeMsg) else 0
-        sent + processed > 0
+    member c.Register f = actors.Register f
+    member c.Dispose() =
+        dispatchers.Dispose()
+        actors.Dispose()
     /// Runs until all foreground work is done
-    member c.Run() =
-        while c.RunOnce() do ()                
+    member c.Run() = 
+        dispatchers.Run()
     /// Sleep/poll while background threads complete
     member c.RunAll() =
-        c.Run()
-        while c.PendingCount > 0 do
-            c.Run()
-            Thread.Sleep(1)
-    member c.Dispose() =
-        actors.Dispose()
+        dispatchers.RunAll()
+    interface IMessagePump with
+        member c.BeginSend<'a>() =
+            outbox.BeginSend<'a>()
+        member c.Run() = c.Run()
+        member c.RunAll() = c.RunAll()
+        member c.Dispose() = c.Dispose()
     static member DefaultThreadCount = 
         // Allow at least one background thread by default
         Environment.ProcessorCount - 1 |> max 1
-    interface IMessagePump with
-        member c.Run() = c.Run()
-        member c.RunAll() = c.RunAll()
-        member c.BeginSend() =
-            c.BeginSend()
-    interface IDisposable with
-        member c.Dispose() = c.Dispose()
     override c.ToString() =
-        sprintf "Messages: %d pending, %d sent, %d received, %d disposed\nActors\n  %s\n  %s"
-            c.PendingCount sender.SentCount receivedCount receiver.DisposedCount
+        sprintf "Actor system\n  %s\n  %s\n  %s"
             (addIndent (actors.ToString()))
-            (addIndent (fgOutbox.ToString()))
+            (addIndent (pool.ToString()))
+            (addIndent (dispatchers.ToString()))
 
 [<Struct>]
 type ActorReference = {
@@ -567,50 +787,6 @@ module ActorSystem =
         member c.Respond(msg) =
             c.outbox.Send(c.sourceId, msg)
     
-/// Not pooled, intended for sending messages to actor system
-/// running on another thread
-type QueueingMessagePump(enqueue) =
-    interface IMessagePump with
-        member c.Run() = ()
-        member c.RunAll() = ()
-        member c.Dispose() = ()
-        member c.BeginSend<'a>() =
-            new MessageWriter<'a>(fun writer ->
-                enqueue (fun (c : IOutbox) -> 
-                    use batch = c.BeginSend()
-                    writer.State.CopyTo batch))
-            :> IMessageWriter<'a>
-
-/// Runs messages against pump in background
-type BackgroundMessagePump(system : IMessagePump, update) =
-    let mutable isRunning = true
-    let nullCommand a = ()
-    let queue = ConcurrentQueue<IOutbox -> unit>()
-    let pump = 
-        new QueueingMessagePump(queue.Enqueue)
-        :> IMessagePump
-    let thread = 
-        let t = System.Threading.Thread(fun () ->
-            while isRunning do
-                try 
-                    let mutable run = nullCommand
-                    while queue.TryDequeue(&run) do
-                        run system
-                    update system
-                    System.Threading.Thread.Sleep(1)
-                with ex -> printfn "%A" ex)    
-        t.Start()
-        t
-    member c.Dispose() = 
-        isRunning <- false
-        thread.Join()
-        pump.Dispose()
-    interface IMessagePump with
-        member c.Run() = pump.Run()
-        member c.RunAll() = pump.RunAll()
-        member c.BeginSend<'a>() = pump.BeginSend<'a>()
-        member c.Dispose() = c.Dispose()
-    
 type Sender = IOutbox -> unit
 
 module Sender =
@@ -624,4 +800,3 @@ module Sender =
         fun (a : IOutbox) ->
             for send in list do
                 send a
-            

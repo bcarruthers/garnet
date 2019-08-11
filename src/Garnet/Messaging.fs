@@ -2,8 +2,10 @@
 
 open System
 open System.Collections.Generic
+open System.Threading
 open Garnet
 open Garnet.Comparisons
+open Garnet.Formatting
 
 /// Identifies an actor
 [<Struct>]
@@ -15,7 +17,7 @@ type ActorId =
 module ActorId =
     let undefined = ActorId 0
     let isAny (id : ActorId) = true
-    
+         
 /// Provides methods for constructing a batch of messages, sending
 /// them upon disposal
 type IMessageWriter<'a> =
@@ -28,11 +30,42 @@ type IMessageWriter<'a> =
     /// Adds a message to the current batch
     abstract member AddMessage : 'a -> unit
 
-/// Provides methods for sending outgoing batches of messages
+type private NullMessageWriter<'a>() =
+    static let mutable instance = new NullMessageWriter<'a>() :> IMessageWriter<'a>
+    static member Instance = instance
+    interface IMessageWriter<'a> with
+        member c.SetSource id = ()
+        member c.AddRecipient id = ()
+        member c.AddMessage msg = ()
+        member c.Dispose() = ()                                          
+
 type IOutbox =
     abstract member BeginSend<'a> : unit -> IMessageWriter<'a>
 
-/// Encloses a message with metadata
+type NullOutbox() =
+    static let mutable instance = NullOutbox()
+    static member Instance = instance
+    interface IOutbox with
+        member c.BeginSend<'a>() =
+            NullMessageWriter<'a>.Instance
+
+[<AutoOpen>]
+module Outbox =
+    type IOutbox with
+        member c.BeginSend<'a>(destId) =
+            let batch = c.BeginSend<'a>()
+            batch.AddRecipient destId
+            batch
+
+        member c.Send<'a>(addresses, msg : 'a) =
+            use batch = c.BeginSend<'a>(addresses)
+            batch.AddMessage msg
+
+        member c.Send<'a>(destId, msg : 'a, sourceId) =
+            use batch = c.BeginSend<'a>(destId)
+            batch.SetSource sourceId
+            batch.AddMessage msg
+        
 [<Struct>]
 type Mail<'a> = {
     outbox : IOutbox
@@ -42,10 +75,38 @@ type Mail<'a> = {
     } with
     override c.ToString() =
         sprintf "%d->%d: %A" c.sourceId.value c.destinationId.value c.message
-
-/// Provides methods for receiving incoming batches of messages
+                
+type Mail<'a> with
+    member c.BeginSend() =
+        c.outbox.BeginSend()
+    member c.BeginSend(destId) =
+        c.outbox.BeginSend(destId)
+    member c.BeginRespond() =
+        c.BeginSend(c.sourceId)
+    member c.Send(destId, msg) =
+        use batch = c.BeginSend destId
+        batch.AddMessage msg
+    member c.Respond(msg) =
+        c.Send(c.sourceId, msg)
+            
 type IInbox =
     abstract member Receive<'a> : Mail<Buffer<'a>> -> unit
+
+type ISubscribable =
+    abstract OnAll<'a> : (Mail<Buffer<'a>> -> unit) -> unit
+
+[<AutoOpen>]
+module Subscribable =
+    type ISubscribable with
+        member c.On<'a>(handle : Mail<'a> -> unit) =
+            c.OnAll<'a>(fun mail ->
+                for i = 0 to mail.message.Count - 1 do
+                    handle {
+                        message = mail.message.[i]
+                        sourceId = mail.sourceId
+                        destinationId = mail.destinationId
+                        outbox = mail.outbox
+                        })
 
 type Inbox() =
     let dict = Dictionary<Type, obj>()
@@ -60,6 +121,9 @@ type Inbox() =
                     existing e
                     action e        
         dict.[t] <- combined
+    interface ISubscribable with
+        member c.OnAll action =
+            c.OnAll action
     member c.TryReceive<'a> e =
         match dict.TryGetValue(typeof<'a>) with
         | true, x -> 
@@ -70,29 +134,10 @@ type Inbox() =
     interface IInbox with
         member c.Receive e =
             c.TryReceive e |> ignore
-            
-[<Struct>]
-type Disposable =
-    val onDispose : unit -> unit
-    new(onDispose) = { onDispose = onDispose }
-    interface IDisposable with
-        member c.Dispose() = c.onDispose()
-
-type private NullMessageWriter<'a>() =
-    interface IMessageWriter<'a> with
-        member c.SetSource id = ()
-        member c.AddRecipient id = ()
-        member c.AddMessage msg = ()
-        member c.Dispose() = ()
-        
-[<AutoOpen>]
-module private Batches =
-    let nullBatch<'a> = new NullMessageWriter<'a>() :> IMessageWriter<'a>
-
-type NullOutbox() =
-    interface IOutbox with
-        member c.BeginSend() = nullBatch<'a>
-        
+    override c.ToString() =
+        let str = String.Join(", ", dict.Keys |> Seq.map typeToString |> Seq.sort)
+        sprintf "Inbox: %s" str
+    
 module Mail =
     let private nullOutbox = NullOutbox()
 
@@ -135,6 +180,8 @@ type private InboxCollection(handlers : IInbox[]) =
         member c.Receive<'a> e =
             for handler in handlers do
                 handler.Receive<'a> e
+    override c.ToString() =
+         formatList "Inboxes" handlers.Length (String.Join("\n", handlers))
      
 /// Defines how an actor is executed or run
 type Execution =
@@ -201,12 +248,12 @@ type internal ActorFactoryCollection() =
     let factories = List<_>()
     member c.Add(desc : ActorId -> Actor) =
         factories.Add(desc)
-    member c.Create(id : ActorId) =
+    member c.Create actorId =
         // first priority is execution type, then order where last wins
         let mutable result = Actor.none
         let mutable i = factories.Count - 1
         while int result.execution <> int Execution.Default && i >= 0 do
-            let actor = factories.[i] id
+            let actor = factories.[i] (ActorId actorId)
             if int actor.execution > int result.execution then
                 result <- actor
             i <- i - 1
@@ -237,7 +284,7 @@ module ActorFactory =
     let combine factories =
         let collection = ActorFactoryCollection()
         for f in factories do collection.Add f
-        collection.Create
+        fun (id : ActorId) -> collection.Create id.value
 
 [<AutoOpen>]
 module Inbox =
@@ -278,6 +325,13 @@ module Inbox =
             for msg in msgs do
                 batch.AddMessage msg
     
+[<Struct>]
+type Disposable =
+    val onDispose : unit -> unit
+    new(onDispose) = { onDispose = onDispose }
+    interface IDisposable with
+        member c.Dispose() = c.onDispose()
+
 /// Need sender member indirection because container registrations
 /// need permanent reference while incoming messages have varying sender
 type internal Outbox() =

@@ -60,6 +60,13 @@ module internal Internal =
     let listInfoToString (list : IList) =
         let args = list.GetType().GetGenericArguments()
         sprintf "%s (%d)" (args.[0] |> typeToString) list.Count
+    
+    let addIndent (str : string) =
+        str.Replace("\n", "\n  ")
+
+    let formatList name count (str : string) =
+        sprintf "%s (%d)%s" name count
+            (if count > 0 then ":\n  " + addIndent str else "")
 
     let listToString prefix title items =
         let str =

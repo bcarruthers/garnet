@@ -265,7 +265,7 @@ module internal RecordingInternal =
         // share counter/formatter since no threads
         let formatter = options.createFormatter()
         let counter = ref 0
-        let a = new ActorSystem(threadCount = 0, batchSizeLimit = 1)
+        let a = new ActorSystem(threadCount = 0)
         a.Register(fun id ->
             if options.filter.destinationFilter id then
                 let h = PrintInbox(id, formatter, counter, options.print) 

@@ -144,7 +144,6 @@ let tests =
                 ]
             a.Run(ActorId 1, 0)
             count |> shouldEqual 10
-            a.RunOnce() |> shouldEqual false
 
         testCase "send message to other" <| fun () ->
             let mutable count1 = 0
@@ -165,7 +164,6 @@ let tests =
             a.Run(ActorId 1, 0)
             count1 |> shouldEqual 5
             count2 |> shouldEqual 5
-            a.RunOnce() |> shouldEqual false
 
         testCase "send message to background actor" <| fun () ->
             let mutable count1 = 0
@@ -193,7 +191,6 @@ let tests =
             a.RunAll()
             count1 |> shouldEqual 5
             count2 |> shouldEqual 5
-            a.RunOnce() |> shouldEqual false
 
         testCase "send random messages to background actors" <| fun () ->
             use a = new ActorSystem(2)
