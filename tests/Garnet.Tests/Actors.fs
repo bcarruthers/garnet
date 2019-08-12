@@ -18,22 +18,46 @@ module ActorFactory =
         ActorFactory.handler actorId register 
         |> ActorFactory.map Actor.execMain
 
+type Inbox() =
+    let dict = Dictionary<Type, obj>()
+    member c.OnAll<'a>(action : Mail<Buffer<'a>> -> unit) =
+        let t = typeof<'a>
+        let combined =
+            match dict.TryGetValue t with
+            | false, _ -> action
+            | true, existing -> 
+                let existing = existing :?> (Mail<Buffer<'a>> -> unit)
+                fun e -> 
+                    existing e
+                    action e        
+        dict.[t] <- combined
+    member c.TryReceive<'a> e =
+        match dict.TryGetValue(typeof<'a>) with
+        | true, x -> 
+            let handle = x :?> (Mail<Buffer<'a>> -> unit)
+            handle e
+            true
+        | false, _ -> false
+    interface IInbox with
+        member c.Receive e =
+            c.TryReceive e |> ignore
+
 let runPingPong onPing onPong iterations =
     let mutable count = 0
     use a = new ActorSystem(0)
     a.Register(ActorId 1, fun h ->
-        h.OnMail<Run> <| fun e ->
-            e.outbox.Send(ActorId 2, Ping())
-        h.OnMail<Pong> <| fun e ->
+        h.On<Run> <| fun e ->
+            h.Send(ActorId 2, Ping())
+        h.On<Pong> <| fun e ->
             count <- count + 1
             if count < iterations then
                 onPing(e)
-                e.Respond(Ping())
+                h.Respond(Ping())
         )
     a.Register(ActorId 2, fun h -> 
-        h.OnMail<Ping> <| fun e -> 
+        h.On<Ping> <| fun e -> 
             onPong e
-            e.Respond(Pong())
+            h.Respond(Pong())
         )
     a.Run(ActorId 1, Run())
     a.RunAll()
@@ -42,9 +66,10 @@ let runPingPong onPing onPong iterations =
 let sendReceiveMessages send =
     let results = List<_>()
     use a = new ActorSystem(0)
-    a.Register(ActorId 1, fun h -> 
-        h.OnAll<int> <| fun e ->
-            results.Add(e |> Mail.map List.ofSeq))
+    let h = Inbox()
+    h.OnAll<int> <| fun e ->
+        results.Add(e |> Mail.map List.ofSeq)
+    a.Register(ActorId 1, h)
     send (a.Get(ActorId 1))
     a.RunAll()
     results |> List.ofSeq
@@ -83,7 +108,7 @@ let tests =
 
         testCase "send to any actor" <| fun () ->
             let msgs = List<_>()
-            let inbox = Inbox()
+            let inbox = Mailbox()
             inbox.On<int> msgs.Add
             use a = new ActorSystem()
             a.Register(ActorFactory.any (fun id -> Actor.inbox inbox))
@@ -137,10 +162,10 @@ let tests =
             use a = new ActorSystem(0)
             a.RegisterAll [
                 ActorFactory.main (ActorId 1) <| fun c ->
-                    c.OnMail<int> <| fun e ->
-                        if e.message < 10 then
+                    c.On<int> <| fun e ->
+                        if e < 10 then
                             count <- count + 1
-                            e.outbox.Send(ActorId 1, e.message + 1)
+                            c.Send(ActorId 1, e + 1)
                 ]
             a.Run(ActorId 1, 0)
             count |> shouldEqual 10
@@ -151,15 +176,15 @@ let tests =
             use a = new ActorSystem(0)
             a.RegisterAll [
                 ActorFactory.handler (ActorId 1) <| fun c ->
-                    c.OnMail<int> <| fun e ->
-                        if e.message < 10 then
+                    c.On<int> <| fun e ->
+                        if e < 10 then
                             count1 <- count1 + 1
-                            e.outbox.Send(ActorId 2, e.message + 1)
+                            c.Send(ActorId 2, e + 1)
                 ActorFactory.handler (ActorId 2) <| fun c ->
-                    c.OnMail<int> <| fun e ->
-                        if e.message < 10 then
+                    c.On<int> <| fun e ->
+                        if e < 10 then
                             count2 <- count2 + 1
-                            e.outbox.Send(ActorId 1, e.message + 1)
+                            c.Send(ActorId 1, e + 1)
                 ]
             a.Run(ActorId 1, 0)
             count1 |> shouldEqual 5
@@ -171,21 +196,21 @@ let tests =
             use a = new ActorSystem(1)
             a.RegisterAll [
                 ActorFactory.main (ActorId 1) <| fun c ->
-                    c.OnMail<Thread> <| fun e ->
+                    c.On<Thread> <| fun e ->
                         // bg thread should be different
-                        Expect.notEqual Thread.CurrentThread.ManagedThreadId e.message.ManagedThreadId ""
-                    c.OnMail<int> <| fun e ->
-                        if e.message < 10 then
+                        Expect.notEqual Thread.CurrentThread.ManagedThreadId e.ManagedThreadId ""
+                    c.On<int> <| fun e ->
+                        if e < 10 then
                             count1 <- count1 + 1
                             //printfn "FG: %d" Thread.CurrentThread.ManagedThreadId
-                            e.outbox.Send(ActorId 2, e.message + 1)
+                            c.Send(ActorId 2, e + 1)
                 ActorFactory.handler (ActorId 2) <| fun c ->
-                    c.OnMail<int> <| fun e ->
-                        if e.message < 10 then
+                    c.On<int> <| fun e ->
+                        if e < 10 then
                             count2 <- count2 + 1
                             //printfn "BG: %d" Thread.CurrentThread.ManagedThreadId
-                            e.outbox.Send(ActorId 1, Thread.CurrentThread)
-                            e.outbox.Send(ActorId 1, e.message + 1)
+                            c.Send(ActorId 1, Thread.CurrentThread)
+                            c.Send(ActorId 1, e + 1)
                 ]            
             a.Run(ActorId 1, 0)
             a.RunAll()
@@ -198,11 +223,11 @@ let tests =
                 //ActorId.consoleOut, fun id -> PrintMessageHandler.Handler 
                 ActorFactory.filterHandler (fun id -> true) <| fun id c -> 
                     let rand = Random(id.value)
-                    c.OnMail<int> <| fun e -> 
-                        //printfn "%d: %d" id.id e.message
-                        if e.message < 1000 then
+                    c.On<int> <| fun e -> 
+                        //printfn "%d: %d" id.id e
+                        if e < 1000 then
                             let nextId = rand.Next(1, 256)
-                            e.outbox.Send(ActorId nextId, e.message + 1)
+                            c.Send(ActorId nextId, e + 1)
                 ]
             a.Run(ActorId 1, 123)
 
@@ -223,32 +248,32 @@ let tests =
             let rules = 
                 [
                 ActorFactory.handler (ActorId 1) <| fun c ->
-                    c.OnMail<int> <| fun e ->
+                    c.On<int> <| fun e ->
                         for i = 1 to 1000 do
-                            e.outbox.Send(ActorId 2, uint32 i)
-                            e.outbox.Send(ActorId 2, uint16 i)
+                            c.Send(ActorId 2, uint32 i)
+                            c.Send(ActorId 2, uint16 i)
                 ActorFactory.handler (ActorId 2) <| fun c ->
-                    c.OnMail<int> <| fun e ->
+                    c.On<int> <| fun e ->
                         for i = 1 to 1 do
-                            e.outbox.Send(ActorId 3, uint32 i)
-                            e.outbox.Send(ActorId 4, uint16 i)
-                    c.OnMail<uint32> <| fun e ->
+                            c.Send(ActorId 3, uint32 i)
+                            c.Send(ActorId 4, uint16 i)
+                    c.On<uint32> <| fun e ->
                         for i = 1 to 1 do
-                            e.outbox.Send(ActorId 3, uint8 i)
+                            c.Send(ActorId 3, uint8 i)
                 ActorFactory.handler (ActorId 3) <| fun c ->
-                    c.OnMail<uint8> <| fun e ->
+                    c.On<uint8> <| fun e ->
                         for i = 1 to 1 do
-                            e.outbox.Send(ActorId 4, int8 i)
-                    c.OnMail<uint16> <| fun e ->
+                            c.Send(ActorId 4, int8 i)
+                    c.On<uint16> <| fun e ->
                         for i = 1 to 1 do
-                            e.outbox.Send(ActorId 4, int8 i)
-                    c.OnMail<uint32> <| fun e ->
+                            c.Send(ActorId 4, int8 i)
+                    c.On<uint32> <| fun e ->
                         Interlocked.Increment(&count) |> ignore
                 ActorFactory.handler (ActorId 4) <| fun c ->
-                    c.OnMail<int8> <| fun e ->
+                    c.On<int8> <| fun e ->
                         for i = 1 to 1 do
-                            e.outbox.Send(ActorId 2, int i)
-                    c.OnMail<uint16> <| fun e ->
+                            c.Send(ActorId 2, int i)
+                    c.On<uint16> <| fun e ->
                         Interlocked.Increment(&count) |> ignore
                 ]     
                 |> List.map (ActorFactory.withLogging createRegistry log.OpenWrite)
@@ -281,13 +306,13 @@ let tests =
             let rules = 
                 [
                 ActorFactory.handler (ActorId 1) <| fun c ->
-                    c.OnMail<int> <| fun e ->
+                    c.On<int> <| fun e ->
                         for i = 1 to 100 do
-                            e.outbox.Send(ActorId 2, uint32 i)
+                            c.Send(ActorId 2, uint32 i)
                 ActorFactory.handler (ActorId 2) <| fun c ->
-                    c.OnMail<uint32> <| fun e ->
+                    c.On<uint32> <| fun e ->
                         for i = 1 to 1 do
-                            e.outbox.Send(ActorId 3, uint8 i)
+                            c.Send(ActorId 3, uint8 i)
                 ]     
                 |> List.map (ActorFactory.withLogging createRegistry log.OpenWrite)
             a.RegisterAll rules
@@ -323,9 +348,9 @@ let tests =
             let id2 = ActorId 25
             a.RegisterAll [
                 ActorFactory.init id1 <| fun () ->
-                    let h = Inbox()
-                    h.OnMail<int> <| fun e -> 
-                        e.outbox.Send(id2, "msg" + e.message.ToString())
+                    let h = Mailbox()
+                    h.On<int> <| fun e -> 
+                        h.Send(id2, "msg" + e.ToString())
                     Actor.inbox (LogInbox(id1, h, StreamInbox(reg, ms)))
                 ]
             a.Run(id1, 100)

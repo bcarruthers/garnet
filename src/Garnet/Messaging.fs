@@ -43,7 +43,7 @@ type IOutbox =
     abstract member BeginSend<'a> : unit -> IMessageWriter<'a>
 
 type NullOutbox() =
-    static let mutable instance = NullOutbox()
+    static let mutable instance = NullOutbox() :> IOutbox
     static member Instance = instance
     interface IOutbox with
         member c.BeginSend<'a>() =
@@ -65,6 +65,20 @@ module Outbox =
             use batch = c.BeginSend<'a>(destId)
             batch.SetSource sourceId
             batch.AddMessage msg
+
+[<Struct>]
+type Envelope = {
+    sourceId : ActorId
+    destinationId : ActorId
+    outbox : IOutbox
+    }
+
+module Envelope = 
+    let empty = {
+        sourceId = ActorId.undefined
+        destinationId = ActorId.undefined
+        outbox = NullOutbox.Instance
+        }
         
 [<Struct>]
 type Mail<'a> = {
@@ -73,6 +87,11 @@ type Mail<'a> = {
     destinationId : ActorId
     message : 'a
     } with
+    member c.Envelope = {
+        outbox = c.outbox
+        sourceId = c.sourceId
+        destinationId = c.destinationId
+        }
     override c.ToString() =
         sprintf "%d->%d: %A" c.sourceId.value c.destinationId.value c.message
                 
@@ -93,30 +112,30 @@ type IInbox =
     abstract member Receive<'a> : Mail<Buffer<'a>> -> unit
 
 type ISubscribable =
-    abstract OnAll<'a> : (Mail<Buffer<'a>> -> unit) -> unit
+    abstract OnAll<'a> : (Buffer<'a> -> unit) -> unit
 
 [<AutoOpen>]
 module Subscribable =
     type ISubscribable with
-        member c.On<'a>(handle : Mail<'a> -> unit) =
+        member c.On<'a>(handle : 'a -> unit) =
             c.OnAll<'a>(fun mail ->
-                for i = 0 to mail.message.Count - 1 do
-                    handle {
-                        message = mail.message.[i]
-                        sourceId = mail.sourceId
-                        destinationId = mail.destinationId
-                        outbox = mail.outbox
-                        })
+                for i = 0 to mail.Count - 1 do
+                    handle mail.[i])
 
-type Inbox() =
+type Mailbox() =
     let dict = Dictionary<Type, obj>()
-    member c.OnAll<'a>(action : Mail<Buffer<'a>> -> unit) =
+    let mutable outbox = NullOutbox.Instance
+    let mutable sourceId = ActorId.undefined
+    let mutable destId = ActorId.undefined
+    member c.SourceId = sourceId
+    member c.DestinationId = destId
+    member c.OnAll<'a>(action : Buffer<'a> -> unit) =
         let t = typeof<'a>
         let combined =
             match dict.TryGetValue t with
             | false, _ -> action
             | true, existing -> 
-                let existing = existing :?> (Mail<Buffer<'a>> -> unit)
+                let existing = existing :?> (Buffer<'a> -> unit)
                 fun e -> 
                     existing e
                     action e        
@@ -124,20 +143,38 @@ type Inbox() =
     interface ISubscribable with
         member c.OnAll action =
             c.OnAll action
-    member c.TryReceive<'a> e =
+    member c.TryHandle<'a> e =
         match dict.TryGetValue(typeof<'a>) with
         | true, x -> 
-            let handle = x :?> (Mail<Buffer<'a>> -> unit)
+            let handle = x :?> (Buffer<'a> -> unit)
             handle e
             true
         | false, _ -> false
+    member c.Handle<'a> e =
+        c.TryHandle<'a> e |> ignore
     interface IInbox with
         member c.Receive e =
-            c.TryReceive e |> ignore
+            outbox <- e.outbox
+            sourceId <- e.sourceId
+            destId <- e.destinationId
+            try
+                c.Handle e.message
+            finally
+                outbox <- NullOutbox.Instance
+                sourceId <- ActorId.undefined
+                destId <- ActorId.undefined
+    interface IOutbox with
+        member c.BeginSend<'a>() =
+            outbox.BeginSend<'a>()
     override c.ToString() =
-        let str = String.Join(", ", dict.Keys |> Seq.map typeToString |> Seq.sort)
-        sprintf "Inbox: %s" str
+        outbox.ToString()
     
+type Mailbox with
+    member c.BeginRespond() =
+        c.BeginSend(c.SourceId)
+    member c.Respond(msg) =
+        c.Send(c.SourceId, msg)
+
 module Mail =
     let private nullOutbox = NullOutbox()
 
@@ -224,7 +261,7 @@ module Actor =
     let inbox inbox = disposable inbox ignore
 
     let handler register = 
-        let inbox = Inbox()
+        let inbox = Mailbox()
         register inbox
         disposable inbox ignore
 
@@ -287,22 +324,7 @@ module ActorFactory =
         fun (id : ActorId) -> collection.Create id.value
 
 [<AutoOpen>]
-module Inbox =
-    type Inbox with
-        member c.On<'a>(handler) =
-            c.OnAll<'a> <| fun e -> 
-                for i = 0 to e.message.Count - 1 do
-                    handler (e.message.[i])
-
-        member c.OnMail<'a>(action) =
-            c.OnAll<'a> <| fun e -> 
-                for msg in e.message do
-                    action { 
-                        sourceId = e.sourceId
-                        destinationId = e.destinationId
-                        outbox = e.outbox
-                        message = msg }
-
+module Mailbox =
     type IOutbox with
         member c.BeginSend<'a>(destId) =
             let batch = c.BeginSend<'a>()
@@ -335,27 +357,26 @@ type Disposable =
 /// Need sender member indirection because container registrations
 /// need permanent reference while incoming messages have varying sender
 type internal Outbox() =
-    let nullOutbox = NullOutbox() :> IOutbox
     let mutable batchCount = 0
     let mutable pushCount = 0
     let mutable popCount = 0
-    let outboxStack = 
-        let s = Stack<_>()
-        s.Push(nullOutbox)
-        s
+    let mutable current = Envelope.empty
+    let outboxStack = Stack<_>()
     let popOutbox() = 
         popCount <- popCount + 1
-        outboxStack.Pop() |> ignore
+        current <- outboxStack.Pop()
     let scope = new Disposable(popOutbox)
+    member c.Current = current
     /// Set temporary outbox for a scope such as handling incoming message
-    member c.PushOutbox outbox = 
-        outboxStack.Push outbox
+    member c.Push outbox = 
+        outboxStack.Push current
+        current <- outbox
         pushCount <- pushCount + 1
         scope
     /// Create an outgoing message batch which is sent on batch disposal
     member c.BeginSend() =             
         // get current outbox
-        let batch = outboxStack.Peek().BeginSend()
+        let batch = current.outbox.BeginSend()
         batchCount <- batchCount + 1
         batch
     interface IOutbox with

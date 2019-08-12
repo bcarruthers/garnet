@@ -417,7 +417,7 @@ let a = new ActorSystem()
 a.Register(ActorId 1, fun c ->
     c.On<Ping> <| fun e -> 
         printf "ping "
-        e.Respond(Pong())
+        c.Respond(Pong())
     )
 a.Register(ActorId 2, fun c ->
     c.On<Pong> <| fun e -> 

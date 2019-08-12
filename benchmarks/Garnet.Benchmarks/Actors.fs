@@ -16,16 +16,16 @@ type SimplePingPongBenchmark() =
     [<GlobalSetup>]
     member this.Setup() =
         a.Register(ActorId 1, fun h ->
-            h.OnMail<Run> <| fun e ->
-                e.outbox.Send(ActorId 2, Ping())
-            h.OnMail<Pong> <| fun e ->
+            h.On<Run> <| fun e ->
+                h.Send(ActorId 2, Ping())
+            h.On<Pong> <| fun e ->
                 count <- count + 1
                 if count < this.N then
-                    e.Respond(Ping())
+                    h.Respond(Ping())
             )
         a.Register(ActorId 2, fun h -> 
-            h.OnMail<Ping> <| fun e -> 
-                e.Respond(Pong())
+            h.On<Ping> <| fun e -> 
+                h.Respond(Pong())
             )
     [<Benchmark>]
     member this.SingleThread() = 

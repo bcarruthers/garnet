@@ -10,7 +10,7 @@ open Garnet.Metrics
 open Garnet.Collections
 open Garnet.Actors
     
-type EventHandler<'a> = Mail<Buffer<'a>> -> unit
+type EventHandler<'a> = Buffer<'a> -> unit
 
 type IEventHandler =
     abstract member Handle<'a> : List<'a> -> unit
@@ -32,7 +32,7 @@ type internal Subscription(handler : IEventHandler) =
         member c.Dispose() = isDisposed <- true
     
 type IPublisher =
-    abstract member PublishAll<'a> : Mail<Buffer<'a>> -> List<Subscription<'a>> -> unit
+    abstract member PublishAll<'a> : Buffer<'a> -> List<Subscription<'a>> -> unit
 
 type internal IChannel =
     abstract member Clear : unit -> unit
@@ -59,7 +59,7 @@ type Publisher() =
     static member Null = NullPublisher() :> IPublisher
 
     interface IPublisher with
-        member c.PublishAll<'a> (batch : Mail<Buffer<'a>>) handlers =
+        member c.PublishAll<'a> (batch : Buffer<'a>) handlers =
             let count = handlers.Count
             for i = 0 to count - 1 do
                 let handler = handlers.[i]
@@ -69,7 +69,7 @@ type Publisher() =
                 | ex -> 
                     let str = 
                         sprintf "Error in handler %d on %s batch (%d):%s" 
-                            i (typeof<'a> |> typeToString) batch.message.Count (formatBatch batch.message)
+                            i (typeof<'a> |> typeToString) batch.Count (formatBatch batch)
                     exn(str, ex) |> raise                
 
 type PrintPublisherOptions = {
@@ -107,7 +107,7 @@ type PrintPublisher(publisher : IPublisher, formatter : IFormatter) =
     member c.Disable t =
         enabledTypes.Remove t |> ignore
     interface IPublisher with        
-        member c.PublishAll<'a> (batch : Mail<Buffer<'a>>) handlers =
+        member c.PublishAll<'a> (batch : Buffer<'a>) handlers =
             let options = options
             let start = Timing.getTimestamp()
             let handlerCount = handlers.Count
@@ -124,7 +124,7 @@ type PrintPublisher(publisher : IPublisher, formatter : IFormatter) =
                         name = typeInfo.typeName
                         start = start
                         stop = stop
-                        count = batch.message.Count 
+                        count = batch.Count 
                         }
                 // print immediate timing
                 let canPrint = 
@@ -138,12 +138,12 @@ type PrintPublisher(publisher : IPublisher, formatter : IFormatter) =
                         sb.Append(
                             sprintf "[%s] %d: %s %dmsg %dh %dus%s"
                                 options.printLabel count (typeof<'a> |> typeToString)
-                                batch.message.Count handlerCount usec
+                                batch.Count handlerCount usec
                                 (if completed then "" else " FAILED")
                             ) |> ignore
                         // print messages
                         if not typeInfo.isEmpty then //if typeInfo.canPrint then
-                            formatMessagesTo sb formatter.Format batch.message options.maxPrintMessages
+                            formatMessagesTo sb formatter.Format batch options.maxPrintMessages
                         sb.AppendLine() |> ignore
                         options.sendLogMessage (sb.ToString())
                         sb.Clear() |> ignore
@@ -174,7 +174,7 @@ type Channel<'a>(publisher : IPublisher) =
                 list
         batch.[0] <- event
         // run on all handlers
-        c.PublishAll (Mail.empty batch)
+        c.PublishAll batch
         // return batch to pool
         batch.Clear()
         singleEventPool.Add(batch)
@@ -193,7 +193,7 @@ type Channel<'a>(publisher : IPublisher) =
     member c.Publish() =
         if events.Count = 0 then false
         else
-            c.PublishAll (Mail.empty events.Buffer)
+            c.PublishAll events.Buffer
             true
     interface IChannel with
         member c.Clear() = c.Clear()
@@ -284,18 +284,8 @@ module Channels =
         member c.On<'a>(handler) =
             c.GetChannel<'a>().OnAll(
                 fun batch -> 
-                    for i = 0 to batch.message.Count - 1 do
-                        handler (batch.message.[i]))
-
-        member c.OnMail<'a>(action) =
-            c.OnAll<'a> <| fun e -> 
-                for msg in e.message do
-                    action { 
-                        sourceId = e.sourceId
-                        destinationId = e.destinationId
-                        outbox = e.outbox
-                        message = msg
-                        }
+                    for i = 0 to batch.Count - 1 do
+                        handler (batch.[i]))
 
     type Channel<'a> with    
         member c.Wait(msg) =

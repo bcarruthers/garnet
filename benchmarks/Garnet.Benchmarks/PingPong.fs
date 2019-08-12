@@ -47,7 +47,7 @@ module Tests =
         let count = ref 0
         use a = new ActorSystem(workerCount)
         a.Register <| fun actorId ->
-            let inbox = Inbox()
+            let inbox = Mailbox()
             inbox.OnAll<int64> <| fun e ->
                 let c = Interlocked.Increment count
                 if log then
@@ -55,9 +55,9 @@ module Tests =
                         sourceId = ActorId.undefined
                         destId = actorId
                         sequence = c
-                        payload = e.message.[0]
+                        payload = e.[0]
                         timestamp = Stopwatch.GetTimestamp()
-                        dispatcher = e.outbox.ToString()
+                        dispatcher = inbox.ToString()
                         }
                 if c <= maxCount then
                     let rand = uint64 c * 2862933555777941757UL + 3037000493UL
@@ -65,18 +65,18 @@ module Tests =
                     if duration > 0 then
                         Thread.Sleep duration
                     if log  then
-                        let nextItem = e.message.[0] + 1L
+                        let nextItem = e.[0] + 1L
                         onSend { 
                             sourceId = actorId
                             destId = destId
                             sequence = c
                             payload = nextItem
                             timestamp = Stopwatch.GetTimestamp()
-                            dispatcher = e.outbox.ToString()
+                            dispatcher = inbox.ToString()
                             }
-                    use batch = e.BeginSend(destId)
-                    for i = 0 to e.message.Count - 1 do
-                        batch.AddMessage(e.message.[i] + 1L)
+                    use batch = inbox.BeginSend(destId)
+                    for i = 0 to e.Count - 1 do
+                        batch.AddMessage(e.[i] + 1L)
             Actor.inbox inbox
         for i = 0 to initCount - 1 do
             let destId = (i % actorCount) + 1 |> ActorId
@@ -116,12 +116,12 @@ module Tests =
         let maxActorCount = maxCount * 2 - initCount
         let count = ref 0
         let createInbox id =
-            let inbox = Inbox()
+            let inbox = Mailbox()
             inbox.OnAll<int64> <| fun e ->
                 if Interlocked.Increment count <= maxActorCount then
-                    use m = e.BeginRespond()
-                    for i = 0 to e.message.Count - 1 do
-                        m.AddMessage e.message.[i]
+                    use m = inbox.BeginRespond()
+                    for i = 0 to e.Count - 1 do
+                        m.AddMessage e.[i]
             inbox
         use a = new ActorSystem(workerCount)
         a.Register(ActorFactory.init (ActorId 1) (fun () ->

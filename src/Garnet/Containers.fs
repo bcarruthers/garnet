@@ -198,6 +198,7 @@ type Container() =
     let recycle eid =
         let partition = Eid.getPartition eid
         eidPools.[partition].Recycle(eid)
+    member c.SourceId = outbox.Current.sourceId
     member c.Get<'a>() = components.Get<'a>()
     member c.GetSegments<'a>() = segments.GetSegments<'a>()
     member c.GetChannel<'a>() = channels.GetChannel<'a>()
@@ -274,11 +275,11 @@ type Container() =
     interface IOutbox with
         member c.BeginSend() =
             outbox.BeginSend()
-    member c.Receive e =
+    member c.Receive (e : Mail<_>) =
         // assign outbox for duration of call
-        use s = outbox.PushOutbox(e.outbox)
+        use s = outbox.Push e.Envelope
         let channel = c.GetChannel<'a>()
-        channel.PublishAll e
+        channel.PublishAll e.message
         c.Run()
     interface IInbox with
         member c.Receive e =
@@ -307,6 +308,12 @@ type Container with
     member c.Run(msg) = 
         c.Send(msg)
         c.Run()
+
+    member c.BeginRespond() =
+        c.BeginSend(c.SourceId)
+
+    member c.Respond(msg) =
+        c.Send(c.SourceId, msg)
     
 [<AutoOpen>]
 module internal Composition =

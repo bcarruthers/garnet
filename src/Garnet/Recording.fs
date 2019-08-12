@@ -217,8 +217,8 @@ type PrintInbox(id : ActorId, formatter : IFormatter, counter : ref<int>, print)
     let mutable isEnabled = false
     let mutable maxMessages = 10
     let handler = 
-        let h = Inbox()
-        h.OnMail<ActorLogCommand> <| fun e -> isEnabled <- e.message.enableActorLog
+        let h = Mailbox()
+        h.On<ActorLogCommand> <| fun e -> isEnabled <- e.enableActorLog
         h :> IInbox
     member c.IsEnabled 
         with get() = isEnabled
