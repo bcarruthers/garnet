@@ -13,6 +13,7 @@
     <Compile Include="Coroutines.fs" />
     <Compile Include="Segments.fs" />
     <Compile Include="Components.fs" />
+    <Compile Include="Channels.fs" />
     <Compile Include="Iteration.fs" />
     <Compile Include="Entities.fs" />
     <Compile Include="Collections.fs" />

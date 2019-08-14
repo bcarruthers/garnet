@@ -7,12 +7,13 @@
     <ProjectReference Include="..\..\src\Garnet\Garnet.fsproj" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Channels.fs" />
     <Compile Include="PingPong.fs" />
     <Compile Include="Actors.fs" />
     <Compile Include="Main.fs" />
+    <None Include="Channels.fsx" />
     <None Include="PingPong.fsx" />
   </ItemGroup>
-  <ItemGroup />
   <ItemGroup>
     <PackageReference Include="FSharp.Core" Version="4.*" />
   </ItemGroup>

@@ -106,6 +106,8 @@ type ResizableBuffer<'a>(capacity) =
     member c.Capacity = array.Length
     member c.Buffer = Buffer.ofArrayStart array count
     member c.Add x = Buffer.addToArray &count &array x
+    member c.RemoveLast() =
+        count <- count - 1
     member c.Clear() = count <- 0
     member c.GetEnumerator() =
         new BufferEnumerator<'a>(array, 0, count)
