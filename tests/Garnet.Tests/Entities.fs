@@ -2,7 +2,7 @@ module Garnet.Tests.Entities
 
 open System.Collections.Generic
 open Expecto
-open Garnet.Ecs
+open Garnet.Composition
 
 type Velocity = {
     velocity : int }

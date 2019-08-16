@@ -2,7 +2,7 @@
 
 open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
-open Garnet.Ecs
+open Garnet.Composition
 open Garnet.Benchmarks
 
 [<CoreJob>]

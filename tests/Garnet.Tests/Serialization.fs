@@ -4,9 +4,9 @@ open System
 open System.Collections.Generic
 open System.IO
 open Expecto
-open Garnet.Ecs
+open Garnet.Composition
 open Garnet.Formatting
-open Garnet.Actors
+open Garnet.Streaming
 
 let testRoundtripValue (serializer : ISerializer<_>) x =
     let ms = new MemoryStream()

@@ -1,4 +1,4 @@
-﻿open Garnet.Ecs
+﻿open Garnet.Composition
 open Garnet.Samples
 open Garnet.Samples.FrameworkTypes
 open Garnet.Samples.MonoGame.MonoGameWrapper

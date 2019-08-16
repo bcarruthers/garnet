@@ -1,4 +1,4 @@
-﻿namespace Garnet.Actors
+﻿namespace Garnet.Composition
 
 open System
 open System.Threading
@@ -52,8 +52,10 @@ module internal Sending =
                 sourceId <- id
             member c.AddRecipient x =
                 Buffer.addToArray &recipientCount &recipients x.value
-            member c.AddMessage x =
+            member c.Write x =
                 Buffer.addToArray &bufferLength &buffer x
+            member c.WriteAll x =
+                Buffer.addAllToArray &bufferLength &buffer x
             member c.Dispose() =
                 c.Sender.Send(c)            
         override c.ToString() =

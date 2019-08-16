@@ -1,4 +1,4 @@
-namespace Garnet.Actors
+namespace Garnet.Streaming
 
 open System
 open System.IO
@@ -6,7 +6,7 @@ open System.Collections.Generic
 open Garnet
 open Garnet.Comparisons
 open Garnet.Formatting
-open Garnet.Actors
+open Garnet.Composition
 
 /// Logs incoming and outgoing messages
 type LogInbox(actorId : ActorId, baseHandler : IInbox, logger : IInbox) =
@@ -255,7 +255,7 @@ module internal RecordingInternal =
             ()
 
     let replayTo (a : IMessagePump) reg filter range ms =
-        let filter = fun h -> filter.sourceFilter h.sourceId
+        let filter = fun (h : MessageHeader) -> filter.sourceFilter h.sourceId
         seek reg filter range.messageTypeId range.start ms
         let sender = StreamMessageSender(reg, filter)
         while getSentCount sender range.messageTypeId < range.count && sender.Send(ms, a) do

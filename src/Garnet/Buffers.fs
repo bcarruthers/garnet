@@ -95,7 +95,13 @@ module Buffer =
         resizeArray count &arr
         arr.[count - 1] <- x
 
-type ResizableBuffer<'a>(capacity) =
+    let internal addAllToArray (count : byref<int>) (arr : byref<_[]>) (src : Buffer<_>) =
+        let destOffset = count
+        count <- count + src.Count
+        resizeArray count &arr
+        Array.Copy(src.Array, src.Offset, arr, destOffset, src.Count)
+
+type internal ResizableBuffer<'a>(capacity) =
     let mutable array = Array.zeroCreate<'a> capacity
     let mutable count = 0
     member c.Item 
@@ -106,6 +112,7 @@ type ResizableBuffer<'a>(capacity) =
     member c.Capacity = array.Length
     member c.Buffer = Buffer.ofArrayStart array count
     member c.Add x = Buffer.addToArray &count &array x
+    member c.AddAll x = Buffer.addAllToArray &count &array x
     member c.RemoveLast() =
         count <- count - 1
     member c.Clear() = count <- 0

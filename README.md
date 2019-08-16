@@ -5,7 +5,7 @@
 Garnet is a lightweight game composition library for F# with entity-component-system (ECS) and actor-like messaging features.
 
 ```fsharp
-open Garnet.Ecs
+open Garnet.Composition
 
 // events
 [<Struct>] type Update = { dt : float32 }

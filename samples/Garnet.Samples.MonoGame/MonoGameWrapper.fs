@@ -5,7 +5,7 @@ open System.IO
 open System.Collections.Generic
 open Microsoft.Xna.Framework
 open Microsoft.Xna.Framework.Graphics
-open Garnet.Ecs
+open Garnet.Composition
 open Garnet.Samples.Comparisons
 open Garnet.Samples.Performance
 open Garnet.Samples.Numerics

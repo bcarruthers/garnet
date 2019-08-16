@@ -7,7 +7,8 @@ open System.Threading
 open Expecto
 open Garnet
 open Garnet.Formatting
-open Garnet.Actors
+open Garnet.Composition
+open Garnet.Streaming
 
 type Run = struct end
 type Ping = struct end

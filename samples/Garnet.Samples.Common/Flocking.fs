@@ -197,7 +197,7 @@ module Domain =
 module Systems =
     open System
     open System.Collections.Generic
-    open Garnet.Ecs
+    open Garnet.Composition
     open Garnet.Samples.Comparisons
     open Garnet.Samples.Numerics
     open Garnet.Samples.FrameworkTypes

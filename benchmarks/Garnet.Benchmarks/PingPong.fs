@@ -4,7 +4,7 @@ open System.Collections.Generic
 open System.Diagnostics
 open System.Runtime.InteropServices
 open System.Threading
-open Garnet.Actors
+open Garnet.Composition
 
 type RecordedMessage = {
     sourceId : ActorId 
@@ -76,14 +76,14 @@ module Tests =
                             }
                     use batch = inbox.BeginSend(destId)
                     for i = 0 to e.Count - 1 do
-                        batch.AddMessage(e.[i] + 1L)
+                        batch.Write(e.[i] + 1L)
             Actor.inbox inbox
         for i = 0 to initCount - 1 do
             let destId = (i % actorCount) + 1 |> ActorId
             let payload = (i + 1) * 10000000
             use batch = a.BeginSend(destId)
             for i = 0 to batchSize - 1 do
-                batch.AddMessage (payload + i * 10000 |> int64)
+                batch.Write (payload + i * 10000 |> int64)
             if log  then
                 onSend { 
                     sourceId = ActorId.undefined
@@ -121,7 +121,7 @@ module Tests =
                 if Interlocked.Increment count <= maxActorCount then
                     use m = inbox.BeginRespond()
                     for i = 0 to e.Count - 1 do
-                        m.AddMessage e.[i]
+                        m.Write e.[i]
             inbox
         use a = new ActorSystem(workerCount)
         a.Register(ActorFactory.init (ActorId 1) (fun () ->

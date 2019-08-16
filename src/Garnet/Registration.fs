@@ -1,4 +1,4 @@
-﻿namespace Garnet.Ecs
+﻿namespace Garnet.Composition
 
 open System
 open System.Collections.Generic
@@ -9,37 +9,6 @@ type Registration = {
     registeredName : string
     register : Container -> IDisposable
     }
-
-type private Disposable(dispose) =
-    interface IDisposable with
-        member c.Dispose() =
-            dispose()
-
-type private DisposableList(items : seq<IDisposable>) =
-    let list = List<_>(items)
-    new() = new DisposableList(Seq.empty)
-    member c.Add item =
-        list.Add item
-    member c.Remove item =
-        list.Remove item
-    interface IDisposable with
-        member c.Dispose() =
-            for item in list do 
-                item.Dispose()
-
-module Disposable =
-    let init dispose = 
-        new Disposable(dispose) :> IDisposable
-
-    let list items =
-        new DisposableList(items |> Seq.map (fun x -> x :> IDisposable)) 
-        :> IDisposable
-
-    let empty =
-        init ignore
-
-    let combine systems =
-        fun c -> systems |> List.map (fun f -> f c) |> list
 
 module Registration =
     type private RegistrationLookup() =

@@ -2,7 +2,7 @@ module Garnet.Tests.Segments
 
 open System
 open Expecto
-open Garnet.Ecs
+open Garnet.Composition
 
 [<Tests>]
 let tests =

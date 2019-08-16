@@ -1,4 +1,4 @@
-﻿namespace Garnet.Ecs
+﻿namespace Garnet.Composition
 
 open System
 open System.Collections.Generic
@@ -8,9 +8,8 @@ open Garnet.Comparisons
 open Garnet.Formatting
 open Garnet.Metrics
 open Garnet.Collections
-open Garnet.Actors
     
-type EventHandler<'a> = Buffer<'a> -> unit
+type internal EventHandler<'a> = Buffer<'a> -> unit
 
 type IPublisher =
     abstract member PublishAll<'a> : Buffer<'a> * Buffer<EventHandler<'a>> -> unit
@@ -171,9 +170,8 @@ type Channel<'a>() =
         total <- total + events.Count
     member c.OnAll(handler : EventHandler<_>) =
         handlers.Add(handler)
-        new Disposable(fun () -> 
-            unsubscribed.Add(handler))
-            :> IDisposable
+        Disposable.init <| fun () -> 
+            unsubscribed.Add(handler)
     /// Calls handler behaviors and prunes subscriptions after
     member c.Publish() =
         if events.Count = 0 then false

@@ -1,7 +1,7 @@
 ﻿module Garnet.Tests.Registry
 
 open Expecto
-open Garnet.Ecs
+open Garnet.Composition
 
 [<Tests>]
 let tests =

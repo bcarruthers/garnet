@@ -5,8 +5,7 @@
 
 open System
 open System.Text
-open Garnet.Ecs
-open Garnet.Actors
+open Garnet.Composition
 
 // primitives
 [<Struct>]

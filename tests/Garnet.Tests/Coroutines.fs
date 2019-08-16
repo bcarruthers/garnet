@@ -2,7 +2,7 @@ module Garnet.Tests.Coroutines
 
 open System.Collections.Generic
 open Expecto
-open Garnet.Ecs
+open Garnet.Composition
 
 [<Tests>]
 let tests =

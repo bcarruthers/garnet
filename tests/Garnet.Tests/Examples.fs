@@ -1,7 +1,6 @@
 module Garnet.Tests.Examples
 
-open Garnet.Ecs
-open Garnet.Actors
+open Garnet.Composition
 
 // Common
 

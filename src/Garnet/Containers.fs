@@ -1,11 +1,10 @@
-﻿namespace Garnet.Ecs
+﻿namespace Garnet.Composition
 
 open System
 open System.Collections.Generic
 open System.Runtime.InteropServices
 open Garnet.Comparisons
 open Garnet.Formatting
-open Garnet.Actors
 
 /// 32-bit entity ID
 [<Struct>]
@@ -189,10 +188,7 @@ type Container() =
     let scheduler = reg.GetInstance<CoroutineScheduler>()
     let segments = reg.GetInstance<SegmentStore<int>>()
     let outbox = reg.GetInstance<Outbox>()
-    let components = 
-        let store = ComponentStore(segments, Eid.eidToComponentKey)
-        reg.RegisterInstance(store)
-        store
+    let components = ComponentStore(segments, Eid.eidToComponentKey)
     let eidPools = reg.GetInstance<EidPools>()
     let eids = components.Get<Eid>()
     let recycle eid =
@@ -277,7 +273,7 @@ type Container() =
             outbox.BeginSend()
     member c.Receive (e : Mail<_>) =
         // assign outbox for duration of call
-        use s = outbox.Push e.Envelope
+        use s = outbox.Push e
         let channel = c.GetChannel<'a>()
         channel.PublishAll e.message
         c.Run()
@@ -316,7 +312,7 @@ type Container with
         c.Send(c.SourceId, msg)
     
 [<AutoOpen>]
-module internal Composition =
+module internal Prefab =
     let cmp c (e : Entity<_,_>) = e.Add c
 
     let create prefab (c : Container) =

@@ -1,6 +1,6 @@
 ﻿module Garnet.Benchmarks.Channels
 
-open Garnet.Ecs
+open Garnet.Composition
 
 let run iterations sendFreq =
     let mutable sum = 0L

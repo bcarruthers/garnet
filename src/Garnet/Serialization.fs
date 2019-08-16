@@ -1,4 +1,4 @@
-﻿namespace Garnet.Actors
+﻿namespace Garnet.Streaming
 
 open System
 open System.IO
@@ -6,6 +6,7 @@ open System.Collections.Generic
 open System.Runtime.InteropServices
 open Garnet
 open Garnet.Formatting
+open Garnet.Composition
 
 type ISerializer<'a> =
     abstract member Write : Stream -> 'a -> unit
@@ -200,7 +201,7 @@ module internal Streaming =
                 writer.AddRecipient header.destinationId
             member c.Read stream =
                 let msg = serializer.Read stream
-                writer.AddMessage msg
+                writer.Write msg
             member c.Flush() =
                 writer.Dispose()
                 writer <- nullMessageWriter
@@ -221,9 +222,12 @@ module internal Streaming =
             member c.AddRecipient id = 
                 baseWriter.AddRecipient id
                 recipients.Add id
-            member c.AddMessage msg = 
-                baseWriter.AddMessage msg
+            member c.Write msg = 
+                baseWriter.Write msg
                 messages.Add msg
+            member c.WriteAll src = 
+                baseWriter.WriteAll src
+                messages.AddAll src
             member c.Dispose() = 
                 for id in recipients do                    
                     logger.Receive { 

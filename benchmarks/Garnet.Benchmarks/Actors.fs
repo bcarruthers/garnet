@@ -1,7 +1,7 @@
 ﻿module Garnet.Benchmarks.Actors
 
 open BenchmarkDotNet.Attributes
-open Garnet.Actors
+open Garnet.Composition
 
 type Run = struct end
 type Ping = struct end

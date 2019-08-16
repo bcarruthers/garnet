@@ -1,4 +1,4 @@
-﻿namespace Garnet.Ecs
+﻿namespace Garnet.Composition
 
 open System
 open System.Collections.Generic
