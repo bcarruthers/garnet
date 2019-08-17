@@ -224,7 +224,7 @@ type PrintInbox(id : ActorId, formatter : IFormatter, counter : ref<int>, print)
         with get() = isEnabled
         and set value = isEnabled <- value
     interface IInbox with
-        member c.Receive<'a> (e : Mail<Buffer<'a>>) =
+        member c.Receive<'a> (e : Envelope<Buffer<'a>>) =
             // print if enabled before or after
             let isEnabledBefore = isEnabled
             handler.Receive e

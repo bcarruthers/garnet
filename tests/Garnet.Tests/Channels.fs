@@ -112,4 +112,21 @@ let tests =
             c.Commit()
             c.Publish() |> shouldEqual true
             r |> Seq.toList |> shouldEqual [ "a" ]
+
+        testCase "log publisher" <| fun () ->
+            let r = List<_>()
+            let c = Container()
+            let sub =
+                c.On<int> <| fun e -> 
+                    if e = 2 then failwith "error"
+                    c.Send<string> "a"
+                    c.Publish 'b'
+            c.SetPublisher(Publisher.Print {
+                PrintPublisherOptions.enabled with
+                    sendLog = r.Add
+                    })
+            c.Run 1
+            try c.Run 2 with ex -> r.Add(sprintf "%s" <| ex.ToString())
+            c.Run "c"
+            r.Count |> shouldEqual 6
     ]

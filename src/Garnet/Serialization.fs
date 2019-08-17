@@ -346,9 +346,9 @@ type StreamMessageSender(registry : MessageRegistry, filter) =
 type StreamInbox(registry : MessageRegistry, stream : Stream) =
     let headerInfo = registry.Get<MessageHeader>()
     interface IInbox with
-        member c.Receive<'a> (e : Mail<Buffer<'a>>) =     
+        member c.Receive<'a> (e : Envelope<Buffer<'a>>) =     
             StreamInbox.Write registry headerInfo stream e
-    static member Write<'a> (registry : MessageRegistry) headerInfo (stream : Stream) (e : Mail<Buffer<'a>>) =
+    static member Write<'a> (registry : MessageRegistry) headerInfo (stream : Stream) (e : Envelope<Buffer<'a>>) =
         let info = registry.Get<'a>()
         if info.typeId <> 0 then
             let header = {

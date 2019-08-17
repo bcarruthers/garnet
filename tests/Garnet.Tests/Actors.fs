@@ -21,13 +21,13 @@ module ActorFactory =
 
 type Inbox() =
     let dict = Dictionary<Type, obj>()
-    member c.OnAll<'a>(action : Mail<Buffer<'a>> -> unit) =
+    member c.OnAll<'a>(action : Envelope<Buffer<'a>> -> unit) =
         let t = typeof<'a>
         let combined =
             match dict.TryGetValue t with
             | false, _ -> action
             | true, existing -> 
-                let existing = existing :?> (Mail<Buffer<'a>> -> unit)
+                let existing = existing :?> (Envelope<Buffer<'a>> -> unit)
                 fun e -> 
                     existing e
                     action e        
@@ -35,7 +35,7 @@ type Inbox() =
     member c.TryReceive<'a> e =
         match dict.TryGetValue(typeof<'a>) with
         | true, x -> 
-            let handle = x :?> (Mail<Buffer<'a>> -> unit)
+            let handle = x :?> (Envelope<Buffer<'a>> -> unit)
             handle e
             true
         | false, _ -> false
@@ -64,12 +64,19 @@ let runPingPong onPing onPong iterations =
     a.RunAll()
     count
 
+let mapEnvelope f (mail : Envelope<_>) = {
+    outbox = mail.outbox
+    sourceId = mail.sourceId
+    destinationId = mail.destinationId
+    message = f mail.message
+    }
+
 let sendReceiveMessages send =
     let results = List<_>()
     use a = new ActorSystem(0)
     let h = Inbox()
     h.OnAll<int> <| fun e ->
-        results.Add(e |> Mail.map List.ofSeq)
+        results.Add(e |> mapEnvelope List.ofSeq)
     a.Register(ActorId 1, h)
     send (a.Get(ActorId 1))
     a.RunAll()

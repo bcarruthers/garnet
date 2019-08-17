@@ -26,7 +26,7 @@ module Proto1 =
     module Message =
         let init payload = new Message<_>(payload) :> IMessage
 
-    type Mail<'a> = {
+    type Envelope<'a> = {
         message : 'a
         send : int -> IMessage -> unit 
         }
@@ -39,7 +39,7 @@ module Proto1 =
         let send destId msg = 
             outgoing.Enqueue(struct(destId, msg))
         member c.On<'a>(handle) =
-            handlers.Add(typeof<'a>, Action<Mail<'a>>(handle))
+            handlers.Add(typeof<'a>, Action<Envelope<'a>>(handle))
         member c.Enqueue msg =
             incoming.Enqueue msg
         member c.Process() =
@@ -119,7 +119,7 @@ module Proto2 =
         abstract Send<'a> : int * 'a -> unit
 
     [<Struct>]
-    type Mail<'a> = {
+    type Envelope<'a> = {
         message : 'a
         system : ISender 
         }
@@ -138,7 +138,7 @@ module Proto2 =
     type ActorSet() =
         let handlers = Dictionary<struct(int * Type), obj>()
         let processors = List<_>()
-        member c.On<'a>(id, handle : Mail<'a> -> unit) =
+        member c.On<'a>(id, handle : Envelope<'a> -> unit) =
             let handler = Handler<'a>(handle)
             handlers.Add(struct(id, typeof<'a>), handler :> obj)
             processors.Add handler.Process
@@ -185,7 +185,7 @@ module Proto3 =
         abstract Process : ISender -> unit
 
     [<Struct>]
-    type Mail<'a> = {
+    type Envelope<'a> = {
         message : 'a
         system : ISender 
         }
@@ -202,7 +202,7 @@ module Proto3 =
     type Actor() =
         let queue = Queue<_>()
         let handlers = Dictionary<Type, IProcessor>()
-        member c.On<'a>(handle : Mail<'a> -> unit) =
+        member c.On<'a>(handle : Envelope<'a> -> unit) =
             let handler = Handler<'a>(handle)
             handlers.Add(typeof<'a>, handler :> IProcessor)
         member c.Enqueue<'a> (msg : 'a) =
@@ -310,14 +310,14 @@ module Proto4 =
                 batch.Add msg
 
     [<Struct>]
-    type Mail<'a> = {
+    type Envelope<'a> = {
         actorId : int
         addresses : Addresses
         message : 'a
         system : IOutbox
         }
         
-    type Mail<'a> with
+    type Envelope<'a> with
         member c.BeginSend(destId) =
             c.system.BeginSend(Addresses.init c.addresses.destinationId destId)
         member c.BeginRespond() =
@@ -333,12 +333,12 @@ module Proto4 =
         abstract Process : int * IOutbox -> bool
 
     type ISubscribable =
-        abstract OnAll<'a> : (Mail<Buffer<'a>> -> unit) -> unit
+        abstract OnAll<'a> : (Envelope<Buffer<'a>> -> unit) -> unit
 
     [<AutoOpen>]
     module Subscribable =
         type ISubscribable with
-            member c.On<'a>(handle : Mail<'a> -> unit) =
+            member c.On<'a>(handle : Envelope<'a> -> unit) =
                 c.OnAll<'a>(fun mail ->
                     for i = 0 to mail.message.count - 1 do
                         handle {

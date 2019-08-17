@@ -193,7 +193,7 @@ module internal Pooling =
 module internal Processing =
     // Stateless
     type IDeliverer =
-        abstract Deliver : LocalPool * IInbox * Mail<obj> -> unit        
+        abstract Deliver : LocalPool * IInbox * Envelope<obj> -> unit        
 
     // Stateless
     type Deliverer<'a>() =
@@ -784,10 +784,6 @@ module ActorSystem =
 
         member c.Run msg =
             c.pump.Run(c.actorId, msg)
-
-    type Mail<'a> with
-        member c.Respond(msg) =
-            c.outbox.Send(c.sourceId, msg)
     
 type Sender = IOutbox -> unit
 

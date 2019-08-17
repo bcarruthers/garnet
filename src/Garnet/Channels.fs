@@ -8,6 +8,9 @@ open Garnet.Comparisons
 open Garnet.Formatting
 open Garnet.Metrics
 open Garnet.Collections
+
+/// Event published when commit occurs    
+type Commit = struct end
     
 type internal EventHandler<'a> = Buffer<'a> -> unit
 
@@ -19,10 +22,6 @@ type internal IChannel =
     abstract member Commit : unit -> unit
     abstract member Publish : unit -> bool
     abstract member SetPublisher : IPublisher voption -> unit
-            
-type internal NullPublisher() =
-    interface IPublisher with
-        member c.PublishAll(batch, handlers) = ()
 
 module internal Publisher =
     let formatBatch (messages : Buffer<_>) =
@@ -47,91 +46,6 @@ module internal Publisher =
                     sprintf "Error in handler %d on %s batch (%d):%s" 
                         i (typeof<'a> |> typeToString) batch.Count (formatBatch batch)
                 exn(str, ex) |> raise                
-    
-type Publisher() =
-    static member Default = Publisher() :> IPublisher
-    static member Null = NullPublisher() :> IPublisher
-
-    interface IPublisher with
-        member c.PublishAll<'a>(batch : Buffer<'a>, handlers) =
-            Publisher.publishAll batch handlers
-
-type PrintPublisherOptions = {
-    isPrintEnabled : bool
-    printLabel : string
-    maxPrintMessages : int
-    minDurationUsec : int
-    sendTiming : Timing -> unit
-    sendLogMessage : string -> unit
-    }
-
-module PrintPublisherOptions =
-    let defaultOptions = {
-        isPrintEnabled = false
-        printLabel = ""
-        maxPrintMessages = 10
-        minDurationUsec = 0
-        sendTiming = ignore
-        sendLogMessage = printfn "%s"
-        }
-
-/// Prints published events
-type PrintPublisher(publisher : IPublisher, formatter : IFormatter) =
-    let sb = StringBuilder()
-    let ticksPerSec = Timing.ticksPerMs / int64 1000
-    let enabledTypes = HashSet<Type>()
-    let mutable count = 0
-    let mutable options = PrintPublisherOptions.defaultOptions
-    new() = PrintPublisher(Publisher(), Formatter())
-    member c.Options = options
-    member c.SetOptions newOptions =
-        options <- newOptions
-    member c.Enable t =
-        enabledTypes.Add t |> ignore
-    member c.Disable t =
-        enabledTypes.Remove t |> ignore
-    interface IPublisher with        
-        member c.PublishAll<'a>(batch : Buffer<'a>, handlers) =
-            let options = options
-            let start = Timing.getTimestamp()
-            let handlerCount = handlers.Count
-            let mutable completed = false
-            try
-                publisher.PublishAll(batch, handlers)
-                completed <- true
-            finally
-                let stop = Timing.getTimestamp()
-                let typeInfo = CachedTypeInfo<'a>.Info
-                // send timing to accumulator
-                if typeInfo.canSendTimings then
-                    options.sendTiming {
-                        name = typeInfo.typeName
-                        start = start
-                        stop = stop
-                        count = batch.Count 
-                        }
-                // print immediate timing
-                let canPrint = 
-                    (options.isPrintEnabled || enabledTypes.Contains typeof<'a>) && 
-                    formatter.CanFormat<'a>() && 
-                    typeInfo.canPrint
-                if canPrint then
-                    let duration = stop - start
-                    let usec = duration * 1000000L / ticksPerSec |> int
-                    if not completed || usec >= options.minDurationUsec then
-                        sb.Append(
-                            sprintf "[%s] %d: %s %dmsg %dh %dus%s"
-                                options.printLabel count (typeof<'a> |> typeToString)
-                                batch.Count handlerCount usec
-                                (if completed then "" else " FAILED")
-                            ) |> ignore
-                        // print messages
-                        if not typeInfo.isEmpty then //if typeInfo.canPrint then
-                            formatMessagesTo sb formatter.Format batch options.maxPrintMessages
-                        sb.AppendLine() |> ignore
-                        options.sendLogMessage (sb.ToString())
-                        sb.Clear() |> ignore
-                count <- count + 1
 
 type Channel<'a>() =
     let unsubscribed = List<EventHandler<'a>>()
@@ -292,3 +206,94 @@ module Channels =
     type IChannels with    
         member c.Wait(msg) =
             c.GetChannel<'a>().Wait msg
+
+type internal NullPublisher() =
+    static let mutable instance = NullPublisher() :> IPublisher
+    static member Instance = instance
+    interface IPublisher with
+        member c.PublishAll(batch, handlers) = ()
+
+type PrintPublisherOptions = {
+    enableLog : bool
+    logLabel : string
+    messageSizeLimit : int
+    minDurationUsec : int
+    sendLog : string -> unit
+    sendTiming : Timing -> unit
+    canSendLog : Type -> bool
+    canSendTiming : Type -> bool
+    basePublisher : IPublisher
+    formatter : IFormatter
+    }
+
+/// Prints published events
+type internal PrintPublisher(options) =
+    let sb = StringBuilder()
+    let mutable count = 0
+    interface IPublisher with        
+        member c.PublishAll<'a>(batch : Buffer<'a>, handlers) =
+            let start = Timing.getTimestamp()
+            let mutable completed = false
+            try
+                options.basePublisher.PublishAll(batch, handlers)
+                completed <- true
+            finally
+                let typeInfo = CachedTypeInfo<'a>.Info
+                let canLog =
+                    options.enableLog &&
+                    options.canSendLog typeof<'a> && 
+                    options.formatter.CanFormat<'a>()
+                let canTime =
+                    options.canSendTiming typeof<'a>
+                // stop timer
+                let stop = Timing.getTimestamp()
+                // send timing
+                if canTime then
+                    options.sendTiming {
+                        name = typeInfo.typeName
+                        start = start
+                        stop = stop
+                        count = batch.Count 
+                        }
+                // send log message
+                if canLog then
+                    let duration = stop - start
+                    let usec = duration * 1000L / Timing.ticksPerMs |> int
+                    if not completed || usec >= options.minDurationUsec then
+                        sb.Append(
+                            sprintf "[%s] %d: %dx %s to %d handlers in %dus%s"
+                                options.logLabel count batch.Count 
+                                (typeof<'a> |> typeToString)
+                                handlers.Count usec
+                                (if completed then "" else " failed")
+                            ) |> ignore
+                        // print messages
+                        if not typeInfo.isEmpty then
+                            formatMessagesTo sb options.formatter.Format batch options.messageSizeLimit
+                        sb.AppendLine() |> ignore
+                        options.sendLog (sb.ToString())
+                        sb.Clear() |> ignore
+                count <- count + 1
+    
+type Publisher() =
+    static let mutable instance = Publisher() :> IPublisher
+    static member Default = instance
+    static member Null = NullPublisher.Instance
+    static member Print options = PrintPublisher(options) :> IPublisher
+    interface IPublisher with
+        member c.PublishAll<'a>(batch : Buffer<'a>, handlers) =
+            Publisher.publishAll batch handlers
+
+module PrintPublisherOptions =
+    let enabled = {
+        enableLog = true
+        logLabel = ""
+        messageSizeLimit = 10
+        minDurationUsec = 0
+        sendLog = printfn "%s"
+        sendTiming = ignore
+        canSendLog = fun t -> not (t.Equals(typeof<Commit>))
+        canSendTiming = fun t -> not (t.Equals(typeof<Commit>))
+        basePublisher = Publisher.Default
+        formatter = Formatter()
+        }

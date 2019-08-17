@@ -176,9 +176,6 @@ type internal EidPools() =
         |> Seq.filter (fun str -> str.Length > 0)
         |> listToString (prefix + "  ") (prefix + "Pools")
 
-/// Event published when commit occurs    
-type Commit = struct end
-
 type Entity = Entity<int, Eid>
 
 /// Wrapper over resource lookup with default types for ECS
@@ -251,8 +248,10 @@ type Container() =
         scheduler.Step deltaTime
     member c.Start coroutine = 
         scheduler.Schedule coroutine
-    member c.SetPublisher dispatcher =
-        channels.SetPublisher dispatcher
+    member c.SetPublisher pub =
+        channels.SetPublisher pub
+    member c.SetPublisher pub =
+        c.SetPublisher (ValueSome pub)
     interface IRegistry with
         member c.Register f = c.Register f
         member c.RegisterInstance x = c.RegisterInstance x
@@ -271,7 +270,7 @@ type Container() =
     interface IOutbox with
         member c.BeginSend() =
             outbox.BeginSend()
-    member c.Receive (e : Mail<_>) =
+    member c.Receive (e : Envelope<_>) =
         // assign outbox for duration of call
         use s = outbox.Push e
         let channel = c.GetChannel<'a>()

@@ -6,7 +6,6 @@ open System.Collections.Generic
 open System.Text
 open Garnet
 open Garnet.Comparisons
-open Garnet.Metrics
 
 /// Provides debug formatting for specific types
 type IFormatter =
@@ -90,8 +89,6 @@ module internal Internal =
                     
     [<Struct>]
     type CachedTypeInfo = {
-        canPrint : bool
-        canSendTimings : bool
         isEmpty : bool
         typeName : string
         }
@@ -108,17 +105,11 @@ module internal Internal =
                     obj.ReferenceEquals(i.GetGenericTypeDefinition(), typeof<IEnumerator<_>>))
             isEnumerable || isGenericEnumerable)
 
-    let isLoggingType<'a> =
-        obj.ReferenceEquals(typeof<'a>, typeof<string>) ||
-        obj.ReferenceEquals(typeof<'a>, typeof<Timing>)
-
     type CachedTypeInfo<'a>() =        
         static member val Info = {
             // special cases
             // - strings already have logging
             // - don't want enumerators to execute
-            canPrint = not (isLoggingType<'a> || isEnumerable<'a>) 
-            canSendTimings = not (obj.ReferenceEquals(typeof<'a>, typeof<Timing>))
             typeName = "Handle " + typeToString typeof<'a>
             isEmpty = isEmptyType typeof<'a>
             }

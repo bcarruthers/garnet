@@ -72,16 +72,9 @@ type NullOutbox() =
     interface IOutbox with
         member c.BeginSend<'a>() =
             NullMessageWriter<'a>.Instance
-
-[<Struct>]
-type internal MessageContext = {
-    sourceId : ActorId
-    destinationId : ActorId
-    outbox : IOutbox
-    }
         
 [<Struct>]
-type Mail<'a> = {
+type Envelope<'a> = {
     outbox : IOutbox
     sourceId : ActorId
     destinationId : ActorId
@@ -89,35 +82,9 @@ type Mail<'a> = {
     } with
     override c.ToString() =
         sprintf "%d->%d: %A" c.sourceId.value c.destinationId.value c.message
-                
-type Mail<'a> with
-    member c.BeginSend() =
-        c.outbox.BeginSend()
-    member c.BeginSend(destId) =
-        c.outbox.BeginSend(destId)
-    member c.BeginRespond() =
-        c.BeginSend(c.sourceId)
-    member c.Send(destId, msg) =
-        use batch = c.BeginSend destId
-        batch.Write msg
-    member c.Respond(msg) =
-        c.Send(c.sourceId, msg)
-
-module private MessageContext = 
-    let empty = {
-        sourceId = ActorId.undefined
-        destinationId = ActorId.undefined
-        outbox = NullOutbox.Instance
-        }
-    
-    let fromMail (c : Mail<_>) = {
-        outbox = c.outbox
-        sourceId = c.sourceId
-        destinationId = c.destinationId
-        }
             
 type IInbox =
-    abstract member Receive<'a> : Mail<Buffer<'a>> -> unit
+    abstract member Receive<'a> : Envelope<Buffer<'a>> -> unit
 
 type Mailbox() =
     let dict = Dictionary<Type, obj>()
@@ -172,39 +139,10 @@ type Mailbox with
         c.BeginSend(c.SourceId)
     member c.Respond(msg) =
         c.Send(c.SourceId, msg)
-
-module Mail =
-    let private nullOutbox = NullOutbox()
-
-    let empty msg = {
-        outbox = nullOutbox
-        sourceId = ActorId.undefined
-        destinationId = ActorId.undefined
-        message = msg
-        }
-
-    let map f mail = {
-        outbox = mail.outbox
-        sourceId = mail.sourceId
-        destinationId = mail.destinationId
-        message = f mail.message
-        }
-
-    let withMessage newMsg mail = {
-        outbox = mail.outbox
-        sourceId = mail.sourceId
-        destinationId = mail.destinationId
-        message = newMsg
-        }
-    
+        
 type private NullInbox() =
     interface IInbox with
         member c.Receive e = ()
-    interface IDisposable with
-        member c.Dispose() = ()
-        
-module private NullInbox =
-    let handler = new NullInbox() :> IInbox
 
 type private InboxCollection(handlers : IInbox[]) =
     interface IInbox with
@@ -241,7 +179,7 @@ module Actor =
         dispose = dispose
         }
 
-    let none = init Execution.None NullInbox.handler ignore
+    let none = init Execution.None (NullInbox()) ignore
 
     let route routedId = { 
         none with 
@@ -347,6 +285,26 @@ module Disposable =
     let combine systems =
         fun c -> systems |> List.map (fun f -> f c) |> list
 
+[<Struct>]
+type internal MessageContext = {
+    sourceId : ActorId
+    destinationId : ActorId
+    outbox : IOutbox
+    }
+             
+module internal MessageContext = 
+    let empty = {
+        sourceId = ActorId.undefined
+        destinationId = ActorId.undefined
+        outbox = NullOutbox.Instance
+        }
+    
+    let fromEnvelope (c : Envelope<_>) = {
+        outbox = c.outbox
+        sourceId = c.sourceId
+        destinationId = c.destinationId
+        }
+
 /// Need sender member indirection because container registrations
 /// need permanent reference while incoming messages have varying sender
 type internal Outbox() =
@@ -362,7 +320,7 @@ type internal Outbox() =
     member c.Current = current
     /// Set temporary outbox for a scope such as handling incoming message
     member c.Push mail = 
-        let outbox = MessageContext.fromMail mail
+        let outbox = MessageContext.fromEnvelope mail
         outboxStack.Push current
         current <- outbox
         pushCount <- pushCount + 1
