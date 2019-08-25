@@ -130,6 +130,16 @@ type PrintHandler(mask) =
 
 [<AutoOpen>]
 module internal Internal =
+    type ISegments<'k 
+        when 'k :> IComparable<'k> 
+        and 'k :> IEquatable<'k> 
+        and 'k : equality> =
+        abstract member Clear : unit -> unit
+        abstract member TryFind : 'k * byref<int> -> bool
+        abstract member Remove : 'k * uint64 -> unit
+        abstract member Commit : unit -> unit
+        abstract member Handle : ISegmentHandler -> 'k -> uint64 ->unit
+
     let failComponentOperation op mask conflict (s : Segment<_, 'a>) =
         failwithf "Could not %s %s, sid: %A\n  Requested: %s\n  Existing:  %s\n  Error:     %s"
             op (typeof<'a> |> typeToString) s.id (maskToString 64 mask) 
@@ -236,6 +246,7 @@ module internal Internal =
 
     type PendingSegments<'k, 'a 
         when 'k :> IComparable<'k> 
+        and 'k :> IEquatable<'k>  
         and 'k : equality>(pool : Stack<_>) =
         let comparison = Comparison<PendingSegment<'k, 'a>>(fun a b -> 
             a.id.CompareTo(b.id))
@@ -301,7 +312,6 @@ module internal Internal =
             | true, i ->
                 let s = segments.[i]
                 let newMask = s.mask &&& ~~~mask
-                clearArrayMask mask s.data
                 segments.[i] <- { 
                 s with 
                     mask = newMask
@@ -320,6 +330,13 @@ module internal Internal =
                     }
                 count <- count + 1
                 idToIndex.Add(id, i)
+        member c.ApplyRemovalsTo(target : ISegments<_>) =
+            // copy in case this is called on self
+            let count = count
+            for i = 0 to count - 1 do
+                let delta = segments.[i]
+                if delta.removalMask <> 0UL then
+                    target.Remove(delta.id, delta.removalMask)           
         member c.FlushTo(target : ImmediateSegments<'k, 'a>) =
             // first copy into existing, removing deltas
             let mutable di = 0
@@ -340,6 +357,7 @@ module internal Internal =
                         copyArrayMask delta.mask delta.data data
                         clearArrayMask delta.mask delta.data
                     // remove from deltas
+                    Array.Clear(delta.data, 0, delta.data.Length)
                     pool.Push(delta.data)
                     count <- count - 1
                     segments.[di] <- segments.[count]
@@ -370,16 +388,6 @@ module internal Internal =
                 (formatBitSegments ("  R") (removals :> seq<_>))
         override c.ToString() =
             c.ToString(formatSegments, formatBitSegments)
-
-    type ISegments<'k 
-        when 'k :> IComparable<'k> 
-        and 'k :> IEquatable<'k> 
-        and 'k : equality> =
-        abstract member Clear : unit -> unit
-        abstract member TryFind : 'k * byref<int> -> bool
-        abstract member Remove : 'k * uint64 -> unit
-        abstract member Commit : unit -> unit
-        abstract member Handle : ISegmentHandler -> 'k -> uint64 ->unit
 
 /// Sparse list of segments
 type Segments<'k, 'a 
@@ -417,6 +425,9 @@ type Segments<'k, 'a
     /// Commits any pending changes and removes empty segments
     member c.Commit() = 
         pending.FlushTo(current)
+    member internal c.ApplyRemovalsTo segments =
+        if not (obj.ReferenceEquals(c, segments)) then
+            pending.ApplyRemovalsTo segments
     interface ISegments<'k> with
         member c.Clear() =
             c.Clear()
@@ -503,6 +514,9 @@ type SegmentStore<'k
     member c.Commit() =
         for segs in lookup.Values do
             segs.Commit()
+    member internal c.ApplyRemovalsFrom (segments : Segments<_,_>) =
+        for segs in lookup.Values do
+            segments.ApplyRemovalsTo segs
     interface ISegmentStore<'k> with
         member c.GetSegments<'a>() = 
             c.GetSegments<'a>()

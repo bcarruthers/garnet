@@ -166,6 +166,10 @@ type internal EidPools() =
     member c.Clear() =
         for pool in pools do
             pool.Clear()
+    interface IRecycler<Eid> with
+        member c.Recycle eid =
+            let partition = Eid.getPartition eid
+            pools.[partition].Recycle(eid)
     override c.ToString() =
         let prefix = ""
         pools
@@ -188,9 +192,6 @@ type Container() =
     let components = ComponentStore(segments, Eid.eidToComponentKey)
     let eidPools = reg.GetInstance<EidPools>()
     let eids = components.Get<Eid>()
-    let recycle eid =
-        let partition = Eid.getPartition eid
-        eidPools.[partition].Recycle(eid)
     member c.SourceId = outbox.Current.sourceId
     member c.Get<'a>() = components.Get<'a>()
     member c.GetSegments<'a>() = segments.GetSegments<'a>()
@@ -205,11 +206,16 @@ type Container() =
         eidPools.Clear()
         scheduler.Clear()
     member c.Commit() =
-        // order doesn't matter since we're just moving data
-        // into committed state and not calling any handlers
+        // Order of commits doesn't matter since we're just moving data
+        // into committed state and not calling any handlers.
         channels.Commit()
+        // Copy removals from eids to other component types before
+        // committing component changes.
+        segments.ApplyRemovalsFrom eids.Segments        
         components.Commit()
+        // Make any recycled eids available.
         eidPools.Commit()
+        // Publish event to allow for custom commit implementations.
         channels.Publish <| Commit()
     /// Returns true if events were handled
     member private c.DispatchOnce() = 
@@ -229,7 +235,7 @@ type Container() =
     member c.Get(eid) = { 
         id = eid
         container = components 
-        recycle = recycle
+        recycler = eidPools
         }
     member internal c.CreateEid(partition) =
         let eid = eidPools.[partition].Next()
@@ -238,8 +244,10 @@ type Container() =
     member c.Handle(id, handler) =
         components.Handle(id, handler)
     member c.Destroy(id : Eid) =
-        components.Destroy(id)
-        recycle id
+        // Only removing from eids and relying on commit to remove
+        // other components.
+        eids.Remove id
+        eidPools.Recycle id
     /// Assumes eid components have been populated and restores 
     /// eid pools from that state
     member c.RestoreEids() =

@@ -105,6 +105,15 @@ type ComponentStore<'k, 'c
     override c.ToString() =
         segs.ToString()
         
+type IRecycler<'c> =
+    abstract member Recycle : 'c -> unit
+
+type NullRecycler<'c>() =
+    static let instance = NullRecycler<'c>() :> IRecycler<'c>
+    static member Instance = instance
+    interface IRecycler<'c> with
+        member c.Recycle x = ()
+
 [<Struct>]
 type Entity<'k, 'c
     when 'k :> IComparable<'k> 
@@ -113,7 +122,7 @@ type Entity<'k, 'c
     and 'c :> IComparable<'c>> = {
     id : 'c
     container : ComponentStore<'k, 'c>
-    recycle : 'c -> unit
+    recycler : IRecycler<'c>
     } with
     member c.Add x = c.container.Get<_>().Add(c.id, x)
     member c.Set x = c.container.Get<_>().Set(c.id, x)
@@ -123,6 +132,7 @@ type Entity<'k, 'c
     member c.Contains<'a>() = c.container.Get<'a>().Contains(c.id)
     member c.Destroy() = c.container.Destroy(c.id)
     member c.With x = c.Add x; c
+    member c.Without<'a>() = c.Remove<'a>(); c
     override c.ToString() = 
         let printer = PrintHandler(UInt64.MaxValue)
         c.container.Handle(c.id, printer)
@@ -136,5 +146,5 @@ type ComponentStore<'k, 'c
     member c.Get(id) = {
         id = id
         container = c 
-        recycle = ignore
+        recycler = NullRecycler<'c>.Instance
         }

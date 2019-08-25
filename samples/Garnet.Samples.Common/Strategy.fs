@@ -94,7 +94,7 @@ type WorldGrid() =
     member c.Get p = { 
         id = p
         container = store 
-        recycle = ignore
+        recycler = NullRecycler.Instance
         }
     member c.Commit() =
         store.Commit()
