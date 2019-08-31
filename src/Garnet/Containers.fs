@@ -3,6 +3,7 @@
 open System
 open System.Collections.Generic
 open System.Runtime.InteropServices
+open Garnet
 open Garnet.Comparisons
 open Garnet.Formatting
 
@@ -83,6 +84,12 @@ module Eid =
     let inline eidToComponentKey (id : Eid) =
         struct(getSegmentIndex id, getComponentIndex id)
 
+    let segmentToPartitionBits = indexBits - Segment.segmentBits
+    let segmentInPartitionMask = (1 <<< segmentToPartitionBits) - 1
+
+    let inline segmentToPartition sid =
+        sid >>> segmentToPartitionBits
+
 type Eid with
     member i.Index = Eid.getIndex i
     member i.Slot = Eid.getSlot i
@@ -91,96 +98,149 @@ type Eid with
     member i.IsDefined = i.value <> 0
     member i.IsUndefined = i.value = 0
 
-/// Stores available IDs with a given partition. IDs start at 1
+type Entity = Entity<int, Eid>
+
 type internal EidPool(partition) =
-    let mask = partition <<< Eid.indexBits
-    let pendingIds = List<Eid>()
-    let availableIds = Queue<int>()
-    let mutable count = 0
-    let getNewEid baseId =
-        baseId ||| mask |> Eid
-    member c.Count = count
-    member c.Pooled = availableIds.Count
-    member c.Pending = pendingIds.Count
-    member c.Total = availableIds.Count + pendingIds.Count
-    member c.Next() =
-        let baseId =
-            // start at segment 1 to avoid partial starting segment since
-            // Eid 0 is reserved for null
-            let minId = Segment.segmentSize
-            // impose threshold to maximize cycles between duplicate IDs
-            // but shouldn't be too high so we don't allocate excess
-            let reserveCount = 0//segmentSize
-            if availableIds.Count > reserveCount then availableIds.Dequeue()
-            elif count = Eid.indexCount - minId then failwith "Max IDs reached"
-            else
-                let id = count
-                count <- count + 1
-                id + minId
-        getNewEid baseId
-    member c.Reset newCount =
-        count <- newCount
-    member c.Recycle(eid) =
-        pendingIds.Add(eid)
-    member c.Restore eids =
-        c.Clear()
-        let mutable maxId = 0
-        let baseIdSet = HashSet<int>()
-        // assume eids could be in any order and from other partitions
-        // bump count to one more than max ID present of partition
-        for eid in eids do
-            if Eid.getPartition eid = partition then
-                let baseId = Eid.getIndex eid
-                if baseId > maxId then
-                    maxId <- baseId
-                baseIdSet.Add baseId |> ignore
-        count <- maxId
-        // fill in available with any gaps up to max ID
-        for baseId = 1 to count - 1 do
-            if not (baseIdSet.Contains baseId) then
-                availableIds.Enqueue (getNewEid baseId).value
+    let mutable known = Array.zeroCreate 1
+    let mutable used = Array.zeroCreate 1
+    let mutable eids = Array.zeroCreate 64
+    let mutable current = Segment.segmentBits - 1
+    let mutable mask = 0UL
+    member c.Used = Bits.bitCount64Array used
+    member c.Allocated = Bits.bitCount64Array known
+    member c.Total = c.Used + c.Allocated
+    member c.SegmentCount = known.Length
+    member private c.EnsureSize si =
+        let required = si + 1
+        if used.Length < required then
+            Buffer.resizeArray required &known
+            Buffer.resizeArray required &used
+            Buffer.resizeArray (required * 64) &eids
     member c.Clear() =
-        pendingIds.Clear()
-        availableIds.Clear()
-        count <- 0
-    member c.Commit() =
-        for eid in pendingIds do
-            let nextGen = Eid.incrementGen eid
-            availableIds.Enqueue(nextGen.value)
-        pendingIds.Clear()           
+        Array.Clear(known, 0, known.Length)
+        Array.Clear(used, 0, used.Length)
+        Array.Clear(eids, 0, eids.Length)
+        c.Reset()
+    member c.Reset() =
+        current <- Segment.segmentBits - 1
+        mask <- 0UL
+    member c.Next() =
+        if mask = 0UL then
+            // Seek until unused segment found. Note we always increment,
+            // ensuring we start at segment 1 to avoid eid zero.
+            let mutable si = (current >>> 6) + 1
+            c.EnsureSize si
+            while used.[si] = UInt64.MaxValue do
+                si <- si + 1
+                current <- si * 64
+                c.EnsureSize si
+            // allocate new eids as needed
+            let knownMask = known.[si]
+            if knownMask <> UInt64.MaxValue then
+                let offset = si * 64
+                let mutable m = ~~~knownMask
+                let mutable i = offset
+                while m <> 0UL do
+                    if m &&& 1UL <> 0UL then 
+                        eids.[i] <- Eid.fromParts 0 partition i
+                    m <- m >>> 1
+                    i <- i + 1
+                known.[si] <- UInt64.MaxValue
+            mask <- ~~~used.[si]
+            current <- (si <<< 6) - 1
+        // increment first with assumption that we start at -1
+        current <- current + 1
+        // advance to next unused slot with segment
+        while mask &&& 1UL = 0UL do
+            mask <- mask >>> 1
+            current <- current + 1
+        // claim eid and advance to next
+        let eid = eids.[current]        
+        mask <- mask >>> 1
+        eid
+    member internal c.Apply(seg : PendingSegment<int, Eid>) =
+        let sid = seg.id &&& Eid.segmentInPartitionMask
+        c.EnsureSize sid
+        let offset = sid * 64
+        if seg.mask &&& seg.removalMask <> 0UL then
+            failwithf "Segment contains overlapping add/remove"
+        // When eid added and not previously known, write to pool with 
+        // incremented gen.
+        if seg.mask <> 0UL then
+            let addMask = seg.mask &&& ~~~known.[sid]
+            let mutable m = addMask
+            let mutable i = 0
+            while m <> 0UL do
+                if m &&& 1UL <> 0UL then 
+                    eids.[offset + i] <- Eid.incrementGen seg.data.[i]
+                m <- m >>> 1
+                i <- i + 1
+            known.[sid] <- known.[sid] ||| addMask
+            used.[sid] <- used.[sid] ||| seg.mask
+        // When eid removed, mark as unused and increment.
+        if seg.removalMask <> 0UL then
+            // Note we're not checking if used or not -- if not marked as used, 
+            // eid was created/destroyed before commit, but we still need to 
+            // return it to increment gen.
+            let removalMask = seg.removalMask
+            // Since removal seg doesn't have populated eids, we must take them
+            // from stored value in pool, which means they must be known. In the
+            // case of restore, expect that add would always be called first to
+            // populate eids.
+            if removalMask &&& known.[sid] <> removalMask then
+                failwithf "Cannot return unknown IDs to pool"
+            let mutable m = removalMask
+            let mutable i = offset
+            while m <> 0UL do
+                if m &&& 1UL <> 0UL then 
+                    eids.[i] <- Eid.incrementGen eids.[i]
+                m <- m >>> 1
+                i <- i + 1
+            used.[sid] <- used.[sid] &&& ~~~removalMask
+        c.Reset()
     override p.ToString() =
-        sprintf "%dC %dT %dP %dR" p.Count p.Total p.Pooled p.Pending
+        let formatBits known used =
+            Array.init 64 (fun i ->
+                let k = (known >>> i) &&& 1UL
+                let u = (used >>> i) &&& 1UL
+                match k, u with
+                | 0UL, 0UL -> ' '
+                | 0UL, 1UL -> 'u'
+                | 1UL, 0UL -> '.'
+                | 1UL, 1UL | _ -> 'x')
+                |> String
+        sprintf "%d alloc, %d used, %d total, %d segs%s" 
+            p.Allocated p.Used p.Total used.Length
+            (seq {
+                for i = 0 to used.Length - 1 do
+                    let k = known.[i] 
+                    let u = used.[i]
+                    if k ||| u <> 0UL then
+                        yield sprintf "%d %s" i (formatBits k u)
+                } |> formatSegments ("    "))
 
 type internal EidPools() =
     let pools = Array.init Eid.partitionCount EidPool
     member c.Count = pools.Length
-    member c.Item with get i = pools.[i]
-    member c.Next() = c.[0].Next()
-    member c.Recycle(id) = c.[Eid.getPartition id].Recycle(id)        
-    member c.Restore eids =
-        for pool in pools do
-            pool.Restore eids
-    member c.Commit() =
-        for pool in pools do
-            pool.Commit()
+    member c.Next p = 
+        pools.[p].Next()
+    member c.Apply(active : Segments<int, Eid>) =
+        for i = 0 to active.PendingCount - 1 do
+            let seg = active.GetPending i
+            let p = Eid.segmentToPartition seg.id
+            pools.[p].Apply seg        
     member c.Clear() =
         for pool in pools do
             pool.Clear()
-    interface IRecycler<Eid> with
-        member c.Recycle eid =
-            let partition = Eid.getPartition eid
-            pools.[partition].Recycle(eid)
     override c.ToString() =
         let prefix = ""
         pools
         |> Seq.mapi (fun i p -> 
-            if p.Count > 0 
+            if p.Total > 0 
             then sprintf "%d: %s" i (p.ToString()) 
             else "")
         |> Seq.filter (fun str -> str.Length > 0)
         |> listToString (prefix + "  ") (prefix + "Pools")
-
-type Entity = Entity<int, Eid>
 
 /// Wrapper over resource lookup with default types for ECS
 type Container() =
@@ -189,9 +249,9 @@ type Container() =
     let scheduler = reg.GetInstance<CoroutineScheduler>()
     let segments = reg.GetInstance<SegmentStore<int>>()
     let outbox = reg.GetInstance<Outbox>()
-    let components = ComponentStore(segments, Eid.eidToComponentKey)
     let eidPools = reg.GetInstance<EidPools>()
-    let eids = components.Get<Eid>()
+    let components = ComponentStore(segments, Eid.eidToComponentKey)
+    let eids = segments.GetSegments<Eid>()
     member c.SourceId = outbox.Current.sourceId
     member c.Get<'a>() = components.Get<'a>()
     member c.GetSegments<'a>() = segments.GetSegments<'a>()
@@ -209,12 +269,12 @@ type Container() =
         // Order of commits doesn't matter since we're just moving data
         // into committed state and not calling any handlers.
         channels.Commit()
-        // Copy removals from eids to other component types before
-        // committing component changes.
-        segments.ApplyRemovalsFrom eids.Segments        
+        // Copy removals from eids to other component types first,
+        // then apply eid changes to partition cache, then after all
+        // this commit all resulting component changes.
+        segments.ApplyRemovalsFrom(eids)   
+        eidPools.Apply(eids)
         components.Commit()
-        // Make any recycled eids available.
-        eidPools.Commit()
         // Publish event to allow for custom commit implementations.
         channels.Publish <| Commit()
     /// Returns true if events were handled
@@ -231,27 +291,26 @@ type Container() =
         while c.RunOnce() do
             c.DispatchAll()
     member c.Contains(eid : Eid) =
-        eids.Contains(eid)
+        let struct(sid, ci) = Eid.eidToComponentKey eid
+        let mask = eids.GetMask sid
+        (mask &&& (1UL <<< ci)) <> 0UL
     member c.Get(eid) = { 
         id = eid
         container = components 
-        recycler = eidPools
         }
     member internal c.CreateEid(partition) =
-        let eid = eidPools.[partition].Next()
-        eids.Add(eid, eid)
+        let eid = eidPools.Next(partition)
+        let struct(sid, ci) = Eid.eidToComponentKey eid
+        let data = eids.Add(sid, 1UL <<< ci)
+        data.[ci] <- eid
         eid
     member c.Handle(id, handler) =
         components.Handle(id, handler)
-    member c.Destroy(id : Eid) =
+    member c.Destroy(eid : Eid) =
         // Only removing from eids and relying on commit to remove
         // other components.
-        eids.Remove id
-        eidPools.Recycle id
-    /// Assumes eid components have been populated and restores 
-    /// eid pools from that state
-    member c.RestoreEids() =
-        eidPools.Restore eids.Components
+        let struct(sid, ci) = Eid.eidToComponentKey eid
+        eids.Remove(sid, 1UL <<< ci)
     member c.Step deltaTime =
         scheduler.Step deltaTime
     member c.Start coroutine = 
@@ -298,15 +357,7 @@ type Container with
     member c.Create() = c.Create(0)
 
     member c.DestroyAll() =
-        let segs = c.GetSegments<Eid>()
-        for si = 0 to segs.Count - 1 do
-            let seg = segs.[si]
-            let mutable m = seg.mask
-            let mutable i = 0
-            while m <> 0UL do
-                if m &&& 1UL <> 0UL then c.Destroy seg.data.[i]
-                m <- m >>> 1
-                i <- i + 1
+        c.GetSegments<Eid>().RemoveAll()
 
     member c.Run(msg) = 
         c.Send(msg)

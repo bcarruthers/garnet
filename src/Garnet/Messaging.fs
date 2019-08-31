@@ -88,7 +88,7 @@ type IInbox =
 
 type Mailbox() =
     let dict = Dictionary<Type, obj>()
-    let mutable outbox = NullOutbox.Instance
+    let mutable outbox = NullOutbox() :> IOutbox
     let mutable sourceId = ActorId.undefined
     let mutable destId = ActorId.undefined
     member c.SourceId = sourceId

@@ -90,10 +90,11 @@ type ComponentStore<'k, 'c
         let struct(sid, ci) = idToKey id
         let mask = 1UL <<< ci
         segs.Handle(sid, mask, handler)
-    /// Removes all components associated with a given ID
+    /// Removes ID component and assumes other components
+    /// will be cleaned up in commit
     member c.Destroy(id) =
         let struct(sid, ci) = idToKey id
-        segs.Remove(sid, 1UL <<< ci)
+        segs.GetSegments<'c>().Remove(sid, 1UL <<< ci)
     member c.Commit() =
         segs.Commit()
     interface IComponentStore<'k, 'c> with
@@ -104,15 +105,6 @@ type ComponentStore<'k, 'c
             segs.GetSegments<'a>()
     override c.ToString() =
         segs.ToString()
-        
-type IRecycler<'c> =
-    abstract member Recycle : 'c -> unit
-
-type NullRecycler<'c>() =
-    static let instance = NullRecycler<'c>() :> IRecycler<'c>
-    static member Instance = instance
-    interface IRecycler<'c> with
-        member c.Recycle x = ()
 
 [<Struct>]
 type Entity<'k, 'c
@@ -122,7 +114,6 @@ type Entity<'k, 'c
     and 'c :> IComparable<'c>> = {
     id : 'c
     container : ComponentStore<'k, 'c>
-    recycler : IRecycler<'c>
     } with
     member c.Add x = c.container.Get<_>().Add(c.id, x)
     member c.Set x = c.container.Get<_>().Set(c.id, x)
@@ -146,5 +137,4 @@ type ComponentStore<'k, 'c
     member c.Get(id) = {
         id = id
         container = c 
-        recycler = NullRecycler<'c>.Instance
         }

@@ -17,6 +17,12 @@ module internal Bits =
     let inline bitCount64 (x : uint64) =
         bitCount (int (x >>> 32)) + bitCount (int (x &&& 0xffffffffUL))
 
+    let bitCount64Array (arr : uint64[]) =
+        let mutable total = 0
+        for x in arr do
+            total <- total + bitCount64 x
+        total
+
     let inline getNextPow2 x =
         let mutable y = x - 1
         y <- y ||| (y >>> 1)
@@ -99,7 +105,7 @@ type internal BitSegment<'k when 'k :> IComparable<'k>> = {
 
 module internal BitSegment =
     let init id mask = { id = id; mask = mask }
-
+    
 /// Provides a method for accepting a generically-typed segment
 type ISegmentHandler =
     abstract member Handle<'k, 'a when 'k :> IComparable<'k>> : Segment<'k, 'a> -> unit
@@ -397,6 +403,8 @@ type Segments<'k, 'a
     let pool = Stack<_>()
     let pending = PendingSegments<'k, 'a>(pool)
     let current = ImmediateSegments<'k, 'a>(pool)
+    member internal c.PendingCount = pending.Count
+    member internal c.GetPending i = pending.[i]
     /// Returns a sequence of the components present
     member internal c.Components = current.Components
     /// Number of current segments
@@ -514,7 +522,7 @@ type SegmentStore<'k
     member c.Commit() =
         for segs in lookup.Values do
             segs.Commit()
-    member internal c.ApplyRemovalsFrom (segments : Segments<_,_>) =
+    member c.ApplyRemovalsFrom (segments : Segments<_,_>) =
         for segs in lookup.Values do
             segments.ApplyRemovalsTo segs
     interface ISegmentStore<'k> with
