@@ -4,7 +4,7 @@ open System
 open System.IO
 open System.Collections.Generic
 open Garnet
-open Garnet.Comparisons
+//open Garnet.Comparisons
 open Garnet.Formatting
 open Garnet.Composition
 

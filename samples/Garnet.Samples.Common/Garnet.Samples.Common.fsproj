@@ -20,7 +20,6 @@
     <Compile Include="Numerics.fs" />
     <Compile Include="FrameworkTypes.fs" />
     <Compile Include="Flocking.fs" />
-    <Compile Include="Strategy.fs" />
   </ItemGroup>
 
   <ItemGroup>

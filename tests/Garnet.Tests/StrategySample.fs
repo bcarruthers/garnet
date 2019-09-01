@@ -1,4 +1,4 @@
-﻿module Garnet.Samples.Strategy
+﻿module Garnet.Tests.StrategySample
 
 // This sample demonstrates using component storage for grid cells
 // for use in a strategy game.

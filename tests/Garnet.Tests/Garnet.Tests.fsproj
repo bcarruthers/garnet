@@ -9,6 +9,8 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Assertions.fs" />
+    <Compile Include="Serialization.fs" />
+    <Compile Include="Recording.fs" />
     <Compile Include="RegistryTests.fs" />
     <Compile Include="CoroutineTests.fs" />
     <Compile Include="SegmentTests.fs" />
@@ -19,10 +21,10 @@
     <Compile Include="CollectionTests.fs" />
     <Compile Include="ActorTests.fs" />
     <Compile Include="SerializationTests.fs" />
-    <Compile Include="Examples.fs" />
+    <Compile Include="StrategySample.fs" />
+    <Compile Include="ReadmeSamples.fs" />
     <Compile Include="Main.fs" />
     <None Include="Scratch.fsx" />
-    <None Include="ActorProto.fsx" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Expecto" Version="8.*" />
