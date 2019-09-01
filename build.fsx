@@ -38,6 +38,7 @@ Target.create "AssemblyInfo" (fun _ ->
     [
         "src/Garnet", "Garnet"
         "tests/Garnet.Tests", "Garnet.Tests"
+        "benchmarks/Garnet.Benchmarks", "Garnet.Benchmarks"
         "samples/Garnet.Samples.Common", "Garnet.Samples.Common"
         "samples/Garnet.Samples.MonoGame", "Garnet.Samples.MonoGame"
     ]
@@ -70,17 +71,30 @@ let build outputDir =
 // use default output folder because pack expects DLL there
 Target.create "BuildLibrary" (fun _ ->
     !! "src/**/*.fsproj"
-    |> Seq.iter (DotNet.build id)
+    //|> Seq.iter (DotNet.build id)
+    |> MSBuild.runWithDefaults "Build"
+    |> Trace.logItems "LibraryBuild-Output: "
 )
 
 Target.create "BuildTests" (fun _ ->
     !! "tests/**/*.fsproj"
-    |> Seq.iter (build testsDir)
+    //|> Seq.iter (build testsDir)
+    |> MSBuild.runRelease id testsDir "Build"
+    |> Trace.logItems "TestBuild-Output: "
 )
 
 Target.create "BuildSamples" (fun _ ->
     !! "samples/**/*.fsproj"
-    |> Seq.iter (build samplesDir)
+    //|> Seq.iter (build samplesDir)    
+    |> MSBuild.runRelease id samplesDir "Build"
+    |> Trace.logItems "SampleBuild-Output: "
+)
+
+Target.create "BuildBenchmarks" (fun _ ->
+    !! "benchmarks/**/*.fsproj"
+    //|> Seq.iter (build samplesDir)    
+    |> MSBuild.runRelease id samplesDir "Build"
+    |> Trace.logItems "BenchmarkBuild-Output: "
 )
 
 Target.create "Tests" (fun _ ->
@@ -127,6 +141,7 @@ Target.create "Default" (fun _ ->
     ==> "BuildLibrary"
     ==> "BuildTests"
     ==> "BuildSamples"
+    ==> "BuildBenchmarks"
     ==> "Tests"
     ==> "Pack"
     ==> "Default"

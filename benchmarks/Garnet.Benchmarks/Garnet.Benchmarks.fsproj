@@ -2,11 +2,13 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.1</TargetFramework>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Garnet\Garnet.fsproj" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AssemblyInfo.fs" />
     <Compile Include="ContainerBenchmarks.fs" />
     <Compile Include="ChannelBenchmarks.fs" />
     <Compile Include="ActorBenchmarks.fs" />
