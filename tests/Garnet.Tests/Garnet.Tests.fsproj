@@ -9,16 +9,16 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Assertions.fs" />
-    <Compile Include="Registry.fs" />
-    <Compile Include="Coroutines.fs" />
-    <Compile Include="Segments.fs" />
-    <Compile Include="Components.fs" />
-    <Compile Include="Channels.fs" />
-    <Compile Include="Iteration.fs" />
-    <Compile Include="Entities.fs" />
-    <Compile Include="Collections.fs" />
-    <Compile Include="Actors.fs" />
-    <Compile Include="Serialization.fs" />
+    <Compile Include="RegistryTests.fs" />
+    <Compile Include="CoroutineTests.fs" />
+    <Compile Include="SegmentTests.fs" />
+    <Compile Include="ComponentTests.fs" />
+    <Compile Include="ChannelTests.fs" />
+    <Compile Include="IterationTests.fs" />
+    <Compile Include="EntityTests.fs" />
+    <Compile Include="CollectionTests.fs" />
+    <Compile Include="ActorTests.fs" />
+    <Compile Include="SerializationTests.fs" />
     <Compile Include="Examples.fs" />
     <Compile Include="Main.fs" />
     <None Include="Scratch.fsx" />

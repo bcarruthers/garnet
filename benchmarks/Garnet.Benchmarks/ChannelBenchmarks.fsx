@@ -1,6 +1,6 @@
 ﻿#r "netstandard"
 #r "bin/Release/netcoreapp2.1/Garnet.dll"
-#load "Channels.fs"
+#load "ChannelBenchmarks.fs"
 
 open Garnet.Benchmarks.Channels
 

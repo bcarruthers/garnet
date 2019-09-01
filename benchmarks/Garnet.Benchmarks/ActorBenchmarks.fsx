@@ -1,9 +1,11 @@
 ﻿#r "netstandard"
 #r "bin/Release/netcoreapp2.1/Garnet.dll"
-#load "PingPong.fs"
+#r "../../packages/BenchmarkDotNet/lib/netstandard2.0/BenchmarkDotNet.dll"
+#r "../../packages/BenchmarkDotNet.Annotations/lib/netstandard2.0/BenchmarkDotNet.Annotations.dll"
+#load "ActorBenchmarks.fs"
 
-open Garnet.Benchmarks.PingPong
-open Garnet.Benchmarks.PingPong.Tests
+open Garnet.Benchmarks.Actors.PingPong
+open Garnet.Benchmarks.Actors.PingPong.Tests
 
 #time
 
