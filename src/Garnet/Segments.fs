@@ -155,8 +155,8 @@ module internal Internal =
     type PendingSegment<'k, 'a when 'k :> IComparable<'k>> = {
         data : 'a[]
         id : 'k
-        mask : uint64
-        removalMask : uint64
+        mutable mask : uint64
+        mutable removalMask : uint64
         }
 
     /// Ordered list of segments and lookup    
@@ -291,12 +291,9 @@ module internal Internal =
         member c.Add(id, mask) =
             match idToIndex.TryGetValue(id) with
             | true, i ->
-                let s = segments.[i]
-                segments.[i] <- { 
-                    s with 
-                        mask = s.mask ||| mask
-                        removalMask = s.removalMask &&& ~~~mask 
-                        }
+                let s = &segments.[i]
+                s.mask <- s.mask ||| mask
+                s.removalMask <- s.removalMask &&& ~~~mask
                 s.data        
             | false, _ ->
                 let i = count
@@ -316,13 +313,9 @@ module internal Internal =
         member c.Remove(id, mask) =
             match idToIndex.TryGetValue(id) with
             | true, i ->
-                let s = segments.[i]
-                let newMask = s.mask &&& ~~~mask
-                segments.[i] <- { 
-                s with 
-                    mask = newMask
-                    removalMask = s.removalMask ||| mask 
-                    }
+                let s = &segments.[i]
+                s.mask <- s.mask &&& ~~~mask
+                s.removalMask <- s.removalMask ||| mask 
             | false, _ ->
                 let i = count
                 if count = segments.Length then
