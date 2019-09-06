@@ -2,6 +2,8 @@
 
 [![Build status](https://ci.appveyor.com/api/projects/status/g82kak7btxp48rnd?svg=true)](https://ci.appveyor.com/project/bcarruthers/garnet)
 
+[NuGet package](https://www.nuget.org/packages/Garnet/)
+
 Garnet is a lightweight game composition library for F# with entity-component-system (ECS) and actor-like messaging features.
 
 ```fsharp
@@ -40,10 +42,12 @@ for i = 1 to 10 do
 ```
 
 ## Table of contents
-* [Background](#background)
-* [Goals](#goals)
-* [Building](#building)
-* [Samples](#samples)
+* Introduction
+    * [Getting started](#gettingstarted)
+    * [Background](#background)
+    * [Goals](#goals)
+    * [Building](#building)
+    * [Samples](#samples)
 * Guide
     * [Containers](#containers)
     * [Entities](#entities)
@@ -55,6 +59,17 @@ for i = 1 to 10 do
 * [FAQ](#faq)
 * [License](#license)
 * [Maintainers](#maintainers)
+
+## Getting started
+
+1. Create either a .NET Framework or .NET Core application.
+2. Reference the [Garnet NuGet package](https://www.nuget.org/packages/Garnet/). 
+3. See code samples for library usage.
+
+Note that for .NET Core, if you encounter warnings about FSharp.Core package downgrade, you may need to add an explicit reference in your .fsproj file to the newer FSharp.Core version: 
+
+    <PackageReference Include="FSharp.Core" Version="4.6.2" />
+
 
 ## Background
 
