@@ -1,12 +1,21 @@
 version 5.215.0
 
-source https://nuget.org/api/v2
+group Test
+    source https://api.nuget.org/v3/index.json
+    nuget Expecto
+    nuget BenchmarkDotNet
 
-nuget Expecto
-nuget BenchmarkDotNet
-nuget MonoGame.Framework.DesktopGL.Core
+group Sample
+    source https://api.nuget.org/v3/index.json
+    nuget MonoGame.Framework.DesktopGL.Core
+    nuget SixLabors.ImageSharp 1.0.0-beta0005
+    nuget ImGui.NET 1.69.0
+    nuget Veldrid
+    nuget Veldrid.ImGui
+    nuget Veldrid.SPIRV
+    nuget Veldrid.StartupUtilities
+    nuget Veldrid.ImageSharp
 
-// [ FAKE GROUP ]
 group Build
     storage none
     source https://api.nuget.org/v3/index.json

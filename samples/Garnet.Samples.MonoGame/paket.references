@@ -1,1 +1,2 @@
-﻿MonoGame.Framework.DesktopGL.Core
+﻿group Sample
+    MonoGame.Framework.DesktopGL.Core

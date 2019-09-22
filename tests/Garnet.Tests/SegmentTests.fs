@@ -43,4 +43,12 @@ let tests =
             s.Commit()
             let data = s.Add(2, 0UL)
             data.[0] |> shouldEqual 0
+
+        testCase "copy masked data" <| fun () ->
+            let a = Array.init 64 id
+            let b = Array.zeroCreate<int> 64
+            Utility.copyArrayMask 0x00ff00ff00ffUL a b
+            b.[1] |> shouldEqual 1
+            b.[8] |> shouldEqual 0
+            b.[16] |> shouldEqual 16
     ]

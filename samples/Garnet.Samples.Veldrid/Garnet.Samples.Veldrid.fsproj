@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="Assets\texture-color-transformed.vert">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\texture-color.frag">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Compile Include="Canvas.fs" />
+    <Compile Include="Shaders.fs" />
+    <Compile Include="Meshes.fs" />
+    <Compile Include="Textures.fs" />
+    <Compile Include="Conversion.fs" />
+    <Compile Include="Renderer.fs" />
+    <Compile Include="Loaders.fs" />
+    <Compile Include="Vertices.fs" />
+    <Compile Include="Systems.fs" />
+    <Compile Include="Startup.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Garnet\Garnet.fsproj" />
+    <ProjectReference Include="..\Garnet.Samples.Common\Garnet.Samples.Common.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" Version="4.*" />
+  </ItemGroup>
+  <ItemGroup />
+  <Import Project="..\..\.paket\Paket.Restore.targets" />
+</Project>
