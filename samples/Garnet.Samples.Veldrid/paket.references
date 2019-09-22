@@ -1,6 +1,5 @@
-﻿group Sample
-    Veldrid
-    Veldrid.ImGui
-    Veldrid.SPIRV
-    Veldrid.StartupUtilities
-    Veldrid.ImageSharp
+﻿Veldrid
+Veldrid.ImGui
+Veldrid.SPIRV
+Veldrid.StartupUtilities
+Veldrid.ImageSharp

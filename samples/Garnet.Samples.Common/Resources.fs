@@ -179,7 +179,7 @@ type ResourceSet() =
     member private c.Open key =
         let mutable result = ValueNone
         let mutable i = 0
-        while result.IsNone && i < sources.Count do
+        while result = ValueNone && i < sources.Count do
             result <- sources.[i].Open key
             i <- i + 1
         match result with
