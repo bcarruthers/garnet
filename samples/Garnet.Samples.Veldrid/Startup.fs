@@ -1,12 +1,11 @@
 ﻿namespace Garnet.Samples.Veldrid
 
 open System
-open System.Numerics
 open Veldrid
 open Veldrid.Sdl2
 open Veldrid.StartupUtilities
 open Garnet.Composition
-open Garnet.Samples.Resources
+open Garnet.Resources
 open Garnet.Samples.FrameworkTypes
 
 type WindowController(device, window : Sdl2Window, root : IRenderer) =

@@ -20,7 +20,6 @@
     <Compile Include="Performance.fs" />
     <Compile Include="Numerics.fs" />
     <Compile Include="FrameworkTypes.fs" />
-    <Compile Include="Resources.fs" />
     <Compile Include="Flocking.fs" />
   </ItemGroup>
 

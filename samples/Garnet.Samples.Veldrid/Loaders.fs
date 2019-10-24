@@ -4,7 +4,7 @@ open System.IO
 open System.Text
 open Veldrid
 open Veldrid.ImageSharp
-open Garnet.Samples.Resources
+open Garnet.Resources
 open Newtonsoft.Json
 
 type ShaderLoader(stage) =

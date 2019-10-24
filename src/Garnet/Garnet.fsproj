@@ -23,6 +23,7 @@
     <Compile Include="Containers.fs" />
     <Compile Include="Registration.fs" />
     <Compile Include="Actors.fs" />
+    <Compile Include="Resources.fs" />
   </ItemGroup>
 
 </Project>

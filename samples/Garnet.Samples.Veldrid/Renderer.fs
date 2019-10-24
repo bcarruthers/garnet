@@ -4,7 +4,7 @@ open System
 open System.Numerics
 open System.Collections.Generic
 open Veldrid
-open Garnet.Samples.Resources
+open Garnet.Resources
 
 [<Struct>]
 type UpdateState = {
@@ -101,6 +101,11 @@ type DeviceCanvas(device, resources : ResourceSet) =
     member c.Dispose() =
         for layer in layers.Values do
             layer.Dispose()
+
+type private Subscription<'a>(subs : List<'a>, item : 'a) =
+    interface IDisposable with
+        member c.Dispose() =
+            subs.Remove item |> ignore
 
 type Renderer(device, resources, canvas : Canvas) =
     let layers = DeviceCanvas(device, resources)

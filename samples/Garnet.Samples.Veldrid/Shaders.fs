@@ -5,7 +5,7 @@ open System.Text
 open System.Numerics
 open Veldrid
 open Veldrid.SPIRV
-open Garnet.Samples.Resources
+open Garnet.Resources
 
 module VertexShaders =
     let toShader (code : string) =

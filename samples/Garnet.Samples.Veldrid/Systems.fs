@@ -1,11 +1,9 @@
 ﻿namespace Garnet.Samples.Veldrid
 
-open System
 open System.Numerics
 open Garnet.Composition
 open Garnet.Samples.Performance
 open Garnet.Samples.FrameworkTypes
-open Garnet.Samples.Resources
 
 [<Struct>]
 type Resize = {
