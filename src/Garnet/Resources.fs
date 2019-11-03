@@ -17,11 +17,17 @@ module private ResourcePath =
 
     /// Result has frontslashes
     let getRelativePath (dir : string) (file : string) =
-        let pathUri = Uri(getCanonical file)
-        let dir = getCanonical dir
-        let dirWithSlash = if dir.EndsWith("/") then dir else dir + "/"
-        let dirUri = Uri(dirWithSlash);
-        Uri.UnescapeDataString(dirUri.MakeRelativeUri(pathUri).ToString())
+        try
+            let pathUri = Uri(getCanonical file)
+            let dir = getCanonical dir
+            let dirWithSlash = if dir.EndsWith("/") then dir else dir + "/"
+            let dirUri = Uri(dirWithSlash);
+            Uri.UnescapeDataString(dirUri.MakeRelativeUri(pathUri).ToString())
+        with ex ->
+            raise(
+                Exception(
+                    sprintf "Could not get relative path in directory '%s' for file '%s'" dir file,
+                    ex))
 
 /// Thread-safe
 type private ResourceInvalidationSet() =
@@ -45,6 +51,7 @@ type private ResourceInvalidationSet() =
 
 /// Thread-safe
 type FileStreamSource(rootDir, delay) =
+    let rootDir = Path.GetFullPath rootDir
     let changedSet = ResourceInvalidationSet()
     let handler =
         FileSystemEventHandler(fun s e ->              
@@ -64,6 +71,7 @@ type FileStreamSource(rootDir, delay) =
                     IncludeSubdirectories = true,
                     EnableRaisingEvents = true)
             watcher.add_Changed handler
+            watcher.add_Created handler
             watcher.Dispose
     let rec openFile path (delay : int) retryCount =
         try
@@ -73,15 +81,27 @@ type FileStreamSource(rootDir, delay) =
             else 
                 Thread.Sleep delay
                 openFile path (delay * 2) (retryCount - 1)
+    let getFullPath file =
+        if Path.IsPathRooted(file) then file
+        else Path.Combine(rootDir, file)
     new(rootDir) = new FileStreamSource(rootDir, 50)
     new() = new FileStreamSource("")
     member c.GetFiles() =
-        Directory.EnumerateFiles(rootDir, "*.*")
+        if Directory.Exists rootDir 
+        then 
+            Directory.EnumerateFiles(rootDir, "*.*")
+            |> Seq.map (fun file -> 
+                let fullPath = Path.GetFullPath file
+                ResourcePath.getRelativePath rootDir fullPath)
+        else Seq.empty
     member c.OpenRead file =
-        let path = Path.Combine(rootDir, file)
+        let path = getFullPath file
         openFile path 1 5 :> Stream
     member c.OpenWrite file =
-        File.OpenWrite file :> Stream
+        let path = getFullPath file
+        let dir = Path.GetDirectoryName path
+        Directory.CreateDirectory dir |> ignore
+        File.OpenWrite path :> Stream
     member c.FlushChanged (action : Action<string>) =
         let maxTimestamp = DateTime.UtcNow - TimeSpan.FromMilliseconds(float delay)
         changedSet.FlushChanged(maxTimestamp, action)
