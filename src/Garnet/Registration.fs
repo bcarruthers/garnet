@@ -10,29 +10,29 @@ type Registration = {
     register : Container -> IDisposable
     }
 
-module Registration =
-    type private RegistrationLookup() =
-        let dict = Dictionary<_,IDisposable>()
-        member c.Unregister name sub =
-            match dict.TryGetValue name with
-            | false, _ -> ()            
-            | true, x -> 
-                if obj.ReferenceEquals(x, sub) then 
-                    x.Dispose()
-                    dict.Remove name |> ignore
-        member c.UnregisterAny name =
-            match dict.TryGetValue name with
-            | false, _ -> ()            
-            | true, x -> 
+type RegistrationLookup() =
+    let dict = Dictionary<_, IDisposable>()
+    member c.Unregister name sub =
+        match dict.TryGetValue name with
+        | false, _ -> ()            
+        | true, x -> 
+            if obj.ReferenceEquals(x, sub) then 
                 x.Dispose()
                 dict.Remove name |> ignore
-        member c.Register name disposable =
-            c.UnregisterAny name
-            dict.[name] <- disposable
-        override c.ToString() =
-            sprintf "Systems (%d)" dict.Count + 
-                (if dict.Count > 0 then ":\n  " + String.Join("\n  ", dict.Keys) else "")
+    member c.UnregisterAny name =
+        match dict.TryGetValue name with
+        | false, _ -> ()            
+        | true, x -> 
+            x.Dispose()
+            dict.Remove name |> ignore
+    member c.Register name disposable =
+        c.UnregisterAny name
+        dict.[name] <- disposable
+    override c.ToString() =
+        sprintf "Systems (%d)" dict.Count + 
+            (if dict.Count > 0 then ":\n  " + String.Join("\n  ", dict.Keys) else "")
 
+module Registration =
     /// Creates a hotswappable system from a registration function
     let named name register = {
         registeredName = name

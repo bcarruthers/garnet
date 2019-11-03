@@ -144,7 +144,8 @@ module internal Internal =
         abstract member TryFind : 'k * byref<int> -> bool
         abstract member Remove : 'k * uint64 -> unit
         abstract member Commit : unit -> unit
-        abstract member Handle : ISegmentHandler -> 'k -> uint64 ->unit
+        abstract member Handle : ISegmentHandler ->unit
+        abstract member Handle : ISegmentHandler * 'k * uint64 ->unit
 
     let failComponentOperation op mask conflict (s : Segment<_, 'a>) =
         failwithf "Could not %s %s, sid: %A\n  Requested: %s\n  Existing:  %s\n  Error:     %s"
@@ -437,7 +438,10 @@ type Segments<'k, 'a
         member c.Remove(sid, mask) =
             c.Remove(sid, mask)
         member c.Commit() = c.Commit()
-        member c.Handle handler sid mask =
+        member c.Handle(handler) =
+            for i = 0 to current.Count - 1 do
+                handler.Handle current.[i]
+        member c.Handle(handler, sid, mask) =
             match c.TryFind(sid) with
             | false, _ -> ()
             | true, si ->
@@ -509,9 +513,12 @@ type SegmentStore<'k
     member c.Remove(sid, mask) =
         for segs in lookup.Values do
             segs.Remove(sid, mask)
+    member c.Handle(handler) =      
+        for s in lookup.Values do
+            s.Handle handler
     member c.Handle(sid, mask, handler) =      
         for s in lookup.Values do
-            s.Handle handler sid mask
+            s.Handle(handler, sid, mask)
     member c.Commit() =
         for segs in lookup.Values do
             segs.Commit()

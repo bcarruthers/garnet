@@ -60,6 +60,8 @@ type Components<'k, 'c, 'a
     member c.Remove(id) =
         let struct(sid, ci) = idToKey id
         segs.Remove(sid, 1UL <<< ci)
+    override c.ToString() =
+        segs.ToString()
 
 type IComponentStore<'k, 'c 
     when 'k :> IComparable<'k> 

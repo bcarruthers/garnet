@@ -219,7 +219,7 @@ type internal EidPool(partition) =
                         yield sprintf "%d %s" i (formatBits k u)
                 } |> formatSegments ("    "))
 
-type internal EidPools() =
+type EidPools() =
     let pools = Array.init Eid.partitionCount EidPool
     member c.Count = pools.Length
     member c.Next p = 
@@ -252,7 +252,6 @@ type Container() =
     let eidPools = reg.GetInstance<EidPools>()
     let components = ComponentStore(segments, Eid.eidToComponentKey)
     let eids = segments.GetSegments<Eid>()
-    member c.SourceId = outbox.Current.sourceId
     member c.Get<'a>() = components.Get<'a>()
     member c.GetSegments<'a>() = segments.GetSegments<'a>()
     member c.GetChannel<'a>() = channels.GetChannel<'a>()
@@ -260,6 +259,8 @@ type Container() =
     member c.RegisterInstance x = reg.RegisterInstance x
     member c.TryGetInstance<'a>([<Out>] r : byref<_>) = 
         reg.TryGetInstance<'a>(&r)
+    member c.GetAddresses() =
+        outbox.Current.addresses
     member internal c.Clear() =
         channels.Clear()
         components.Clear()
@@ -364,10 +365,10 @@ type Container with
         c.Run()
 
     member c.BeginRespond() =
-        c.BeginSend(c.SourceId)
+        c.BeginSend(c.GetAddresses().sourceId)
 
     member c.Respond(msg) =
-        c.Send(c.SourceId, msg)
+        c.Send(c.GetAddresses().sourceId, msg)
     
 [<AutoOpen>]
 module internal Prefab =

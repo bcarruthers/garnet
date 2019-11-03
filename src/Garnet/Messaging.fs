@@ -88,7 +88,7 @@ type IInbox =
 
 type Mailbox() =
     let dict = Dictionary<Type, obj>()
-    let mutable outbox = NullOutbox() :> IOutbox
+    let mutable outbox = NullOutbox.Instance
     let mutable sourceId = ActorId.undefined
     let mutable destId = ActorId.undefined
     member c.SourceId = sourceId
@@ -108,32 +108,32 @@ type Mailbox() =
         c.OnAll<'a>(fun mail ->
             for i = 0 to mail.Count - 1 do
                 handle mail.[i])
-    member c.TryHandle<'a> e =
+    member c.TryReceive<'a> e =
         match dict.TryGetValue(typeof<'a>) with
         | true, x -> 
-            let handle = x :?> (Buffer<'a> -> unit)
-            handle e
-            true
-        | false, _ -> false
-    member c.Handle<'a> e =
-        c.TryHandle<'a> e |> ignore
-    interface IInbox with
-        member c.Receive e =
             outbox <- e.outbox
             sourceId <- e.sourceId
             destId <- e.destinationId
             try
-                c.Handle e.message
+                let handle = x :?> (Buffer<'a> -> unit)
+                handle e.message
             finally
                 outbox <- NullOutbox.Instance
                 sourceId <- ActorId.undefined
                 destId <- ActorId.undefined
+            true
+        | false, _ -> false
+    member c.BeginSend<'a>() =
+        outbox.BeginSend<'a>()
+    interface IInbox with
+        member c.Receive e =
+            c.TryReceive e |> ignore
     interface IOutbox with
         member c.BeginSend<'a>() =
             outbox.BeginSend<'a>()
     override c.ToString() =
         outbox.ToString()
-    
+
 type Mailbox with
     member c.BeginRespond() =
         c.BeginSend(c.SourceId)
@@ -286,23 +286,35 @@ module Disposable =
         fun c -> systems |> List.map (fun f -> f c) |> list
 
 [<Struct>]
-type internal MessageContext = {
+type Addresses = {
     sourceId : ActorId
     destinationId : ActorId
+    }
+
+module Addresses = 
+    let undefined = {        
+        sourceId = ActorId.undefined
+        destinationId = ActorId.undefined
+        }
+
+[<Struct>]
+type internal MessageContext = {
+    addresses : Addresses
     outbox : IOutbox
     }
              
 module internal MessageContext = 
     let empty = {
-        sourceId = ActorId.undefined
-        destinationId = ActorId.undefined
+        addresses = Addresses.undefined
         outbox = NullOutbox.Instance
         }
     
     let fromEnvelope (c : Envelope<_>) = {
         outbox = c.outbox
-        sourceId = c.sourceId
-        destinationId = c.destinationId
+        addresses = {
+            sourceId = c.sourceId
+            destinationId = c.destinationId
+            }
         }
 
 /// Need sender member indirection because container registrations
