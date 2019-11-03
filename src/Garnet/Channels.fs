@@ -9,9 +9,17 @@ open Garnet.Formatting
 open Garnet.Metrics
 open Garnet.Collections
 
+type Start = struct end    
+
 /// Event published when commit occurs    
 type Commit = struct end
     
+[<Struct>]
+type Update = {
+    currentTime : int64
+    deltaTime : int64
+    }
+
 type internal EventHandler<'a> = Buffer<'a> -> unit
 
 type IPublisher =

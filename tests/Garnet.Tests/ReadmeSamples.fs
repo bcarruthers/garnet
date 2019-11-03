@@ -132,14 +132,14 @@ c.Start <| seq {
     for i = 1 to 5 do
         printf "[%d] " i
         // yield execution until time units pass
-        yield Wait.time 3
+        yield Wait.time 3L
     }
 
 // simulate update loop
 // output: [1] 1 2 3 [2] 4 5 6 [3] 7 8 9
 for i = 1 to 9 do
     // increment time units and run pending coroutines
-    c.Step 1
+    c.Step 1L
     c.Run()
     printf "%d " i
 

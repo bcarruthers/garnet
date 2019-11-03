@@ -29,7 +29,7 @@ module Timing =
     let one name start stop  =
         init name start stop 1
 
-    let oneEndingNow name start stop  =
+    let oneEndingNow name start =
         init name start (getTimestamp()) 1
 
 [<Struct>]
