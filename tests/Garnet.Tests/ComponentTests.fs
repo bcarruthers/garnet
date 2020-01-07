@@ -27,6 +27,7 @@ let tests =
         testCase "try get component when it exists" <| fun () ->
             let s = create()
             s.Add(Eid 1, 10)
+            s.Commit()
             s.TryGet(Eid 1) |> Option.isSome |> shouldEqual true
 
         testCase "try get component when it does not exist" <| fun () ->
