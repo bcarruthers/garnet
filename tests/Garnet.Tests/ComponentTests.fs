@@ -24,6 +24,15 @@ let tests =
             let s = create()
             s.Get(Eid 1, 10) |> shouldEqual 10
 
+        testCase "try get component when it exists" <| fun () ->
+            let s = create()
+            s.Add(Eid 1, 10)
+            s.TryGet(Eid 1) |> Option.isSome |> shouldEqual true
+
+        testCase "try get component when it does not exist" <| fun () ->
+            let s = create()
+            s.TryGet(Eid 1) |> Option.isNone |> shouldEqual true
+
         testCase "add component multiple times" <| fun () ->
             let s = create()
             s.Add(Eid 1, 10)

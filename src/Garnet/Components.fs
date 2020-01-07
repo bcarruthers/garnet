@@ -51,7 +51,15 @@ type Components<'k, 'c, 'a
         | true, si ->
             let s = segs.[si]
             if s.mask &&& (1UL <<< ci) = 0UL then fallback
-            else s.data.[ci]                
+            else s.data.[ci]
+    member c.TryGet(id) =
+        let struct(sid, ci) = idToKey id
+        match segs.TryFind(sid) with
+        | false, _ -> None
+        | true, si ->
+            let s = segs.[si]
+            if s.mask &&& (1UL <<< ci) = 0UL then None
+            else Some s.data.[ci]
     member c.Add(id, value) =
         let struct(sid, ci) = idToKey id
         let data = segs.Add(sid, 1UL <<< ci)
@@ -122,6 +130,7 @@ type Entity<'k, 'c
     member c.Remove<'a>() = c.container.Get<'a>().Remove(c.id)
     member c.Get<'a>() = c.container.Get<'a>().Get(c.id)    
     member c.GetOrDefault<'a>(fallback) = c.container.Get<'a>().Get(c.id, fallback)
+    member c.TryGet<'a>() = c.container.Get<'a>().TryGet(c.id)
     member c.Contains<'a>() = c.container.Get<'a>().Contains(c.id)
     member c.Destroy() = c.container.Destroy(c.id)
     member c.With x = c.Add x; c
