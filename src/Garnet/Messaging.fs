@@ -2,6 +2,7 @@
 
 open System
 open System.Collections.Generic
+open System.Threading
 open Garnet
 open Garnet.Comparisons
 open Garnet.Formatting
@@ -10,7 +11,7 @@ open Garnet.Formatting
 [<Struct>]
 type ActorId =
     val value : int
-    new(id) = { value = id }
+    new(value) = { value = value }
     override e.ToString() = e.value.ToString()
     
 module ActorId =
@@ -31,7 +32,7 @@ type IMessageWriter<'a> =
     /// Writes a buffer to the current batch
     abstract member WriteAll : Buffer<'a> -> unit
 
-type internal NullMessageWriter<'a>() =
+type NullMessageWriter<'a>() =
     static let mutable instance = new NullMessageWriter<'a>() :> IMessageWriter<'a>
     static member Instance = instance
     interface IMessageWriter<'a> with
@@ -86,43 +87,55 @@ type Envelope<'a> = {
 type IInbox =
     abstract member Receive<'a> : Envelope<Buffer<'a>> -> unit
 
+type internal MessageTypeId() =
+    static let mutable id  = 0
+    static member GetNext() = Interlocked.Increment(&id)
+
+type internal MessageTypeId<'a>() =
+    static let mutable id = MessageTypeId.GetNext()
+    static member Id = id
+
 type Mailbox() =
-    let dict = Dictionary<Type, obj>()
+    let mutable lookup = Array.zeroCreate<obj>(8)
     let mutable outbox = NullOutbox.Instance
     let mutable sourceId = ActorId.undefined
     let mutable destId = ActorId.undefined
     member c.SourceId = sourceId
     member c.DestinationId = destId
     member c.OnAll<'a>(action : Buffer<'a> -> unit) =
-        let t = typeof<'a>
+        let id = MessageTypeId<'a>.Id
+        Buffer.resizeArray (id + 1) &lookup
         let combined =
-            match dict.TryGetValue t with
-            | false, _ -> action
-            | true, existing -> 
-                let existing = existing :?> (Buffer<'a> -> unit)
-                fun e -> 
+            let h = lookup.[id]
+            if isNotNull h then
+                let existing = h :?> (Buffer<'a> -> unit)
+                fun e ->
                     existing e
-                    action e        
-        dict.[t] <- combined
+                    action e
+            else action
+        lookup.[id] <- combined :> obj
     member c.On<'a>(handle : 'a -> unit) =
         c.OnAll<'a>(fun mail ->
             for i = 0 to mail.Count - 1 do
                 handle mail.[i])
     member c.TryReceive<'a> e =
-        match dict.TryGetValue(typeof<'a>) with
-        | true, x -> 
-            outbox <- e.outbox
-            sourceId <- e.sourceId
-            destId <- e.destinationId
-            try
-                let handle = x :?> (Buffer<'a> -> unit)
-                handle e.message
-            finally
-                outbox <- NullOutbox.Instance
-                sourceId <- ActorId.undefined
-                destId <- ActorId.undefined
-            true
-        | false, _ -> false
+        let id = MessageTypeId<'a>.Id
+        if id < lookup.Length then
+            let h = lookup.[id]
+            if isNotNull h then
+                outbox <- e.outbox
+                sourceId <- e.sourceId
+                destId <- e.destinationId
+                try
+                    let handle = h :?> (Buffer<'a> -> unit)
+                    handle e.message
+                    true
+                finally
+                    outbox <- NullOutbox.Instance
+                    sourceId <- ActorId.undefined
+                    destId <- ActorId.undefined
+            else false
+        else false
     member c.BeginSend<'a>() =
         outbox.BeginSend<'a>()
     interface IInbox with
@@ -140,7 +153,9 @@ type Mailbox with
     member c.Respond(msg) =
         c.Send(c.SourceId, msg)
         
-type private NullInbox() =
+type NullInbox() =
+    static let mutable instance = NullInbox() :> IInbox
+    static member Instance = instance
     interface IInbox with
         member c.Receive e = ()
 

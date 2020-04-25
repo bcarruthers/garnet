@@ -10,6 +10,7 @@ open Garnet.Metrics
 open Garnet.Collections
 
 type Start = struct end    
+type Stop = struct end    
 
 /// Event published when commit occurs    
 type Commit = struct end
@@ -132,56 +133,60 @@ type IChannels =
 
 /// Supports reentrancy
 type Channels() =
-    // lookup needed for reentrancy since it has a list we can iterate over
-    let lookup = IndexedLookup<Type, IChannel>()
+    let channels = List<IChannel>()
+    let mutable lookup = Array.zeroCreate<IChannel>(8)
     let mutable publisher : IPublisher voption = ValueNone
     member c.Clear() =
-        for i = 0 to lookup.Count - 1 do
-            lookup.[i].Clear()
+        for channel in channels do
+            channel.Clear()
     member c.Commit() =
-        for i = 0 to lookup.Count - 1 do
-            lookup.[i].Commit()
+        for channel in channels do
+            channel.Commit()
     member c.SetPublisher(newPublisher) =
         publisher <- newPublisher
-        for i = 0 to lookup.Count - 1 do
-            lookup.[i].SetPublisher newPublisher
+        for channel in channels do
+            channel.SetPublisher newPublisher
     /// Returns true if any events were handled
     member c.Publish() =
+        // to handle reentrancy, avoid foreach and iterate up to current count
         let mutable published = false
-        for i = 0 to lookup.Count - 1 do
-            published <- lookup.[i].Publish() || published
+        let count = channels.Count
+        for i = 0 to count - 1 do
+            published <- channels.[i].Publish() || published
         published
     member c.GetChannel<'a>() =
-        let t = typeof<'a>
-        let i =
-            match lookup.TryGetIndex(t) with
-            | false, _ -> 
-                let channel = Channel<'a>()
-                channel.SetPublisher publisher
-                lookup.Add(t, channel)
-            | true, i -> i
-        lookup.[i] :?> Channel<'a>
+        let id = MessageTypeId<'a>.Id
+        if id >= lookup.Length then
+            Buffer.resizeArray (id + 1) &lookup
+        let channel = lookup.[id]
+        if isNotNull channel then channel :?> Channel<'a>
+        else            
+            let channel = Channel<'a>()
+            channel.SetPublisher publisher
+            lookup.[id] <- channel :> IChannel
+            channels.Add(channel)
+            channel
     interface IChannels with
         member c.GetChannel<'a>() = c.GetChannel<'a>()
     override c.ToString() =
         let sb = StringBuilder()
         sb.Append("Channels") |> ignore
         let groups = 
-            lookup.Entries 
-            |> Seq.groupBy (fun kvp -> kvp.Key.Namespace)
+            channels
+            |> Seq.map (fun ch -> ch.GetType().GetGenericArguments().[0], ch)
+            |> Seq.groupBy (fun (t, _) -> t.Namespace)
             |> Seq.sortBy (fun (key, _) -> key)
         for ns, group in groups do
             let name = if String.IsNullOrEmpty(ns) then "[None]" else ns
             sb.AppendLine().Append("  " + name) |> ignore
             let channels = 
                 group 
-                |> Seq.sortBy (fun kvp -> kvp.Key.Name)
-                |> Seq.map (fun kvp -> kvp.Value)
-            for index in channels do
-                let channel = lookup.[index]
+                |> Seq.sortBy (fun (t, _) -> t.Name)
+                |> Seq.map snd
+            for channel in channels do
                 sb.AppendLine().Append("    " + channel.ToString()) |> ignore
         sb.ToString()
-        
+                
 [<AutoOpen>]
 module Channels =
     type IChannels with    

@@ -320,6 +320,10 @@ type Container() =
         channels.SetPublisher pub
     member c.SetPublisher pub =
         c.SetPublisher (ValueSome pub)
+    member c.Send(msg) =
+        c.GetChannel<'a>().Send msg
+    member c.Publish(msg) =
+        c.GetChannel<'a>().Publish msg
     interface IRegistry with
         member c.Register f = c.Register f
         member c.RegisterInstance x = c.RegisterInstance x

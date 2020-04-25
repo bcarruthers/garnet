@@ -4,6 +4,8 @@ open System
 open System.Collections.Generic
 open System.Text
 open System.Runtime.InteropServices
+open System.Threading
+open Garnet
 open Garnet.Comparisons
 open Garnet.Formatting
 
@@ -493,43 +495,55 @@ type ISegmentStore<'k
     and 'k :> IEquatable<'k> 
     and 'k : equality> =
     abstract member GetSegments<'b> : unit -> Segments<'k, 'b>
+
+type internal ComponentTypeId() =
+    static let mutable id  = 0
+    static member GetNext() = Interlocked.Increment(&id)
+
+type internal ComponentTypeId<'a>() =
+    static let mutable id = ComponentTypeId.GetNext()
+    static member Id = id
         
 type SegmentStore<'k 
     when 'k :> IComparable<'k> 
     and 'k :> IEquatable<'k> 
     and 'k : equality>() =
-    let lookup = Dictionary<Type, ISegments<'k>>()
+    let segmentLists = List<ISegments<'k>>()
+    let mutable lookup = Array.zeroCreate<ISegments<'k>>(8)
     member c.GetSegments<'a>() =
-        let t = typeof<'a>
-        match lookup.TryGetValue(t) with
-        | true, segs -> segs :?> Segments<'k, 'a>
-        | false, _ ->
+        let id = ComponentTypeId<'a>.Id
+        if id >= lookup.Length then
+            Buffer.resizeArray (id + 1) &lookup
+        let segs = lookup.[id]
+        if isNotNull segs then segs :?> Segments<'k, 'a>
+        else            
             let segs = Segments<'k, 'a>()
-            lookup.Add(t, segs)
+            lookup.[id] <- segs :> ISegments<'k>
+            segmentLists.Add(segs)
             segs
     member c.Clear() =
-        for segs in lookup.Values do
+        for segs in segmentLists do
             segs.Clear()
     member c.Remove(sid, mask) =
-        for segs in lookup.Values do
+        for segs in segmentLists do
             segs.Remove(sid, mask)
     member c.Handle(handler) =      
-        for s in lookup.Values do
+        for s in segmentLists do
             s.Handle handler
     member c.Handle(sid, mask, handler) =      
-        for s in lookup.Values do
+        for s in segmentLists do
             s.Handle(handler, sid, mask)
     member c.Commit() =
-        for segs in lookup.Values do
+        for segs in segmentLists do
             segs.Commit()
     member c.ApplyRemovalsFrom (segments : Segments<_,_>) =
-        for segs in lookup.Values do
+        for segs in segmentLists do
             segments.ApplyRemovalsTo segs
     interface ISegmentStore<'k> with
         member c.GetSegments<'a>() = 
             c.GetSegments<'a>()
     override c.ToString() =
         let prefix = ""
-        lookup.Values
+        segmentLists
         |> Seq.map (fun item -> item.ToString().Replace("\n", "\n  "))
         |> listToString (prefix + "  ") (c.GetType() |> typeToString)

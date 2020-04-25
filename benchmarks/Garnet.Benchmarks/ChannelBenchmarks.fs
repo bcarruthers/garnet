@@ -20,6 +20,23 @@ let run iterations sendFreq =
         count <- count + 1
     sum, count
 
+let runWithoutCachingChannel iterations sendFreq =
+    let mutable sum = 0L
+    let c = Channels()
+    let sub =
+        c.On<int> <| fun e ->
+            sum <- sum + int64 e
+            if e < iterations then
+                if e % sendFreq = 0 then c.Send<int> (e + 1)
+                else c.Publish<int> (e + 1)
+    c.Publish 1
+    c.Commit()
+    let mutable count = 0
+    while c.Publish() do
+        c.Commit()
+        count <- count + 1
+    sum, count
+
 let runBatches iterations batchSize =
     let mutable sum = 0L
     let mutable count = 0
