@@ -1,6 +1,7 @@
 ﻿namespace Garnet.Composition
 
 open System
+open System.Diagnostics
 open System.Threading
 open System.Collections.Generic
 open System.Runtime.InteropServices
@@ -230,6 +231,8 @@ module internal Processing =
         let queue = Queue<struct(int * int * IDeliverer * obj)>()
         let mutable maxQueued = 0
         let mutable total = 0
+        let mutable waitDuration = 0L
+        let mutable waitCount = 0
         // returns number of messages before processing
         let run outbox pool =
             // lock for duration of dequeue, which ends
@@ -253,28 +256,43 @@ module internal Processing =
                     onError (exn(msg, ex))
             remaining
         member c.ActorId = actorId
+        member c.WaitDuration = waitDuration
         member c.Enqueue<'a>(sourceId, destId, message : Message<'a>) =
             Monitor.Enter queueSync
             queue.Enqueue(struct(sourceId, destId, Deliverer<'a>.Instance, message :> obj))
+            // This check is an optimization to avoid queuing actors repeatedly in dispatchers,
+            // but it relies on dispatchers taking full responsibility to ensure all messages
+            // are handled. Otherwise, the actor will be orphaned and continue to accumulate 
+            // messages without a dispatcher to run it.
             let r = if queue.Count = 1 then ValueSome dispatcher else ValueNone
             maxQueued <- max maxQueued queue.Count
             Monitor.Exit queueSync
             r            
-        member c.Process(outbox, pool, throughput) =
+        member private c.Process(outbox, pool, throughput) =
             let mutable count = 0
-            if Monitor.TryEnter processSync then                    
-                // using remaining count to avoid locking again
-                // when throughput >1
-                let mutable remaining = 1
-                while count < throughput && remaining > 0 do
-                    // get count in queue prior to dequeuing
-                    remaining <- run outbox pool
-                    if remaining > 0 then
-                        // count the message that was just processed
-                        count <- count + 1    
-                        remaining <- remaining - 1
-                total <- total + count
-                Monitor.Exit processSync
+            if not (Monitor.TryEnter processSync) then
+                // This is a case where actor is in more than one dispatcher queue and
+                // contention has occurred. This should only occur when a worker has
+                // completed all messages and has already decided to release its lock
+                // when another message is enqueued, causing a second worker to pick it
+                // up and attempt to process it (before the first has released lock).
+                let start = Stopwatch.GetTimestamp()
+                Monitor.Enter processSync
+                let stop = Stopwatch.GetTimestamp()
+                waitDuration <- waitDuration + stop - start
+                waitCount <- waitCount + 1
+            // using remaining count to avoid locking again
+            // when throughput >1
+            let mutable remaining = 1
+            while count < throughput && remaining > 0 do
+                // get count in queue prior to dequeuing
+                remaining <- run outbox pool
+                if remaining > 0 then
+                    // count the message that was just processed
+                    count <- count + 1    
+                    remaining <- remaining - 1
+            total <- total + count
+            Monitor.Exit processSync
             count
         member c.ProcessAll(outbox, pool, throughput) =
             let mutable count = 0
@@ -288,11 +306,10 @@ module internal Processing =
             lock processSync (fun () ->
                 lock queueSync (fun () -> queue.Clear())
                 dispose()
-                )                
+                )     
         override c.ToString() =
-            sprintf "Actor %d: %d processed, %d max queued"//, inbox: %s" 
-                actorId total maxQueued
-                //(addIndent (inbox.ToString()))
+            sprintf "Actor %d: %d processed, %d max queued, %d waits (%d ticks)"
+                actorId total maxQueued waitCount waitDuration
                             
     // Thread-safe
     type IDispatcherLookup =
@@ -346,7 +363,7 @@ module internal Processing =
                 let count = min actors.Count 20
                 let ordered = 
                     actors.Values 
-                    |> Seq.sortBy (fun a -> a.ActorId) 
+                    |> Seq.sortBy (fun a -> -a.WaitDuration, a.ActorId) 
                     |> Seq.take count
                 formatList "Actors" actors.Count (String.Join("\n", ordered))
                 

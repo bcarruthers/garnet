@@ -46,12 +46,13 @@ module PingPong =
 
     module Tests =
         let runLogging log onSend onReceive actorCount workerCount duration initCount maxCount batchSize =
-            let count = ref 0
+            let receivedcount = ref 0
+            let sentCount = ref 0
             use a = new ActorSystem(workerCount)
             a.Register <| fun actorId ->
                 let inbox = Mailbox()
                 inbox.OnAll<int64> <| fun e ->
-                    let c = Interlocked.Increment count
+                    let c = Interlocked.Increment receivedcount
                     if log then
                         onReceive { 
                             sourceId = ActorId.undefined
@@ -62,6 +63,7 @@ module PingPong =
                             dispatcher = inbox.ToString()
                             }
                     if c <= maxCount then
+                        let sc = Interlocked.Increment sentCount
                         let rand = uint64 c * 2862933555777941757UL + 3037000493UL
                         let destId = (abs (int rand) % actorCount) + 1 |> ActorId
                         if duration > 0 then
@@ -97,9 +99,14 @@ module PingPong =
                         }
             a.RunAll()
             let expected = maxCount + initCount
-            let actual = count.Value
+            let actual = receivedcount.Value
             if actual <> expected then
-                printfn "Expected count: %d, actual: %d" expected actual
+                printfn "Expected received count: %d, actual: %d" expected actual
+                printfn "%s" <| a.ToString()
+            let expected = maxCount
+            let actual = sentCount.Value
+            if actual <> expected then
+                printfn "Expected sent count: %d, actual: %d" expected actual
             if log then
                 printfn "%s" (a.ToString())
 

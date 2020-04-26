@@ -45,4 +45,14 @@ run 1000 4 0 5000 4000000 1
 // batch size 1000
 run 1000 8 0 500 1000000 1000
 run 1000 12 0 500 1000000 1000
-run 1000 16 0 500 1000000 1000
+
+// More threads than cores with large number of messages:
+// This reproduces issue where not all messages would be
+// completed. Using throughput=1 can also help to repro.
+runLogging true ignore ignore 5000 32 0 500 10000000 1
+runLogging true ignore ignore 5000 16 0 500 10000000 1
+runLogging true ignore ignore 5000 8 0 500 10000000 1
+runLogging true ignore ignore 5000 6 0 500 10000000 1
+runLogging true ignore ignore 5000 4 0 500 10000000 1
+runLogging true ignore ignore 5000 2 0 500 10000000 1
+runLogging true ignore ignore 5000 1 0 500 10000000 1
