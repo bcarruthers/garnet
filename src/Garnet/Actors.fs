@@ -30,8 +30,8 @@ module internal Sending =
         let mutable receiveCount = 0
         let mutable sourceId = ActorId.undefined
         member c.SourceId = sourceId
-        member c.Buffer = Buffer.ofArrayStart buffer bufferLength
-        member c.Recipients = Buffer.ofArrayStart recipients recipientCount
+        member c.Buffer = Memory(buffer, 0, bufferLength)
+        member c.Recipients = Memory(recipients, 0, recipientCount)
         member val Sender = NullOutboxSender.Instance with get, set
         member val OriginPool : obj = null with get, set
         member val OriginStack : Stack<Message<'a>> = null with get, set
@@ -53,10 +53,18 @@ module internal Sending =
                 sourceId <- id
             member c.AddRecipient x =
                 Buffer.addToArray &recipientCount &recipients x.value
-            member c.Write x =
-                Buffer.addToArray &bufferLength &buffer x
-            member c.WriteAll x =
-                Buffer.addAllToArray &bufferLength &buffer x
+            member c.Advance count =
+                bufferLength <- bufferLength + count
+            member c.GetMemory minSize =
+                let required = bufferLength + minSize
+                if buffer.Length < required then
+                    Buffer.resizeArray required &buffer
+                Memory(buffer, bufferLength, buffer.Length - bufferLength)
+            member c.GetSpan minSize =
+                let required = bufferLength + minSize
+                if buffer.Length < required then
+                    Buffer.resizeArray required &buffer
+                Span(buffer, bufferLength, buffer.Length - bufferLength)
             member c.Dispose() =
                 c.Sender.Send(c)            
         override c.ToString() =
@@ -97,7 +105,7 @@ module internal Pooling =
         override c.ToString() =
             lock sync <| fun () ->
                 let count = pool.Count
-                let total = pool |> Seq.sumBy (fun p -> p.Buffer.Array.Length)
+                let total = pool |> Seq.sumBy (fun p -> p.Buffer.Length)
                 let mean = if count > 0 then total / count else 0
                 sprintf "%s (%d): %d total, %d mean" 
                     (typeToString typeof<'a>)
@@ -152,7 +160,7 @@ module internal Pooling =
             else shared.Return x
         override c.ToString() =
             let count = pool.Count
-            let total = pool |> Seq.sumBy (fun p -> p.Buffer.Array.Length)
+            let total = pool |> Seq.sumBy (fun p -> p.Buffer.Length)
             let mean = if count > 0 then total / count else 0
             sprintf "%s (%d): %d total, %d mean" 
                 (typeToString typeof<'a>)
@@ -413,8 +421,8 @@ module internal Dispatchers =
                 actor
         member c.Send<'a>(message : Message<'a>) =
             // Avoiding foreach since recipients will be cleared.
-            let recipients = message.Recipients
-            for i = 0 to recipients.Count - 1 do
+            let recipients = message.Recipients.Span
+            for i = 0 to recipients.Length - 1 do
                 let recipientId = recipients.[i]
                 queue.Enqueue(c.Get(recipientId), recipientId, message)
         interface IOutboxSender with
@@ -437,9 +445,9 @@ module internal Dispatchers =
         interface IOutboxSender with
             member c.Send<'a>(message : Message<'a>) =
                 // Avoiding foreach since recipients will be cleared.
-                let recipients = message.Recipients
+                let recipients = message.Recipients.Span
                 let sourceId = message.SourceId.value
-                for i = 0 to recipients.Count - 1 do
+                for i = 0 to recipients.Length - 1 do
                     let recipientId = recipients.[i]
                     // Using shared map here
                     let actor = actors.GetProcessor(recipientId)
@@ -796,7 +804,7 @@ module ActorSystem =
         member c.SendAll(msgs) =
             c.pump.SendAll(c.actorId, msgs)
 
-        member c.SendAll<'a>(msgs : Buffer<'a>, sourceId) =
+        member c.SendAll<'a>(msgs : Span<'a>, sourceId) =
             c.pump.SendAll(c.actorId, msgs, sourceId)
 
         member c.Run msg =

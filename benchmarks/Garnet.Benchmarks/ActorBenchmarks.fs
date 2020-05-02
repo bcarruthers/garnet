@@ -52,13 +52,14 @@ module PingPong =
             a.Register <| fun actorId ->
                 let inbox = Mailbox()
                 inbox.OnAll<int64> <| fun e ->
+                    let span = e.Span
                     let c = Interlocked.Increment receivedcount
                     if log then
                         onReceive { 
                             sourceId = ActorId.undefined
                             destId = actorId
                             sequence = c
-                            payload = e.[0]
+                            payload = span.[0]
                             timestamp = Stopwatch.GetTimestamp()
                             dispatcher = inbox.ToString()
                             }
@@ -69,7 +70,7 @@ module PingPong =
                         if duration > 0 then
                             Thread.Sleep duration
                         if log  then
-                            let nextItem = e.[0] + 1L
+                            let nextItem = span.[0] + 1L
                             onSend { 
                                 sourceId = actorId
                                 destId = destId
@@ -79,8 +80,8 @@ module PingPong =
                                 dispatcher = inbox.ToString()
                                 }
                         use batch = inbox.BeginSend(destId)
-                        for i = 0 to e.Count - 1 do
-                            batch.Write(e.[i] + 1L)
+                        for i = 0 to span.Length - 1 do
+                            batch.Write(span.[i] + 1L)
                 Actor.inbox inbox
             for i = 0 to initCount - 1 do
                 let destId = (i % actorCount) + 1 |> ActorId
@@ -128,9 +129,10 @@ module PingPong =
                 let inbox = Mailbox()
                 inbox.OnAll<int64> <| fun e ->
                     if Interlocked.Increment count <= maxActorCount then
+                        let span = e.Span
                         use m = inbox.BeginRespond()
-                        for i = 0 to e.Count - 1 do
-                            m.Write e.[i]
+                        for i = 0 to span.Length - 1 do
+                            m.Write span.[i]
                 inbox
             use a = new ActorSystem(workerCount)
             a.Register(ActorFactory.init (ActorId 1) (fun () ->

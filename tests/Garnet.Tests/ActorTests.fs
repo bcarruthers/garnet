@@ -21,13 +21,13 @@ module ActorFactory =
 
 type Inbox() =
     let dict = Dictionary<Type, obj>()
-    member c.OnAll<'a>(action : Envelope<Buffer<'a>> -> unit) =
+    member c.OnAll<'a>(action : Envelope<Memory<'a>> -> unit) =
         let t = typeof<'a>
         let combined =
             match dict.TryGetValue t with
             | false, _ -> action
             | true, existing -> 
-                let existing = existing :?> (Envelope<Buffer<'a>> -> unit)
+                let existing = existing :?> (Envelope<Memory<'a>> -> unit)
                 fun e -> 
                     existing e
                     action e        
@@ -35,7 +35,7 @@ type Inbox() =
     member c.TryReceive<'a> e =
         match dict.TryGetValue(typeof<'a>) with
         | true, x -> 
-            let handle = x :?> (Envelope<Buffer<'a>> -> unit)
+            let handle = x :?> (Envelope<Memory<'a>> -> unit)
             handle e
             true
         | false, _ -> false
@@ -76,7 +76,7 @@ let sendReceiveMessages send =
     use a = new ActorSystem(0)
     let h = Inbox()
     h.OnAll<int> <| fun e ->
-        results.Add(e |> mapEnvelope List.ofSeq)
+        results.Add(e |> mapEnvelope (fun m -> m.ToArray()))
     a.Register(ActorId 1, h)
     send (a.Get(ActorId 1))
     a.RunAll()
@@ -92,11 +92,11 @@ let tests =
 
         testCase "send batch" <| fun () ->
             let results = sendReceiveMessages <| fun a ->
-                a.SendAll(Buffer.ofSeq [ 1; 2; 3 ])                
+                a.SendAll([| 1; 2; 3 |].AsSpan())
             let r = List.head results
             r.sourceId |> shouldEqual (ActorId 0)
             r.destinationId |> shouldEqual (ActorId 1)
-            r.message |> shouldEqual [ 1; 2; 3 ]
+            r.message |> shouldEqual [| 1; 2; 3 |]
 
         testCase "send single" <| fun () ->
             let results = sendReceiveMessages <| fun a ->
@@ -104,7 +104,7 @@ let tests =
             let r = List.head results
             r.sourceId |> shouldEqual (ActorId 0)
             r.destinationId |> shouldEqual (ActorId 1)
-            r.message |> shouldEqual [ 1 ]
+            r.message |> shouldEqual [| 1 |]
 
         testCase "send single with source" <| fun () ->
             let results = sendReceiveMessages <| fun a ->
@@ -112,7 +112,7 @@ let tests =
             let r = List.head results
             r.sourceId |> shouldEqual (ActorId 2)
             r.destinationId |> shouldEqual (ActorId 1)
-            r.message |> shouldEqual [ 1 ]
+            r.message |> shouldEqual [| 1 |]
 
         testCase "send to any actor" <| fun () ->
             let msgs = List<_>()

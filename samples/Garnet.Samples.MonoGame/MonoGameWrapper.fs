@@ -79,7 +79,7 @@ module SpriteSystems =
                 samplerState = SamplerState.LinearClamp, 
                 blendState = BlendState.Additive,
                 transformMatrix = Nullable xf)
-            for sprite in list do
+            for sprite in list.Span do
                 tileSet.Draw(sb, sprite)
             sb.End()
 

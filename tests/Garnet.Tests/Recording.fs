@@ -224,7 +224,7 @@ type PrintInbox(id : ActorId, formatter : IFormatter, counter : ref<int>, print)
         with get() = isEnabled
         and set value = isEnabled <- value
     interface IInbox with
-        member c.Receive<'a> (e : Envelope<Buffer<'a>>) =
+        member c.Receive<'a> (e : Envelope<Memory<'a>>) =
             // print if enabled before or after
             let isEnabledBefore = isEnabled
             handler.Receive e
@@ -233,15 +233,15 @@ type PrintInbox(id : ActorId, formatter : IFormatter, counter : ref<int>, print)
                 sb.Append(sprintf "%d: %d->%d %d/%d/%d: %dx %s" 
                     id.value e.sourceId.value e.destinationId.value 
                     counter.Value batchCount messageCount
-                    e.message.Count (typeof<'a> |> typeToString)) |> ignore
+                    e.message.Length (typeof<'a> |> typeToString)) |> ignore
                 let typeInfo = CachedTypeInfo<'a>.Info
                 if not typeInfo.isEmpty then
-                    formatMessagesTo sb formatter.Format e.message maxMessages
+                    formatMessagesTo sb formatter.Format e.message.Span maxMessages
                 sb.ToString() |> print//printfn "%s"
                 sb.Clear() |> ignore
             counter.Value <- counter.Value + 1
             batchCount <- batchCount + 1
-            messageCount <- messageCount + e.message.Count
+            messageCount <- messageCount + e.message.Length
           
 [<AutoOpen>]
 module internal RecordingInternal =

@@ -4,7 +4,6 @@ open System
 open System.Collections
 open System.Collections.Generic
 open System.Text
-open Garnet
 open Garnet.Comparisons
 
 /// Provides debug formatting for specific types
@@ -114,8 +113,8 @@ module internal Internal =
             isEmpty = isEmptyType typeof<'a>
             }
 
-    let formatMessagesTo (sb : StringBuilder) (formatMsg : _ -> string) (batch : Buffer<_>) maxCount =
-        let printCount = min batch.Count maxCount
+    let formatMessagesTo (sb : StringBuilder) (formatMsg : _ -> string) (batch : Span<_>) maxCount =
+        let printCount = min batch.Length maxCount
         for i = 0 to printCount - 1 do
             let msg = batch.[i]
             sb.AppendLine() |> ignore
@@ -123,7 +122,7 @@ module internal Internal =
             sb.Append(formatMsg msg) |> ignore
             //sb.Append(sprintf "%A" msg) |> ignore
         // count of messages not printed
-        let remaining = batch.Count - printCount
+        let remaining = batch.Length - printCount
         if remaining > 0 then
             sb.AppendLine() |> ignore
             sb.Append(sprintf "  +%d" remaining) |> ignore

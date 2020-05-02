@@ -44,11 +44,11 @@ let runBatches iterations batchSize =
     let channel = c.GetChannel<int>()
     let sub =
         c.OnAll<int> <| fun list ->
-            for e in list do
+            for e in list.Span do
                 sum <- sum + int64 e
             if count < iterations then
                 count <- count + 1
-                for e in list do
+                for e in list.Span do
                     channel.Send e
     for i = 1 to batchSize do
         c.Send i

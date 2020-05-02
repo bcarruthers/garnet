@@ -172,7 +172,7 @@ a.RunAll()
 
 let batchSub =
     c.OnAll<AddShip> <| fun list ->
-        for e in list do
+        for e in list.Span do
             // [do update here]
             printfn "%A" e
 

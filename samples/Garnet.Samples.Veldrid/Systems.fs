@@ -45,7 +45,7 @@ module SpriteSystems =
         let canvas = c.GetInstance<Canvas>()
         c.OnAll<Sprite> <| fun list ->
             let w = canvas.Begin(spriteLayer)
-            for sprite in list do
+            for sprite in list.Span do
                 let p = Vector2(sprite.center.x, sprite.center.y)
                 let color = Vector4(sprite.color.red, sprite.color.green, sprite.color.blue, sprite.color.alpha)
                 w.Write(p, Vector2.One * sprite.size * 120.0f, origin, sprite.radians, TextureBounds.zeroToOne, color)

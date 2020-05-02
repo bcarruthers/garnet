@@ -192,7 +192,7 @@ module internal Streaming =
             member c.Flush() = ()
 
     type LogReader<'a>(serializer : ISerializer<'a>) =
-        let nullMessageWriter = new NullMessageWriter<'a>() :> IMessageWriter<'a>
+        let nullMessageWriter = new MessageWriter<'a>() :> IMessageWriter<'a>
         let mutable writer = nullMessageWriter
         interface IMessageStreamReader with
             member c.Start (header : MessageHeader) (outbox : IOutbox) =
@@ -208,37 +208,35 @@ module internal Streaming =
 
     type LogMessageWriter<'a>(actorId : ActorId, logger : IInbox, onDispose : Action<_>) =
         let nullOutbox = NullOutbox()
-        let nullMessageWriter = NullMessageWriter<'a>.Instance
-        let recipients = List<ActorId>()
-        let messages = ResizableBuffer<'a>(8)
-        let mutable sourceId = actorId
+        let nullMessageWriter = new MessageWriter<'a>() :> IMessageWriter<'a>
+        let logWriter = new MessageWriter<'a>()
         let mutable baseWriter = nullMessageWriter
         member c.SetWriter writer =
             baseWriter <- writer
         interface IMessageWriter<'a> with
             member c.SetSource id =
-                baseWriter.SetSource id
-                sourceId <- id
-            member c.AddRecipient id = 
-                baseWriter.AddRecipient id
-                recipients.Add id
-            member c.Write msg = 
-                baseWriter.Write msg
-                messages.Add msg
-            member c.WriteAll src = 
-                baseWriter.WriteAll src
-                messages.AddAll src
+                logWriter.SetSource id
+            member c.AddRecipient id =
+                logWriter.AddRecipient id
+            member c.Advance count =
+                logWriter.Advance count
+            member c.GetMemory minSize =
+                logWriter.GetMemory minSize
+            member c.GetSpan minSize =
+                logWriter.GetSpan minSize
             member c.Dispose() = 
-                for id in recipients do                    
-                    logger.Receive { 
-                        outbox = nullOutbox
-                        sourceId = sourceId
-                        destinationId = id
-                        message = messages.Buffer
-                        }
-                recipients.Clear()
-                messages.Clear()
-                sourceId <- actorId
+                // omitting any empty messages with the expectation
+                // that the underlying writer will do the same
+                if logWriter.Memory.Length > 0 then
+                    for id in logWriter.Recipients do                    
+                        logger.Receive { 
+                            outbox = nullOutbox
+                            sourceId = logWriter.SourceId
+                            destinationId = id
+                            message = logWriter.Memory
+                            }
+                logWriter.CopyTo(baseWriter)
+                logWriter.Dispose()
                 baseWriter.Dispose()
                 baseWriter <- nullMessageWriter
                 onDispose.Invoke c
@@ -346,17 +344,17 @@ type StreamMessageSender(registry : MessageRegistry, filter) =
 type StreamInbox(registry : MessageRegistry, stream : Stream) =
     let headerInfo = registry.Get<MessageHeader>()
     interface IInbox with
-        member c.Receive<'a> (e : Envelope<Buffer<'a>>) =     
+        member c.Receive<'a> (e : Envelope<Memory<'a>>) =     
             StreamInbox.Write registry headerInfo stream e
-    static member Write<'a> (registry : MessageRegistry) headerInfo (stream : Stream) (e : Envelope<Buffer<'a>>) =
+    static member Write<'a> (registry : MessageRegistry) headerInfo (stream : Stream) (e : Envelope<Memory<'a>>) =
         let info = registry.Get<'a>()
         if info.typeId <> 0 then
             let header = {
                 sourceId = e.sourceId
                 destinationId = e.destinationId
                 messageTypeId = info.typeId
-                messageCount = e.message.Count
+                messageCount = e.message.Length
                 }
             headerInfo.serializer.Write stream header
-            for msg in e.message do
+            for msg in e.message.Span do
                 info.serializer.Write stream msg

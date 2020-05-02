@@ -7,24 +7,23 @@ open Garnet
 open Garnet.Comparisons
 open Garnet.Formatting
 open Garnet.Metrics
-open Garnet.Collections
 
 type Start = struct end    
 type Stop = struct end    
 
 /// Event published when commit occurs    
 type Commit = struct end
-    
+
 [<Struct>]
 type Update = {
     currentTime : int64
     deltaTime : int64
     }
 
-type internal EventHandler<'a> = Buffer<'a> -> unit
+type internal EventHandler<'a> = Memory<'a> -> unit
 
 type IPublisher =
-    abstract member PublishAll<'a> : Buffer<'a> * Buffer<EventHandler<'a>> -> unit
+    abstract member PublishAll<'a> : Memory<'a> * Memory<EventHandler<'a>> -> unit
 
 type internal IChannel =
     abstract member Clear : unit -> unit
@@ -33,19 +32,19 @@ type internal IChannel =
     abstract member SetPublisher : IPublisher voption -> unit
 
 module internal Publisher =
-    let formatBatch (messages : Buffer<_>) =
+    let formatBatch (messages : Span<_>) =
         let sb = System.Text.StringBuilder()
-        let count = min 20 messages.Count
+        let count = min 20 messages.Length
         for i = 0 to count - 1 do 
             let msg = messages.[i]
             sb.AppendLine().Append(sprintf "%A" msg) |> ignore
-        let remaining = messages.Count - count
+        let remaining = messages.Length - count
         if remaining > 0 then
             sb.AppendLine().Append(sprintf "(+%d)" remaining) |> ignore
         sb.ToString()
 
-    let publishAll<'a>(batch : Buffer<'a>) (handlers : Buffer<_>) =
-        for i = 0 to handlers.Count - 1 do
+    let publishAll<'a>(batch : Memory<'a>) (handlers : Span<_>) =
+        for i = 0 to handlers.Length - 1 do
             let handler = handlers.[i]
             try
                 handler batch
@@ -53,7 +52,7 @@ module internal Publisher =
             | ex -> 
                 let str = 
                     sprintf "Error in handler %d on %s batch (%d):%s" 
-                        i (typeof<'a> |> typeToString) batch.Count (formatBatch batch)
+                        i (typeof<'a> |> typeToString) batch.Length (formatBatch batch.Span)
                 exn(str, ex) |> raise                
 
 type Channel<'a>() =
@@ -69,32 +68,27 @@ type Channel<'a>() =
         pending.Clear()
     member c.SetPublisher p =
         publisher <- p
-    member c.PublishAll batch =
+    member c.PublishAll(batch : Memory<'a>) =
         match publisher with 
-        | ValueNone -> Publisher.publishAll batch handlers.Buffer
+        | ValueNone -> Publisher.publishAll batch handlers.Buffer.Span
         | ValueSome publisher -> publisher.PublishAll(batch, handlers.Buffer)
     /// Dispatches event immediately/synchronously
     member c.Publish event =
         stack.Add event
         try
-            c.PublishAll {
-                Array = stack.Array
-                Offset = stack.Count - 1
-                Count = 1
-                }
+            let mem = Memory(stack.Array, stack.Count - 1, 1)
+            c.PublishAll mem
         finally
             stack.RemoveLast()
     member c.Send(event) =
         pending.Add(event)
         total <- total + 1
-    member c.SendAll(events : Buffer<_>) =
-        for event in events do
-            pending.Add(event)
-        total <- total + events.Count
+    member c.SendAll(events : Memory<_>) =
+        pending.AddAll(events.Span)
+        total <- total + events.Length
     member c.OnAll(handler : EventHandler<_>) =
         handlers.Add(handler)
-        Disposable.init <| fun () -> 
-            unsubscribed.Add(handler)
+        Disposable.init (fun () -> unsubscribed.Add(handler))
     /// Calls handler behaviors and prunes subscriptions after
     member c.Publish() =
         if events.Count = 0 then false
@@ -208,8 +202,9 @@ module Channels =
         member c.On<'a>(handler) =
             c.GetChannel<'a>().OnAll(
                 fun batch -> 
-                    for i = 0 to batch.Count - 1 do
-                        handler batch.[i])
+                    let span = batch.Span
+                    for i = 0 to span.Length - 1 do
+                        handler span.[i])
 
     type Channel<'a> with    
         member c.Wait(msg) =
@@ -244,7 +239,7 @@ type internal PrintPublisher(options) =
     let sb = StringBuilder()
     let mutable count = 0
     interface IPublisher with        
-        member c.PublishAll<'a>(batch : Buffer<'a>, handlers) =
+        member c.PublishAll<'a>(batch : Memory<'a>, handlers) =
             let start = Timing.getTimestamp()
             let mutable completed = false
             try
@@ -266,7 +261,7 @@ type internal PrintPublisher(options) =
                         name = typeInfo.typeName
                         start = start
                         stop = stop
-                        count = batch.Count 
+                        count = batch.Length 
                         }
                 // send log message
                 if canLog then
@@ -275,14 +270,14 @@ type internal PrintPublisher(options) =
                     if not completed || usec >= options.minDurationUsec then
                         sb.Append(
                             sprintf "[%s] %d: %dx %s to %d handlers in %dus%s"
-                                options.logLabel count batch.Count 
+                                options.logLabel count batch.Length 
                                 (typeof<'a> |> typeToString)
-                                handlers.Count usec
+                                handlers.Length usec
                                 (if completed then "" else " failed")
                             ) |> ignore
                         // print messages
                         if not typeInfo.isEmpty then
-                            formatMessagesTo sb options.formatter.Format batch options.messageSizeLimit
+                            formatMessagesTo sb options.formatter.Format batch.Span options.messageSizeLimit
                         sb.AppendLine() |> ignore
                         options.sendLog (sb.ToString())
                         sb.Clear() |> ignore
@@ -294,8 +289,8 @@ type Publisher() =
     static member Null = NullPublisher.Instance
     static member Print options = PrintPublisher(options) :> IPublisher
     interface IPublisher with
-        member c.PublishAll<'a>(batch : Buffer<'a>, handlers) =
-            Publisher.publishAll batch handlers
+        member c.PublishAll<'a>(batch : Memory<'a>, handlers : Memory<_>) =
+            Publisher.publishAll batch handlers.Span
 
 module PrintPublisherOptions =
     let enabled = {

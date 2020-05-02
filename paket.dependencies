@@ -2,6 +2,7 @@ version 5.215.0
 
 source https://nuget.org/api/v2
 
+nuget System.Memory
 nuget Expecto
 nuget BenchmarkDotNet
 nuget MonoGame.Framework.DesktopGL.Core
