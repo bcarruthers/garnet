@@ -8,7 +8,7 @@ This sample demonstrates classic boids-style flocking or steering, with behavior
 
 ## Strategy
 
-[[Code](https://github.com/bcarruthers/garnet/blob/master/samples/Garnet.Samples.Common/Strategy.fs)]
+[[Code](https://github.com/bcarruthers/garnet/blob/master/tests/Garnet.Tests/StrategySample.fs)]
 
 Strategy games like Civilization have a world map consisting of grid cells. This sample demonstrates use of 2D location as a custom entity key for storing components in a world grid.
 
