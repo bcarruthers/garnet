@@ -18,7 +18,7 @@ let tags = "fsharp game ecs actor"
 let authors = "Ben Carruthers"
 let owners = "Ben Carruthers"
 let projectUrl = "https://github.com/bcarruthers/garnet"
-let copyright = "Copyright © 2019 Ben Carruthers"
+let copyright = "Copyright © 2020 Ben Carruthers"
 let license = "MIT"
 let buildDir = Path.getFullName "./artifacts/"
 let libDir = buildDir + "lib/"
@@ -40,7 +40,7 @@ Target.create "AssemblyInfo" (fun _ ->
         "tests/Garnet.Tests", "Garnet.Tests"
         "benchmarks/Garnet.Benchmarks", "Garnet.Benchmarks"
         "samples/Garnet.Samples.Common", "Garnet.Samples.Common"
-        "samples/Garnet.Samples.MonoGame", "Garnet.Samples.MonoGame"
+        "samples/Garnet.Samples.Veldrid", "Garnet.Samples.Veldrid"
     ]
     |> List.iter (fun (path, name) ->
         let filename = path + "/AssemblyInfo.fs"

@@ -2,7 +2,7 @@
 
 open System
 open System.Collections.Generic
-open Newtonsoft.Json
+//open Newtonsoft.Json
 
 type TextureEntry = {
     name : string
@@ -242,12 +242,12 @@ module TextureAtlas =
         textures = List.empty 
         }
 
-    let readFile file = 
-        JsonConvert.DeserializeObject<TextureAtlas>(System.IO.File.ReadAllText(file))
+    //let readFile file = 
+    //    JsonConvert.DeserializeObject<TextureAtlas>(System.IO.File.ReadAllText(file))
 
-    let writeFile file atlas = 
-        let str = JsonConvert.SerializeObject(atlas, Formatting.Indented)
-        System.IO.File.WriteAllText(file, str)
+    //let writeFile file atlas = 
+    //    let str = JsonConvert.SerializeObject(atlas, Formatting.Indented)
+    //    System.IO.File.WriteAllText(file, str)
 
     let private getTexBounds width height (tex : TextureEntry) =
         let size = Vec2f.init (float32 width) (float32 height)

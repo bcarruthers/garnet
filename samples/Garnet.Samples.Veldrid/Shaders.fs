@@ -113,7 +113,7 @@ type ShaderSet(device : GraphicsDevice,
                 layout : VertexLayoutDescription) =
     let shaders =
         try
-            printfn "Creating shaders"
+            //printfn "Creating shaders"
             device.ResourceFactory.CreateFromSpirv(vert, frag)
         with :? SpirvCompilationException as ex ->
             printfn "Could not create shaders: %s\nVertex:\n%s\nFragment:\n%s" 

@@ -23,7 +23,7 @@ type ResizableDeviceBuffer(device : GraphicsDevice, elementSize, usage) =
                     // round up to pow2 number of elements (not bytes)
                     let requiredSize = Buffer.getRequiredCount count * elementSize
                     let desc = new BufferDescription(uint32 requiredSize, usage)    
-                    printfn "Buffer %A %A %A %A" typeof<'v>.Name count elementSize requiredSize
+                    //printfn "Buffer %A %A %A %A" typeof<'v>.Name count elementSize requiredSize
                     buffer <- device.ResourceFactory.CreateBuffer(desc)
                 // write data (better if this could be partial)
                 device.UpdateBuffer(buffer, 0u, src)

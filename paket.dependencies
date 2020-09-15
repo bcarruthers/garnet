@@ -13,6 +13,7 @@ nuget Veldrid.ImGui
 nuget Veldrid.SPIRV
 nuget Veldrid.StartupUtilities
 nuget Veldrid.ImageSharp
+nuget Microsoft.DotNet.PlatformAbstractions
 
 // [ FAKE GROUP ]
 group Build

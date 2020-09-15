@@ -3,3 +3,4 @@ Veldrid.ImGui
 Veldrid.SPIRV
 Veldrid.StartupUtilities
 Veldrid.ImageSharp
+Microsoft.DotNet.PlatformAbstractions

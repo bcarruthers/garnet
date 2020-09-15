@@ -4,7 +4,7 @@ open System.Reflection
 
 [<assembly: AssemblyTitleAttribute("Garnet.Benchmarks")>]
 [<assembly: AssemblyProductAttribute("Garnet.Benchmarks")>]
-[<assembly: AssemblyCopyrightAttribute("Copyright © 2019 Ben Carruthers")>]
+[<assembly: AssemblyCopyrightAttribute("Copyright © 2020 Ben Carruthers")>]
 [<assembly: AssemblyDescriptionAttribute("F# game composition library")>]
 [<assembly: AssemblyVersionAttribute("0.2.0")>]
 [<assembly: AssemblyFileVersionAttribute("0.2.0")>]
@@ -13,7 +13,7 @@ do ()
 module internal AssemblyVersionInformation =
     let [<Literal>] AssemblyTitle = "Garnet.Benchmarks"
     let [<Literal>] AssemblyProduct = "Garnet.Benchmarks"
-    let [<Literal>] AssemblyCopyright = "Copyright © 2019 Ben Carruthers"
+    let [<Literal>] AssemblyCopyright = "Copyright © 2020 Ben Carruthers"
     let [<Literal>] AssemblyDescription = "F# game composition library"
     let [<Literal>] AssemblyVersion = "0.2.0"
     let [<Literal>] AssemblyFileVersion = "0.2.0"

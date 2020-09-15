@@ -5,7 +5,7 @@ open System.Text
 open Veldrid
 open Veldrid.ImageSharp
 open Garnet.Resources
-open Newtonsoft.Json
+//open Newtonsoft.Json
 
 type ShaderLoader(stage) =
     interface IResourceLoader<ShaderDescription> with
@@ -25,15 +25,15 @@ type TextureLoader(device : GraphicsDevice) =
         member c.Dispose x =
             x.Dispose()
 
-type JsonLoader<'a>() =
-    let serializer = new JsonSerializer()
-    member c.Load(stream : Stream) =
-        let reader = new StreamReader(stream)
-        let jsonReader = new JsonTextReader(reader)
-        serializer.Deserialize<'a>(jsonReader)
-    interface IResourceLoader<'a> with
-        member c.Load(stream) = c.Load(stream)
-        member c.Dispose x = ()
+//type JsonLoader<'a>() =
+//    let serializer = new JsonSerializer()
+//    member c.Load(stream : Stream) =
+//        let reader = new StreamReader(stream)
+//        let jsonReader = new JsonTextReader(reader)
+//        serializer.Deserialize<'a>(jsonReader)
+//    interface IResourceLoader<'a> with
+//        member c.Load(stream) = c.Load(stream)
+//        member c.Dispose x = ()
 
 type TextLoader() =
     interface IResourceLoader<string> with
