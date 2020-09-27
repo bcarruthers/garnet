@@ -7,11 +7,12 @@ open System.Threading
 open Garnet.Comparisons
 
 /// Mutable min-heap
-type Heap<'a>(compareTo : 'a -> 'a -> int) = // when 'a :> IComparable<'a>>() =
+type Heap<'k, 'a when 'k :> IComparable<'k>>() =
     // create a dummy value for easier indexing
-    let items = List<'a>()
-    do items.Add(Unchecked.defaultof<'a>)
-    let compare a b = compareTo items.[a] items.[b]
+    let items = List<KeyValuePair<'k, 'a>>()
+    do items.Add(Unchecked.defaultof<_>)
+    let compare a b = 
+        items.[a].Key.CompareTo(items.[b].Key)
     let swap a b =
         let temp = items.[b]
         items.[b] <- items.[a]
@@ -42,8 +43,8 @@ type Heap<'a>(compareTo : 'a -> 'a -> int) = // when 'a :> IComparable<'a>>() =
     member h.Items = items
     member h.Count = items.Count - 1
     member h.Top = items.[1]
-    member h.Insert item =
-        items.Add(item)
+    member h.Insert(key, value) =
+        items.Add(KeyValuePair(key, value))
         siftUp (items.Count - 1)
     member h.RemoveMin() =
         if h.Count = 0 then failwith "Heap is empty"
@@ -55,25 +56,18 @@ type Heap<'a>(compareTo : 'a -> 'a -> int) = // when 'a :> IComparable<'a>>() =
     member h.Clear() =
         while items.Count > 1 do items.RemoveAt(items.Count - 1)
 
-[<Struct>]
-type Pair<'a, 'b> =
-    val first : 'a
-    val second : 'b
-    new(x, y) = { first = x; second = y }
-    override v.ToString() = sprintf "%A %A" v.first v.second
-
 /// Mutable, min queue (min priority value dequeued first)
-type PriorityQueue<'p, 'a when 'p :> IComparable<'p>>() =
-    let compareTuples (a : Pair<'p,_>) (b : Pair<'p,_>) = a.first.CompareTo(b.first)
-    let heap = Heap<Pair<'p, 'a>>(compareTuples)
+type PriorityQueue<'k, 'a when 'k :> IComparable<'k>>() =
+    let heap = Heap<'k, 'a>()
     member q.Items = heap.Items
     member q.Count = heap.Count
     member q.Top = heap.Top
-    member q.Enqueue priority value =
-        heap.Insert (Pair(priority, value))
+    member q.Enqueue(priority, value) =
+        heap.Insert(priority, value)
     member q.Dequeue() =
-        heap.RemoveMin().second
-    member q.Clear() = heap.Clear()
+        heap.RemoveMin().Value
+    member q.Clear() = 
+        heap.Clear()
 
 module RingBuffer =
     let defaultBufferSize = 32

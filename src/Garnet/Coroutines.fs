@@ -46,15 +46,17 @@ type internal StackScheduler() =
                 temp.Add(active.[i])
             active.RemoveRange(frameStart, frameSize)
             // run coroutines, possibly re-enqueuing
-            for e in temp do
-                iterate.Invoke e
-            temp.Clear()
-            // update frame
-            let removedCount = priorActiveCount - active.Count
-            let newFrameSize = frameSize - removedCount
-            if newFrameSize = 0 
-                then frames.RemoveAt(frames.Count - 1)
-                else frames.[frames.Count - 1] <- newFrameSize
+            try
+                for e in temp do
+                    iterate.Invoke e
+            finally
+                temp.Clear()
+                // update frame
+                let removedCount = priorActiveCount - active.Count
+                let newFrameSize = frameSize - removedCount
+                if newFrameSize = 0 
+                    then frames.RemoveAt(frames.Count - 1)
+                    else frames.[frames.Count - 1] <- newFrameSize
         hasPending || hasFrames      
     override c.ToString() =
         sprintf "Stack: %d pending, %d active, frames: %s" pending.Count active.Count
@@ -66,10 +68,10 @@ type internal TimeScheduler() =
     member c.Enqueue (e : IEnumerator<_>) =
         let delay = e.Current.duration
         let nextTime = time + delay
-        active.Enqueue nextTime e
+        active.Enqueue(nextTime, e)
     member c.RunOnce(iterate : Action<_>) =
         let mutable iterCount = 0
-        while active.Count > 0 && active.Top.first <= time do
+        while active.Count > 0 && active.Top.Key <= time do
             iterCount <- iterCount + 1
             let e = active.Dequeue()
             iterate.Invoke e
@@ -81,9 +83,9 @@ type internal TimeScheduler() =
         time <- 0L
     override c.ToString() =
         sprintf "Timed: %d total, due: %s" active.Count
-            (String.Join(", ", active.Items |> Seq.map (fun p -> p.first)))
+            (String.Join(", ", active.Items |> Seq.map (fun p -> p.Key)))
             
-type internal CoroutineScheduler() =
+type CoroutineScheduler() =
     let timed = TimeScheduler()
     let stacked = StackScheduler()
     let iterate = 

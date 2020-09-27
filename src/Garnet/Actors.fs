@@ -791,12 +791,6 @@ type IMessagePump =
     abstract member Run : unit -> unit
     abstract member RunAll : unit -> unit
 
-type ActorSystemSection =
-    | None = 0
-    | Pools = 1
-    | Actors = 2
-    | Dispatchers = 3
-
 // Thread-safe
 type ActorSystem(threadCount) =
     let pool = SharedPool()
