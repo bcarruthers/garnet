@@ -51,4 +51,16 @@ let tests =
             b.[1] |> shouldEqual 1
             b.[8] |> shouldEqual 0
             b.[16] |> shouldEqual 16
+
+        testCase "copy segments" <| fun () ->
+            let s = SegmentStore<int>()
+            s.GetSegments<int>().Add(1, UInt64.MaxValue) |> ignore
+            s.Commit()
+            s.GetSegments<int>().Add(2, UInt64.MaxValue) |> ignore
+            let s2 = SegmentStore<int>()
+            s.CopyTo(s2)
+            s2.GetSegments<int>().Count |> shouldEqual 0
+            s2.Commit()
+            // note pending not copied
+            s2.GetSegments<int>().Count |> shouldEqual 1
     ]

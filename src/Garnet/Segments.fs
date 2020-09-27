@@ -109,10 +109,19 @@ module internal BitSegment =
     let init id mask = { id = id; mask = mask }
     
 /// Provides a method for accepting a generically-typed segment
-type ISegmentHandler =
-    abstract member Handle<'k, 'a when 'k :> IComparable<'k>> : Segment<'k, 'a> -> unit
+type ISegmentHandler<'p> =
+    abstract member Handle<'k, 'a when 'k :> IComparable<'k>> : 'p * Segment<'k, 'a> -> unit
+
+type ISegmentListHandler<'p, 'k
+        when 'k :> IComparable<'k> 
+        and 'k :> IEquatable<'k> 
+        and 'k : equality> =
+    abstract member Handle<'a> : 'p * IReadOnlyList<Segment<'k, 'a>> -> unit
     
-type PrintHandler(mask) =
+type PrintHandler<'k
+        when 'k :> IComparable<'k> 
+        and 'k :> IEquatable<'k> 
+        and 'k : equality>(mask) =
     let sb = StringBuilder()
     let mutable bytes = 0
     let iter action param mask (sa : _[]) =
@@ -129,9 +138,13 @@ type PrintHandler(mask) =
         if not (isEmptyType t) then 
             bytes <- bytes + sizeof<'b>
             sb.Append(sprintf " %A" x) |> ignore
-    interface ISegmentHandler with               
-        member c.Handle segment =
+    interface ISegmentHandler<unit> with               
+        member c.Handle((), segment) =
             iter c.Print () (segment.mask &&& mask) segment.data            
+    interface ISegmentListHandler<unit, 'k> with               
+        member c.Handle((), segments) =
+            for segment in segments do
+                iter c.Print () (segment.mask &&& mask) segment.data            
     override c.ToString() =
         sprintf "%d bytes" bytes
         + sb.ToString()    
@@ -146,8 +159,8 @@ module internal Internal =
         abstract member TryFind : 'k * byref<int> -> bool
         abstract member Remove : 'k * uint64 -> unit
         abstract member Commit : unit -> unit
-        abstract member Handle : ISegmentHandler ->unit
-        abstract member Handle : ISegmentHandler * 'k * uint64 ->unit
+        abstract member Handle<'p> : 'p * ISegmentListHandler<'p, 'k> ->unit
+        abstract member Handle<'p> : 'p * ISegmentHandler<'p> * 'k * uint64 ->unit
 
     let failComponentOperation op mask conflict (s : Segment<_, 'a>) =
         failwithf "Could not %s %s, sid: %A\n  Requested: %s\n  Existing:  %s\n  Error:     %s"
@@ -164,8 +177,9 @@ module internal Internal =
 
     /// Ordered list of segments and lookup    
     type ImmediateSegments<'k, 'a 
-                when 'k :> IComparable<'k> 
-                and 'k : equality>(pool : Stack<_>) =    
+            when 'k :> IComparable<'k> 
+            and 'k :> IEquatable<'k> 
+            and 'k : equality>(pool : Stack<_>) =    
         let segments = List<Segment<'k, 'a>>()
         let idToIndex = Dictionary<'k, int>()
         let removeIfEmpty = Predicate<Segment<'k, 'a>>(fun s -> 
@@ -203,6 +217,8 @@ module internal Internal =
                 pool.Push(s.data)
             segments.Clear()
             idToIndex.Clear()
+        member c.Handle<'p>(param, handler : ISegmentListHandler<'p, 'k>) =
+            handler.Handle(param, segments)
         /// Given a segment ID, returns segment index if found or -1 if not found
         member c.TryFind(id, [<Out>] i : byref<_>) = 
             idToIndex.TryGetValue(id, &i)
@@ -439,17 +455,17 @@ type Segments<'k, 'a
             current.TryFind(sid, &i)
         member c.Remove(sid, mask) =
             c.Remove(sid, mask)
-        member c.Commit() = c.Commit()
-        member c.Handle(handler) =
-            for i = 0 to current.Count - 1 do
-                handler.Handle current.[i]
-        member c.Handle(handler, sid, mask) =
+        member c.Commit() = 
+            c.Commit()
+        member c.Handle<'p>(param, handler : ISegmentListHandler<'p, 'k>) =
+            current.Handle(param, handler)
+        member c.Handle(param, handler, sid, mask) =
             match c.TryFind(sid) with
             | false, _ -> ()
             | true, si ->
                 let seg = current.[si]
                 let masked = Segment.init seg.id (seg.mask &&& mask) seg.data
-                handler.Handle masked
+                handler.Handle(param, masked)
     member internal c.ToString(formatSegments, formatBitSegments) =
         let prefix = ""
         let pendingStr = pending.ToString(formatSegments, formatBitSegments)
@@ -495,6 +511,19 @@ type ISegmentStore<'k
     and 'k :> IEquatable<'k> 
     and 'k : equality> =
     abstract member GetSegments<'b> : unit -> Segments<'k, 'b>
+    abstract member Handle<'p> : 'p * ISegmentListHandler<'p, 'k> -> unit
+
+type CopyHandler<'k
+        when 'k :> IComparable<'k> 
+        and 'k :> IEquatable<'k> 
+        and 'k : equality>() =
+    interface ISegmentListHandler<ISegmentStore<'k>, 'k> with               
+        member c.Handle<'a>(store, src : IReadOnlyList<Segment<'k, 'a>>) =
+            let dest = store.GetSegments<'a>()
+            for i = 0 to src.Count - 1 do
+                let seg = src.[i]
+                let data = dest.Add(seg.id, seg.mask)
+                seg.data.CopyTo(data, 0)
 
 type internal ComponentTypeId() =
     static let mutable id  = 0
@@ -527,12 +556,12 @@ type SegmentStore<'k
     member c.Remove(sid, mask) =
         for segs in segmentLists do
             segs.Remove(sid, mask)
-    member c.Handle(handler) =      
+    member c.Handle(param, handler) =      
         for s in segmentLists do
-            s.Handle handler
-    member c.Handle(sid, mask, handler) =      
+            s.Handle(param, handler)
+    member c.Handle(param, sid, mask, handler) =      
         for s in segmentLists do
-            s.Handle(handler, sid, mask)
+            s.Handle(param, handler, sid, mask)
     member c.Commit() =
         for segs in segmentLists do
             segs.Commit()
@@ -540,6 +569,8 @@ type SegmentStore<'k
         for segs in segmentLists do
             segments.ApplyRemovalsTo segs
     interface ISegmentStore<'k> with
+        member c.Handle(param, handler) =      
+            c.Handle(param, handler)
         member c.GetSegments<'a>() = 
             c.GetSegments<'a>()
     override c.ToString() =
@@ -547,3 +578,13 @@ type SegmentStore<'k
         segmentLists
         |> Seq.map (fun item -> item.ToString().Replace("\n", "\n  "))
         |> listToString (prefix + "  ") (c.GetType() |> typeToString)
+
+[<AutoOpen>]
+module SegmentStore =
+    type ISegmentStore<'k
+           when 'k :> IComparable<'k> 
+           and 'k :> IEquatable<'k> 
+           and 'k : equality> with
+        member c.CopyTo(dest : ISegmentStore<'k>) =
+            let handler = CopyHandler() :> ISegmentListHandler<_,_>
+            c.Handle(dest, handler)

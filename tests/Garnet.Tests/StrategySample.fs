@@ -100,7 +100,10 @@ type WorldGrid() =
         store.Segments.ApplyRemovalsFrom(locs)   
         store.Commit()
     interface ISegmentStore<Loc> with
-        member c.GetSegments() = store.GetSegments()
+        member c.GetSegments() = 
+            store.GetSegments()
+        member c.Handle(param, handler) =      
+            store.Handle(param, handler)
     override c.ToString() =
         store.ToString()
 

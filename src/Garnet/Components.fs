@@ -1,6 +1,7 @@
 ﻿namespace Garnet.Composition
 
 open System
+open System.Runtime.InteropServices
 open Garnet.Comparisons
 open Garnet.Formatting
 
@@ -36,15 +37,29 @@ type Components<'k, 'c, 'a
         let struct(sid, ci) = idToKey id
         let seg = segs.Get(sid)
         if seg.mask &&& (1UL <<< ci) = 0UL then 
-            failwithf "Cannot get %s component %d in segment %A" (typeToString typeof<'a>) ci sid
+            failwithf "Cannot get %s %s" (typeToString typeof<'a>) (id.ToString())
         seg.data.[ci]
     member c.Set(id, value) =
         let struct(sid, ci) = idToKey id
         let seg = segs.Get(sid)
         if seg.mask &&& (1UL <<< ci) = 0UL then 
-            failwithf "Cannot set %s component %d in segment %A" (typeToString typeof<'a>) ci sid
+            failwithf "Cannot set %s %s" (typeToString typeof<'a>) (id.ToString())
         seg.data.[ci] <- value
-    member c.Get(id, fallback) =
+    member c.TryGet(id, [<Out>] value : byref<_>)=
+        let struct(sid, ci) = idToKey id
+        match segs.TryFind(sid) with
+        | false, _ ->
+            value <- Unchecked.defaultof<_>
+            false
+        | true, si ->
+            let s = segs.[si]
+            if s.mask &&& (1UL <<< ci) = 0UL then 
+                value <- Unchecked.defaultof<_>
+                false
+            else 
+                value <- s.data.[ci]                
+                true
+    member c.GetOrDefault(id, fallback) =
         let struct(sid, ci) = idToKey id
         match segs.TryFind(sid) with
         | false, _ -> fallback
@@ -88,10 +103,12 @@ type ComponentStore<'k, 'c
         Components(segs.GetSegments<'a>(), idToKey)
     member c.Clear() =
         segs.Clear()
-    member c.Handle(id, handler) =        
+    member c.Handle(param, id, handler) =        
         let struct(sid, ci) = idToKey id
         let mask = 1UL <<< ci
-        segs.Handle(sid, mask, handler)
+        segs.Handle(param, sid, mask, handler)
+    member c.Handle(param, handler) =      
+        segs.Handle(param, handler)
     /// Removes ID component and assumes other components
     /// will be cleaned up in commit
     member c.Destroy(id) =
@@ -103,6 +120,8 @@ type ComponentStore<'k, 'c
         member c.Get<'a>() = 
             c.Get<'a>()
     interface ISegmentStore<'k> with
+        member c.Handle(param, handler) =      
+            c.Handle(param, handler)
         member c.GetSegments<'a>() = 
             segs.GetSegments<'a>()
     override c.ToString() =
@@ -121,14 +140,15 @@ type Entity<'k, 'c
     member c.Set x = c.container.Get<_>().Set(c.id, x)
     member c.Remove<'a>() = c.container.Get<'a>().Remove(c.id)
     member c.Get<'a>() = c.container.Get<'a>().Get(c.id)    
-    member c.GetOrDefault<'a>(fallback) = c.container.Get<'a>().Get(c.id, fallback)
+    member c.TryGet<'a>([<Out>] value : byref<_>) = c.container.Get<'a>().TryGet(c.id, &value)
+    member c.GetOrDefault<'a>(fallback) = c.container.Get<'a>().GetOrDefault(c.id, fallback)
     member c.Contains<'a>() = c.container.Get<'a>().Contains(c.id)
     member c.Destroy() = c.container.Destroy(c.id)
     member c.With x = c.Add x; c
     member c.Without<'a>() = c.Remove<'a>(); c
     override c.ToString() = 
-        let printer = PrintHandler(UInt64.MaxValue)
-        c.container.Handle(c.id, printer)
+        let printer = PrintHandler<'k>(UInt64.MaxValue)
+        c.container.Handle((), c.id, printer)
         "Entity " + c.id.ToString() + ": " + printer.ToString()
 
 type ComponentStore<'k, 'c

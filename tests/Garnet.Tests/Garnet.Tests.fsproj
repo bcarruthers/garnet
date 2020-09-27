@@ -22,6 +22,7 @@
     <Compile Include="CollectionTests.fs" />
     <Compile Include="ActorTests.fs" />
     <Compile Include="SerializationTests.fs" />
+    <Compile Include="StateMachineTests.fs" />
     <Compile Include="StrategySample.fs" />
     <Compile Include="ReadmeSamples.fs" />
     <Compile Include="Main.fs" />

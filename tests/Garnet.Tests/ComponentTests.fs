@@ -13,7 +13,7 @@ let tests =
             let s = create()
             s.Add(Eid 1, 10)
             s.Commit()
-            s.Get(Eid 1, 10) |> shouldEqual 10
+            s.GetOrDefault(Eid 1, 10) |> shouldEqual 10
 
         testCase "get component without commit" <| fun () ->
             let s = create()
@@ -22,7 +22,7 @@ let tests =
 
         testCase "get component or default" <| fun () ->
             let s = create()
-            s.Get(Eid 1, 10) |> shouldEqual 10
+            s.GetOrDefault(Eid 1, 10) |> shouldEqual 10
 
         testCase "add component multiple times" <| fun () ->
             let s = create()
@@ -64,11 +64,11 @@ let tests =
             s.Add(Eid 1, 10)
             s.Count |> shouldEqual 0
             s.Contains(Eid 1) |> shouldEqual false
-            s.Get(Eid 1, 0) |> shouldEqual 0
+            s.GetOrDefault(Eid 1, 0) |> shouldEqual 0
             s.Commit()
             s.Count |> shouldEqual 1
             s.Contains(Eid 1) |> shouldEqual true
-            s.Get(Eid 1, 0) |> shouldEqual 10
+            s.GetOrDefault(Eid 1, 0) |> shouldEqual 10
                 
         testCase "removal is deferred" <| fun () ->
             let s = create()
@@ -77,7 +77,7 @@ let tests =
             s.Remove(Eid 1)
             s.Count |> shouldEqual 1
             s.Contains(Eid 1) |> shouldEqual true
-            s.Get(Eid 1, 0) |> shouldEqual 10
+            s.GetOrDefault(Eid 1, 0) |> shouldEqual 10
             s.Commit()
             s.Count |> shouldEqual 0
             s.Contains(Eid 1) |> shouldEqual false

@@ -1,7 +1,6 @@
 ﻿namespace Garnet.Composition
 
 open System
-open System.Collections.Generic
 open System.Runtime.InteropServices
 open Garnet
 open Garnet.Comparisons
@@ -11,7 +10,7 @@ open Garnet.Formatting
 [<Struct>]
 type Eid =
     val value : int
-    new(id) = { value = id }
+    new(value) = { value = value }
     override e.ToString() = "0x" + e.value.ToString("x")
     
 module Eid =
@@ -100,7 +99,7 @@ type Eid with
 
 type Entity = Entity<int, Eid>
 
-type internal EidPool(partition) =
+type EidPool(partition) =
     let mutable known = Array.zeroCreate 1
     let mutable used = Array.zeroCreate 1
     let mutable eids = Array.zeroCreate 64
@@ -158,6 +157,13 @@ type internal EidPool(partition) =
         let eid = eids.[current]        
         mask <- mask >>> 1
         eid
+    member c.Recyle(eid : Eid) =
+        c.Apply {
+            data = null
+            id = Eid.getSegmentIndex eid
+            mask = 0UL
+            removalMask = 1UL <<< (Eid.getComponentIndex eid)
+        }
     member internal c.Apply(seg : PendingSegment<int, Eid>) =
         let sid = seg.id &&& Eid.segmentInPartitionMask
         c.EnsureSize sid
@@ -307,8 +313,10 @@ type Container() =
         let data = eids.Add(sid, 1UL <<< ci)
         data.[ci] <- eid
         eid
-    member c.Handle(id, handler) =
-        components.Handle(id, handler)
+    member c.Handle(param, handler : ISegmentListHandler<_, int>) =
+        segments.Handle(param, handler)
+    member c.Handle(param, id, handler) =
+        components.Handle(param, id, handler)
     member c.Destroy(eid : Eid) =
         // Only removing from eids and relying on commit to remove
         // other components.
@@ -322,10 +330,8 @@ type Container() =
         channels.SetPublisher pub
     member c.SetPublisher pub =
         c.SetPublisher (ValueSome pub)
-    member c.Send(msg) =
-        c.GetChannel<'a>().Send msg
-    member c.Publish(msg) =
-        c.GetChannel<'a>().Publish msg
+    member c.UnsubscribeAll() =
+        channels.Clear()
     interface IRegistry with
         member c.Register f = c.Register f
         member c.RegisterInstance x = c.RegisterInstance x
@@ -339,6 +345,8 @@ type Container() =
         member c.Get<'a>() = 
             components.Get<'a>()
     interface ISegmentStore<int> with
+        member c.Handle(param, handler) =      
+            c.Handle(param, handler)
         member c.GetSegments<'a>() = 
             segments.GetSegments<'a>()
     member c.BeginSend() =
@@ -357,13 +365,39 @@ type Container() =
             c.Receive(e)
     override c.ToString() = 
         reg.ToString()
+    static member Create(register : Container -> IDisposable) =
+        let c = Container()
+        register c |> ignore
+        c.Commit()
+        c
+
+type private Disposable<'a when 'a :> IDisposable>(init : 'a) =
+    let mutable current = init
+    member c.Value = current
+    member c.Set(create) =
+        current.Dispose()
+        current <- create()
+    member c.Dispose() =
+        current.Dispose()
+    interface IDisposable with
+        member c.Dispose() =
+            c.Dispose()
 
 type Container with
+    member c.GetSourceId() =
+        c.GetAddresses().sourceId
+
+    member c.GetDestinationId() =
+        c.GetAddresses().destinationId
+
     member c.Create(partition) =
         let eid = c.CreateEid(partition)
         c.Get eid
 
     member c.Create() = c.Create(0)
+
+    member c.Create(eid : Eid) =
+        c.Get(eid).With(eid)
 
     member c.DestroyAll() =
         c.GetSegments<Eid>().RemoveAll()
@@ -377,6 +411,25 @@ type Container with
 
     member c.Respond(msg) =
         c.Send(c.GetAddresses().sourceId, msg)
+
+    /// Uses a state type as both a component and event subscription. This is useful
+    /// for allowing a container to have multiple states with their own subscriptions
+    /// and transition logic.
+    member c.RegisterStateMachine<'a>(eid, initState, registerState) =
+        let state = new Disposable<IDisposable>(Disposable.empty)
+        let setState e =
+            // store state as component 
+            c.Get(eid).Add e
+            // force commit so state is immediately accessible
+            c.Commit()
+            // register subscriptions specific to it, replacing prior
+            state.Set(fun () -> registerState e c)
+        setState initState
+        Disposable.list [
+            // when state message arrives
+            c.On<'a> setState
+            state :> IDisposable
+            ]        
     
 [<AutoOpen>]
 module internal Prefab =
