@@ -563,6 +563,11 @@ module Join =
             fun (events : List<_>) ->
                 for e in events do
                     run e
+                    
+    let where pred action =
+        fun param values ->
+            if pred param values then
+                action param values
 
     let over c proc =
         proc c

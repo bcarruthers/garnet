@@ -32,5 +32,22 @@ let tests =
                 |> Join.over c
             iter 0
             r.Count |> shouldEqual 16
+            
+        testCase "where" <| fun () ->
+            let c = ComponentStore(Eid.eidToComponentKey)
+            for i = 1 to 100 do
+                let e = c.Get(Eid i)
+                e.Add(i)
+                e.Add(Eid i)
+            c.Commit()
+            let r = List<_>()
+            let iterWhere =
+                fun param struct(a : int, b : Eid) ->
+                    r.Add((param, a, b))
+                |> Join.where (fun param struct(a : int, _ : Eid) -> a % 2 = 0)
+                |> Join.iter2
+                |> Join.over c
+            iterWhere 0
+            r.Count |> shouldEqual 50            
 
     ]
