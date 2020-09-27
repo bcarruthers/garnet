@@ -20,10 +20,10 @@ type Update = {
     deltaTime : int64
     }
 
-type internal EventHandler<'a> = Memory<'a> -> unit
+type internal EventHandler<'a> = ReadOnlyMemory<'a> -> unit
 
 type IPublisher =
-    abstract member PublishAll<'a> : Memory<'a> * Memory<EventHandler<'a>> -> unit
+    abstract member PublishAll<'a> : ReadOnlyMemory<'a> * ReadOnlyMemory<EventHandler<'a>> -> unit
 
 type internal IChannel =
     abstract member Clear : unit -> unit
@@ -32,7 +32,7 @@ type internal IChannel =
     abstract member SetPublisher : IPublisher voption -> unit
 
 module internal Publisher =
-    let formatBatch (messages : Span<_>) =
+    let formatBatch (messages : ReadOnlySpan<_>) =
         let sb = System.Text.StringBuilder()
         let count = min 20 messages.Length
         for i = 0 to count - 1 do 
@@ -43,7 +43,7 @@ module internal Publisher =
             sb.AppendLine().Append(sprintf "(+%d)" remaining) |> ignore
         sb.ToString()
 
-    let publishAll<'a>(batch : Memory<'a>) (handlers : Span<_>) =
+    let publishAll<'a>(batch : ReadOnlyMemory<'a>) (handlers : ReadOnlySpan<_>) =
         for i = 0 to handlers.Length - 1 do
             let handler = handlers.[i]
             try
@@ -68,7 +68,7 @@ type Channel<'a>() =
         pending.Clear()
     member c.SetPublisher p =
         publisher <- p
-    member c.PublishAll(batch : Memory<'a>) =
+    member c.PublishAll(batch : ReadOnlyMemory<'a>) =
         match publisher with 
         | ValueNone -> Publisher.publishAll batch handlers.Buffer.Span
         | ValueSome publisher -> publisher.PublishAll(batch, handlers.Buffer)
@@ -76,14 +76,14 @@ type Channel<'a>() =
     member c.Publish event =
         stack.Add event
         try
-            let mem = Memory(stack.Array, stack.Count - 1, 1)
+            let mem = ReadOnlyMemory(stack.Array, stack.Count - 1, 1)
             c.PublishAll mem
         finally
             stack.RemoveLast()
     member c.Send(event) =
         pending.Add(event)
         total <- total + 1
-    member c.SendAll(events : Memory<_>) =
+    member c.SendAll(events : ReadOnlyMemory<_>) =
         pending.AddAll(events.Span)
         total <- total + events.Length
     member c.OnAll(handler : EventHandler<_>) =
@@ -130,6 +130,7 @@ type Channels() =
     let channels = List<IChannel>()
     let mutable lookup = Array.zeroCreate<IChannel>(8)
     let mutable publisher : IPublisher voption = ValueNone
+    member c.Count = channels.Count
     member c.Clear() =
         for channel in channels do
             channel.Clear()
@@ -206,6 +207,27 @@ module Channels =
                     for i = 0 to span.Length - 1 do
                         handler span.[i])
 
+        /// Buffers incoming events in a second set of channels and subscribes
+        /// handler to the buffered channel. THis is useful for holding events
+        /// until a commit event is received or an appropriate update event occurs.
+        member c.BufferOnAll<'a>(buffer : IChannels, handler) =
+            let channel = buffer.GetChannel<'a>()
+            Disposable.list [
+                // when first channels receive events, write to buffer
+                // events will need to be published by a separate mechanism
+                c.OnAll<'a> channel.SendAll                    
+                // subscribe handler to buffer rather than original channels
+                channel.OnAll(handler)
+                ]
+    
+        /// Buffers incoming events in a second set of channels and subscribes
+        /// handler to the buffered channel. THis is useful for holding events
+        /// until a commit event is received or an appropriate update event occurs.
+        member c.BufferOn<'a>(buffer : IChannels, handle) =
+            c.BufferOnAll<'a>(buffer, fun mem ->
+                for e in mem.Span do
+                    handle e)
+
     type Channel<'a> with    
         member c.Wait(msg) =
             c.Send(msg)
@@ -239,7 +261,7 @@ type internal PrintPublisher(options) =
     let sb = StringBuilder()
     let mutable count = 0
     interface IPublisher with        
-        member c.PublishAll<'a>(batch : Memory<'a>, handlers) =
+        member c.PublishAll<'a>(batch : ReadOnlyMemory<'a>, handlers) =
             let start = Timing.getTimestamp()
             let mutable completed = false
             try
@@ -289,7 +311,7 @@ type Publisher() =
     static member Null = NullPublisher.Instance
     static member Print options = PrintPublisher(options) :> IPublisher
     interface IPublisher with
-        member c.PublishAll<'a>(batch : Memory<'a>, handlers : Memory<_>) =
+        member c.PublishAll<'a>(batch : ReadOnlyMemory<'a>, handlers : ReadOnlyMemory<_>) =
             Publisher.publishAll batch handlers.Span
 
 module PrintPublisherOptions =

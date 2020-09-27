@@ -81,14 +81,14 @@ module PingPong =
                                 }
                         use batch = inbox.BeginSend(destId)
                         for i = 0 to span.Length - 1 do
-                            batch.Write(span.[i] + 1L)
+                            batch.WriteValue(span.[i] + 1L)
                 Actor.inbox inbox
             for i = 0 to initCount - 1 do
                 let destId = (i % actorCount) + 1 |> ActorId
                 let payload = (i + 1) * 10000000
                 use batch = a.BeginSend(destId)
                 for i = 0 to batchSize - 1 do
-                    batch.Write (payload + i * 10000 |> int64)
+                    batch.WriteValue (payload + i * 10000 |> int64)
                 if log  then
                     onSend { 
                         sourceId = ActorId.undefined
@@ -132,7 +132,7 @@ module PingPong =
                         let span = e.Span
                         use m = inbox.BeginRespond()
                         for i = 0 to span.Length - 1 do
-                            m.Write span.[i]
+                            m.WriteValue span.[i]
                 inbox
             use a = new ActorSystem(workerCount)
             a.Register(ActorFactory.init (ActorId 1) (fun () ->

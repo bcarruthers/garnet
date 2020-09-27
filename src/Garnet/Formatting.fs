@@ -35,6 +35,48 @@ type Formatter() =
         member c.CanFormat<'a>() =
             not (skippedTypes.Contains(typeof<'a>))
 
+type IStringBlockWriter =
+    abstract Begin : string * string -> bool
+    abstract Write : string -> unit
+    abstract End : unit -> unit
+
+[<AutoOpen>]
+module StringBlockWriter =
+    type IStringBlockWriter with
+        member c.Begin(name) =
+            c.Begin(name, name)
+
+        member c.BeginList(name, count) =
+            let str = sprintf "%s (%d)" name count
+            if count = 0 
+                then c.Write(str); false
+                else c.Begin(str, name)
+
+type StringBlockWriter() =
+    let sb = StringBuilder()
+    let mutable indent = 0
+    member private c.AppendLine(str) =
+        for i = 0 to indent - 1 do
+            sb.Append("  ") |> ignore
+        sb.AppendLine(str) |> ignore
+    interface IStringBlockWriter with
+        member c.Begin(name, id) =
+            c.AppendLine(name)
+            indent <- indent + 1
+            true
+        member c.Write(text) =
+            c.AppendLine(text)
+        member c.End() =
+            indent <- indent - 1
+    member c.Clear() =
+        sb.Clear()
+    override c.ToString() =
+        sb.ToString()
+    static member Format(toString) =
+        let w = StringBlockWriter()
+        toString w
+        w.ToString()
+
 [<AutoOpen>]
 module internal Internal =
     let private getNonGenericTypeName (name : string) =
@@ -113,7 +155,7 @@ module internal Internal =
             isEmpty = isEmptyType typeof<'a>
             }
 
-    let formatMessagesTo (sb : StringBuilder) (formatMsg : _ -> string) (batch : Span<_>) maxCount =
+    let formatMessagesTo (sb : StringBuilder) (formatMsg : _ -> string) (batch : ReadOnlySpan<_>) maxCount =
         let printCount = min batch.Length maxCount
         for i = 0 to printCount - 1 do
             let msg = batch.[i]

@@ -27,7 +27,7 @@ module Buffer =
         resizeArray count &arr
         arr.[count - 1] <- x
 
-    let internal addAllToArray (count : byref<int>) (arr : byref<_[]>) (src : Span<_>) =
+    let internal addAllToArray (count : byref<int>) (arr : byref<_[]>) (src : ReadOnlySpan<_>) =
         let destOffset = count
         count <- count + src.Length
         resizeArray count &arr
@@ -43,7 +43,7 @@ type internal ResizableBuffer<'a>(capacity) =
     member c.Array = array
     member c.Count = count
     member c.Capacity = array.Length
-    member c.Buffer = Memory(array, 0, count)
+    member c.Buffer = ReadOnlyMemory(array, 0, count)
     member c.Add x = Buffer.addToArray &count &array x
     member c.AddAll x = Buffer.addAllToArray &count &array x
     member c.RemoveLast() =

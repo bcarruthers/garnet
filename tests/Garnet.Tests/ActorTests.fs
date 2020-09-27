@@ -21,13 +21,13 @@ module ActorFactory =
 
 type Inbox() =
     let dict = Dictionary<Type, obj>()
-    member c.OnAll<'a>(action : Envelope<Memory<'a>> -> unit) =
+    member c.OnAll<'a>(action : Envelope<ReadOnlyMemory<'a>> -> unit) =
         let t = typeof<'a>
         let combined =
             match dict.TryGetValue t with
             | false, _ -> action
             | true, existing -> 
-                let existing = existing :?> (Envelope<Memory<'a>> -> unit)
+                let existing = existing :?> (Envelope<ReadOnlyMemory<'a>> -> unit)
                 fun e -> 
                     existing e
                     action e        
@@ -35,7 +35,7 @@ type Inbox() =
     member c.TryReceive<'a> e =
         match dict.TryGetValue(typeof<'a>) with
         | true, x -> 
-            let handle = x :?> (Envelope<Memory<'a>> -> unit)
+            let handle = x :?> (Envelope<ReadOnlyMemory<'a>> -> unit)
             handle e
             true
         | false, _ -> false
@@ -92,7 +92,7 @@ let tests =
 
         testCase "send batch" <| fun () ->
             let results = sendReceiveMessages <| fun a ->
-                a.SendAll([| 1; 2; 3 |].AsSpan())
+                a.SendAll(ReadOnlyMemory([| 1; 2; 3 |]).Span)
             let r = List.head results
             r.sourceId |> shouldEqual (ActorId 0)
             r.destinationId |> shouldEqual (ActorId 1)
