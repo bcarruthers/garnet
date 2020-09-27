@@ -259,6 +259,8 @@ type Container() =
     member c.RegisterInstance x = reg.RegisterInstance x
     member c.TryGetInstance<'a>([<Out>] r : byref<_>) = 
         reg.TryGetInstance<'a>(&r)
+    member c.IterInstances(param, handler) =
+        reg.IterInstances(param, handler)
     member c.GetAddresses() =
         outbox.Current.addresses
     member internal c.Clear() =
@@ -329,6 +331,8 @@ type Container() =
         member c.RegisterInstance x = c.RegisterInstance x
         member c.TryGetInstance<'a>([<Out>] r : byref<_>) = 
             c.TryGetInstance<'a>(&r)
+        member c.IterInstances(param, handler) =
+            c.IterInstances(param, handler)
     interface IChannels with
         member c.GetChannel<'a>() = channels.GetChannel<'a>()
     interface IComponentStore<int, Eid> with

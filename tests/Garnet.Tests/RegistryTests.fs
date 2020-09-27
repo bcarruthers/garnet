@@ -31,4 +31,13 @@ let tests =
             r.RegisterInstance 11
             r.Register(fun () -> 10)
             r.GetInstance<int>() |> shouldEqual 11
+
+        testCase "copy registry" <| fun () ->
+            let r = Registry()
+            r.RegisterInstance 10
+            r.RegisterInstance "a"
+            let r2 = Registry()
+            r.CopyTo(r2)
+            r2.GetInstance<int>() |> shouldEqual 10
+            r2.GetInstance<string>() |> shouldEqual "a"
     ]
