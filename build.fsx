@@ -143,7 +143,7 @@ Target.create "Default" (fun _ ->
     ==> "BuildSamples"
     ==> "BuildBenchmarks"
     ==> "Tests"
-    ==> "Pack"
+    //==> "Pack"
     ==> "Default"
 
 Target.runOrDefault "Default"
