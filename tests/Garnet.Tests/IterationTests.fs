@@ -50,4 +50,23 @@ let tests =
             iterWhere 0
             r.Count |> shouldEqual 50            
 
+        testCase "add4" <| fun () ->
+            let c = Container()
+            let mutable count = 0
+            let add4 =
+                fun () struct(a : string, b : int, c : char, d : byte) -> 
+                    count <- count + 1
+                    1us
+                |> Join.add4
+                |> Join.over c
+            for i = 1 to 10 do
+                c.Create().With("").With(1).With('a').Add(1uy)
+            for i = 1 to 10 do
+                c.Create().With("").With(1).Add('a')
+            c.Commit()
+            add4()
+            count |> shouldEqual 10
+            c.Commit()
+            add4()
+            count |> shouldEqual 10
     ]

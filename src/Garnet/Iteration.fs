@@ -52,6 +52,14 @@ module Join =
                 m <- m >>> 1
                 i <- i + 1
 
+        let iter7 action param mask struct(s1 : _[], s2 : _[], s3 : _[], s4 : _[], s5 : _[], s6 : _[], s7 : _[]) =
+            let mutable m = mask
+            let mutable i = 0
+            while m <> 0UL do
+                if m &&& 1UL <> 0UL then action param struct(s1.[i], s2.[i], s3.[i], s4.[i], s5.[i], s6.[i], s7.[i])
+                m <- m >>> 1
+                i <- i + 1
+
         let update1 map param mask (s1 : _[]) =
             let mutable m = mask
             let mutable i = 0
@@ -335,7 +343,7 @@ module Join =
                 elif n3 < n1 || n3 < n2 || n3 < n4 || n3 < n5 || n3 < n6 then i3 <- i3 + 1
                 elif n4 < n1 || n4 < n2 || n4 < n3 || n4 < n5 || n4 < n6 then i4 <- i4 + 1
                 elif n5 < n1 || n5 < n2 || n5 < n3 || n5 < n4 || n5 < n6 then i5 <- i5 + 1
-                elif n6 < n1 || n6 < n2 || n6 < n3 || n6 < n4 || n6 < n5 then i5 <- i5 + 1
+                elif n6 < n1 || n6 < n2 || n6 < n3 || n6 < n4 || n6 < n5 then i6 <- i6 + 1
                 else
                     let mask = s1.mask &&& s2.mask &&& s3.mask &&& s4.mask &&& s5.mask &&& s6.mask
                     if mask <> 0UL then action param mask struct(s1.data, s2.data, s3.data, s4.data, s5.data, s6.data)
@@ -345,6 +353,54 @@ module Join =
                     i4 <- i4 + 1
                     i5 <- i5 + 1
                     i6 <- i6 + 1
+
+        let iter7 action struct(a, b, c, d, e, f, g) param =
+            let c1 = count a
+            let c2 = count b
+            let c3 = count c
+            let c4 = count d
+            let c5 = count e
+            let c6 = count f
+            let c7 = count g
+            let mutable i1 = 0
+            let mutable i2 = 0
+            let mutable i3 = 0
+            let mutable i4 = 0
+            let mutable i5 = 0
+            let mutable i6 = 0
+            let mutable i7 = 0
+            while i1 < c1 && i2 < c2 && i3 < c3 && i4 < c4 && i5 < c5 && i6 < c6 && i7 < c7 do
+                let s1 = get a i1
+                let s2 = get b i2
+                let s3 = get c i3
+                let s4 = get d i4
+                let s5 = get e i5
+                let s6 = get f i6
+                let s7 = get g i7
+                let n1 = s1.id
+                let n2 = s2.id
+                let n3 = s3.id
+                let n4 = s4.id
+                let n5 = s5.id
+                let n6 = s6.id
+                let n7 = s7.id
+                if   n1 < n2 || n1 < n3 || n1 < n4 || n1 < n5 || n1 < n6 || n1 < n7 then i1 <- i1 + 1
+                elif n2 < n1 || n2 < n3 || n2 < n4 || n2 < n5 || n2 < n6 || n2 < n7 then i2 <- i2 + 1
+                elif n3 < n1 || n3 < n2 || n3 < n4 || n3 < n5 || n3 < n6 || n3 < n7 then i3 <- i3 + 1
+                elif n4 < n1 || n4 < n2 || n4 < n3 || n4 < n5 || n4 < n6 || n4 < n7 then i4 <- i4 + 1
+                elif n5 < n1 || n5 < n2 || n5 < n3 || n5 < n4 || n5 < n6 || n5 < n7 then i5 <- i5 + 1
+                elif n6 < n1 || n6 < n2 || n6 < n3 || n6 < n4 || n6 < n5 || n6 < n7 then i6 <- i6 + 1
+                elif n7 < n1 || n7 < n2 || n7 < n3 || n7 < n4 || n7 < n5 || n7 < n6 then i7 <- i7 + 1
+                else
+                    let mask = s1.mask &&& s2.mask &&& s3.mask &&& s4.mask &&& s5.mask &&& s6.mask &&& s7.mask
+                    if mask <> 0UL then action param mask struct(s1.data, s2.data, s3.data, s4.data, s5.data, s6.data, s7.data)
+                    i1 <- i1 + 1
+                    i2 <- i2 + 1
+                    i3 <- i3 + 1
+                    i4 <- i4 + 1
+                    i5 <- i5 + 1
+                    i6 <- i6 + 1
+                    i7 <- i7 + 1
         
         let iterKey1 action a param =
             let ca = count a
@@ -394,6 +450,36 @@ module Join =
                     ib <- ib + 1
                     ic <- ic + 1
 
+        let iterKey4 action struct(a, b, c, d) param =
+            let ca = count a
+            let cb = count b
+            let cc = count c
+            let cd = count d
+            let mutable ia = 0
+            let mutable ib = 0
+            let mutable ic = 0
+            let mutable id = 0
+            while ia < ca && ib < cb && ic < cc && id < cd do
+                let sa = a.[ia]
+                let sb = b.[ib]
+                let sc = c.[ic]
+                let sd = d.[id]
+                let na = sa.id
+                let nb = sb.id
+                let nc = sc.id
+                let nd = sd.id
+                if   na < nb || na < nc || na < nd then ia <- ia + 1
+                elif nb < na || nb < nc || nb < nd then ib <- ib + 1
+                elif nc < na || nc < nb || nc < nd then ic <- ic + 1
+                elif nd < na || nd < nb || nd < nc then id <- id + 1
+                else
+                    let mask = sa.mask &&& sb.mask &&& sc.mask &&& sd.mask
+                    if mask <> 0UL then action param mask na struct(sa.data, sb.data, sc.data, sd.data)
+                    ia <- ia + 1
+                    ib <- ib + 1
+                    ic <- ic + 1
+                    id <- id + 1
+
         /// Creates components when present in A and missing from R
         let add1 action struct(r, a) param =
             let c1 = count a
@@ -410,7 +496,7 @@ module Join =
                     let addMask = mask &&& ~~~sr.mask
                     if addMask <> 0UL then
                         let data = r.Add(sid, addMask)
-                        action param mask struct(data, s1.data)
+                        action param addMask struct(data, s1.data)
 
         /// Creates components when present in A and B and missing from R
         let add2 action struct(r, a, b) param =
@@ -438,7 +524,7 @@ module Join =
                             let addMask = mask &&& ~~~sr.mask
                             if addMask <> 0UL then
                                 let data = r.Add(sid, addMask)
-                                action param mask struct(data, s1.data, s2.data)
+                                action param addMask struct(data, s1.data, s2.data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1            
     
@@ -473,7 +559,7 @@ module Join =
                             let addMask = mask &&& ~~~sr.mask
                             if addMask <> 0UL then
                                 let data = r.Add(sid, addMask)
-                                action param mask struct(data, s1.data, s2.data, s3.data)
+                                action param addMask struct(data, s1.data, s2.data, s3.data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
                     i3 <- i3 + 1
@@ -502,7 +588,7 @@ module Join =
                 elif n3 < n1 || n3 < n2 || n3 < n4 then i3 <- i3 + 1
                 elif n4 < n1 || n4 < n2 || n4 < n3 then i4 <- i4 + 1
                 else
-                    let mask = s1.mask &&& s2.mask &&& s3.mask
+                    let mask = s1.mask &&& s2.mask &&& s3.mask &&& s4.mask
                     if mask <> 0UL then 
                         let sid = s1.id
                         let ir = find r sid
@@ -514,7 +600,7 @@ module Join =
                             let addMask = mask &&& ~~~sr.mask
                             if addMask <> 0UL then
                                 let data = r.Add(sid, addMask)
-                                action param mask struct(data, s1.data, s2.data, s3.data, s4.data)
+                                action param addMask struct(data, s1.data, s2.data, s3.data, s4.data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
                     i3 <- i3 + 1
@@ -613,6 +699,7 @@ module Join =
         let get4 c = struct(get c, get c, get c, get c)
         let get5 c = struct(get c, get c, get c, get c, get c)
         let get6 c = struct(get c, get c, get c, get c, get c, get c)
+        let get7 c = struct(get c, get c, get c, get c, get c, get c, get c)
         
         let iter1 a c = get c |> Joins.iter1 a    
         let iter2 a c = get2 c |> Joins.iter2 a
@@ -620,10 +707,12 @@ module Join =
         let iter4 a c = get4 c |> Joins.iter4 a
         let iter5 a c = get5 c |> Joins.iter5 a
         let iter6 a c = get6 c |> Joins.iter6 a
+        let iter7 a c = get7 c |> Joins.iter7 a
 
         let iterKey1 a c = get c |> Joins.iterKey1 a    
         let iterKey2 a c = get2 c |> Joins.iterKey2 a
         let iterKey3 a c = get3 c |> Joins.iterKey3 a    
+        let iterKey4 a c = get4 c |> Joins.iterKey4 a    
 
         let add1 a c = get2 c |> Joins.add1 a
         let add2 a c = get3 c |> Joins.add2 a
@@ -641,6 +730,7 @@ module Join =
     let iter4 a = a |> Array.iter4 |> Segments.iter4
     let iter5 a = a |> Array.iter5 |> Segments.iter5
     let iter6 a = a |> Array.iter6 |> Segments.iter6
+    let iter7 a = a |> Array.iter7 |> Segments.iter7
 
     let add1 a = a |> Array.add1 |> Segments.add1
     let add2 a = a |> Array.add2 |> Segments.add2        
