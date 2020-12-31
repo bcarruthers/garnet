@@ -16,10 +16,13 @@
 .vscode/
 .ionide
 packages/
-paket-files/
 build/
 publish/
 artifacts/
 BenchmarkDotNet.Artifacts/
 bin
 obj
+
+#Paket dependency manager
+.paket/
+paket-files/

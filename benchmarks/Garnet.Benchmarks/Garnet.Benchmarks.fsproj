@@ -8,6 +8,7 @@
     <ProjectReference Include="..\..\src\Garnet\Garnet.fsproj" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="paket.references" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="ContainerBenchmarks.fs" />
     <Compile Include="ChannelBenchmarks.fs" />

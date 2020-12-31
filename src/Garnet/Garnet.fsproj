@@ -5,6 +5,7 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="paket.references" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="VisibleTo.fs" />
     <Compile Include="Comparisons.fs" />

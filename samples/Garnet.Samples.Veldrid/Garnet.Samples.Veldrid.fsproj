@@ -12,6 +12,7 @@
     <Content Include="Assets\texture-color.frag">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <None Include="paket.references" />
     <Compile Include="Canvas.fs" />
     <Compile Include="Shaders.fs" />
     <Compile Include="Meshes.fs" />

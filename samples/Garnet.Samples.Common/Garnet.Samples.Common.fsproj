@@ -1,10 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
-
   <ItemGroup>
     <Content Include="Assets\hex.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -15,6 +14,7 @@
     <Content Include="Assets\triangle.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <None Include="paket.references" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Comparisons.fs" />
     <Compile Include="Performance.fs" />
@@ -22,9 +22,8 @@
     <Compile Include="FrameworkTypes.fs" />
     <Compile Include="Flocking.fs" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\src\Garnet\Garnet.fsproj" />
   </ItemGroup>
-
+  <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

@@ -1,3 +1,6 @@
+dotnet tool restore
+dotnet paket restore
+
 SET TOOL_PATH=.fake
 
 IF NOT EXIST "%TOOL_PATH%\fake.exe" (
