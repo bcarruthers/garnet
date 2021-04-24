@@ -33,7 +33,7 @@ module WorldSystems =
             fun param (x : int) -> x + 1
             |> Join.update1
             |> Join.over c               
-        Disposable.list [
+        Disposable.Create [
             c.On<Update> <| fun e ->
                 update()
         ]
@@ -46,10 +46,10 @@ module WorldSystems =
     
     let registerCommon (c : Container) =
         // register systems common across all states here
-        Disposable.empty
+        Disposable.Null
 
     let register (c : Container) =
-        Disposable.list [
+        Disposable.Create [
             registerCommon c
             // register so that state is stored in a globals entity
             // and we start in inactive state

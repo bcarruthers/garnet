@@ -88,7 +88,7 @@ type Channel<'a>() =
         total <- total + events.Length
     member c.OnAll(handler : EventHandler<_>) =
         handlers.Add(handler)
-        Disposable.init (fun () -> unsubscribed.Add(handler))
+        Disposable.Create (fun () -> unsubscribed.Add(handler))
     /// Calls handler behaviors and prunes subscriptions after
     member c.Publish() =
         if events.Count = 0 then false
@@ -212,7 +212,7 @@ module Channels =
         /// until a commit event is received or an appropriate update event occurs.
         member c.BufferOnAll<'a>(buffer : IChannels, handler) =
             let channel = buffer.GetChannel<'a>()
-            Disposable.list [
+            Disposable.Create [
                 // when first channels receive events, write to buffer
                 // events will need to be published by a separate mechanism
                 c.OnAll<'a> channel.SendAll                    

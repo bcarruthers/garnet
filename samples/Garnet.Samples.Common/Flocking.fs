@@ -260,7 +260,7 @@ module Systems =
                     |> Heading.fromVelocity
                 |> Join.update5
                 |> Join.over c)
-            Disposable.list [
+            Disposable.Create [
                 c.On<Update> <| fun e ->
                     update.Value e
                 ]
@@ -316,17 +316,17 @@ module Systems =
 
         let registerDefaultSettings (c : Container) =
             c.Register <| fun () -> WorldSettings.settings
-            Disposable.empty
+            Disposable.Null
 
-        let definition =
-            Registration.listNamed "Core" [
-                registerReset
-                registerLifespan
-                registerUpdatePosition
-                registerUpdateRotation
-                registerTrailEmission
-                registerUpdateVehicleHeading
-                registerDefaultSettings
+        let register (c : Container) =
+            Disposable.Create [
+                registerReset c
+                registerLifespan c
+                registerUpdatePosition c
+                registerUpdateRotation c
+                registerTrailEmission c
+                registerUpdateVehicleHeading c
+                registerDefaultSettings c
                 ]
 
     module ViewSystems =
@@ -368,23 +368,23 @@ module Systems =
                 |> Join.iter5
                 |> Join.over c)
 
-        let definition =
-            Registration.listNamed "View" [
-                registerVehicleSprites
-                registerTrailSprites
+        let register (c : Container) =
+            Disposable.Create [
+                registerVehicleSprites c
+                registerTrailSprites c
                 ]
         
     let test() =
         let c = Container()    
-        CoreSystems.definition.register c |> ignore
+        CoreSystems.register c |> ignore
         c.RegisterInstance WorldSettings.settings//{ settings with vehicleCount = 10 }
         c.Run <| Reset()
         for i = 1 to 10 do
             c.Run <| { Update.deltaTime = 0.1f }
         c.Get(Eid 64).ToString()
 
-    let definition = 
-        Registration.combine [ 
-            CoreSystems.definition
-            ViewSystems.definition
+    let register (c : Container) =
+        Disposable.Create [
+            CoreSystems.register c
+            ViewSystems.register c
             ]

@@ -378,35 +378,23 @@ module ActorFactory =
         for f in factories do collection.Add f
         fun (id : ActorId) -> collection.Create id.value
 
-module Disposable =
-    type private Disposable(dispose) =
-        interface IDisposable with
-            member c.Dispose() = dispose()
+type internal DisposableCollection<'a when 'a :> IDisposable>(items : 'a[]) =
+    interface IDisposable with
+        member c.Dispose() =
+            for item in items do 
+                item.Dispose()
 
-    type private DisposableList(items : seq<IDisposable>) =
-        let list = List<_>(items)
-        new() = new DisposableList(Seq.empty)
-        member c.Add item =
-            list.Add item
-        member c.Remove item =
-            list.Remove item
-        interface IDisposable with
-            member c.Dispose() =
-                for item in list do 
-                    item.Dispose()
-
-    let init dispose = 
+type Disposable(dispose) =
+    static let mutable instance = new Disposable(ignore) :> IDisposable
+    static member Null = instance
+    interface IDisposable with
+        member c.Dispose() = dispose()
+    static member Create(dispose) =
         new Disposable(dispose) :> IDisposable
-
-    let list items =
-        new DisposableList(items |> Seq.map (fun x -> x :> IDisposable)) 
-        :> IDisposable
-
-    let empty =
-        init ignore
-
-    let combine systems =
-        fun c -> systems |> List.map (fun f -> f c) |> list
+    static member Create(items : IDisposable[]) =
+        new DisposableCollection<_>(items) :> IDisposable
+    static member Create(items : IDisposable list) =
+        Disposable.Create(items |> List.toArray)
 
 [<Struct>]
 type Addresses = {
@@ -451,7 +439,7 @@ type internal Outbox() =
     let popOutbox() = 
         popCount <- popCount + 1
         current <- outboxStack.Pop()
-    let scope = Disposable.init popOutbox
+    let scope = new Disposable(popOutbox)
     member c.Current = current
     /// Set temporary outbox for a scope such as handling incoming message
     member c.Push mail = 

@@ -18,8 +18,8 @@ type Health = {
 }
 
 module HashSpaceSystem =     
-    let definition =
-        Registration.listNamed "HashSpace" [
+    let register (c : Container) =
+        Disposable.Create [
             ]
 
 let c = Container()
@@ -43,11 +43,12 @@ module MovementSystem =
     let registerUpdate (c : Container) =
         c.On<UpdatePositions> <| fun e ->
             printfn "%A" e
+
     // combine all together
-    let definition =
+    let register (c : Container) =
         // give a name so we can hot reload
-        Registration.listNamed "Movement" [
-            registerUpdate
+        Disposable.Create [
+            registerUpdate c
             ]
 
 // Iterating over entities
@@ -73,10 +74,10 @@ let healthSub =
 // Composing systems
 
 module CoreSystems =        
-    let definition =
-        Registration.combine [
-            MovementSystem.definition
-            HashSpaceSystem.definition
+    let register (c : Container) =
+        Disposable.Create [
+            MovementSystem.register c
+            HashSpaceSystem.register c
         ]
 
 // Running stack-like coroutines

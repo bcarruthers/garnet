@@ -110,7 +110,7 @@ type WorldGrid() =
 module MapSystem =
     let register (c : Container) =
         let map = c.GetInstance<WorldGrid>()
-        Disposable.list [
+        Disposable.Create [
             c.On<Commit> <| fun e ->
                 map.Commit()
             c.On<ResetMap> <| fun e ->

@@ -14,7 +14,7 @@ type Resize = {
 module SpriteSystems =
     let registerFpsMonitor (c : Container) =
         let fps = c.GetInstance<FpsMonitor>()
-        Disposable.list [
+        Disposable.Create [
             c.On<Update> <| fun e ->
                 fps.Update()                
             ]
@@ -22,7 +22,7 @@ module SpriteSystems =
     let registerUpdateViewport (c : Container) =
         let canvas = c.GetInstance<Canvas>()
         let viewport = canvas.GetViewport(0)
-        Disposable.list [
+        Disposable.Create [
             c.On<Reset> <| fun e ->
                 viewport.View <- Matrix4x4.CreateScale(1.0f)
                 viewport.ClearColor <- Vector4(0.0f, 0.1f, 0.2f, 1.0f)
@@ -50,15 +50,15 @@ module SpriteSystems =
                 let color = Vector4(sprite.color.red, sprite.color.green, sprite.color.blue, sprite.color.alpha)
                 w.Write(p, Vector2.One * sprite.size * 120.0f, origin, sprite.radians, TextureBounds.zeroToOne, color)
 
-    let definition = 
-        Registration.list [ 
-            registerFpsMonitor
-            registerUpdateViewport
-            registerDrawSprites
+    let register (c : Container) =
+        Disposable.Create [
+            registerFpsMonitor c
+            registerUpdateViewport c
+            registerDrawSprites c
             ]
 
 module VeldridSystems =
-    let definition = 
-        Registration.combine [
-            SpriteSystems.definition
+    let register (c : Container) =
+        Disposable.Create [
+            SpriteSystems.register c
             ]

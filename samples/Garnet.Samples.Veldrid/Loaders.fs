@@ -50,7 +50,7 @@ type TextLoader() =
 module LoaderExtensions =
     type ResourceSet with
         member c.RegisterGraphics(device : GraphicsDevice) =
-            Disposable.list [
+            Disposable.Create [
                 c.Register<ShaderDescription>(".vert", ShaderLoader(ShaderStages.Vertex))
                 c.Register<ShaderDescription>(".tesc", ShaderLoader(ShaderStages.TessellationControl))
                 c.Register<ShaderDescription>(".tese", ShaderLoader(ShaderStages.TessellationEvaluation))

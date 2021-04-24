@@ -283,10 +283,10 @@ module MovementSystem =
             printfn "%A" e
 
     // combine all together
-    let definition =
+    let register (c : Container) =
         // give a name so we can hot reload
-        Registration.listNamed "Movement" [
-            registerUpdate
+        Disposable.Create [
+            registerUpdate c
             ]
 ```
 
@@ -407,10 +407,10 @@ Since systems are just named event subscriptions, you can compose them into larg
 
 ```fsharp
 module CoreSystems =        
-    let definition =
-        Registration.combine [
-            MovementSystem.definition
-            HashSpaceSystem.definition
+    let register (c : Container) =
+        Disposable.Create [
+            MovementSystem.register c
+            HashSpaceSystem.register c
         ]
 ```
 

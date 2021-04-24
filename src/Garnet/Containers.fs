@@ -435,7 +435,7 @@ type Container with
     /// for allowing a container to have multiple states with their own subscriptions
     /// and transition logic.
     member c.RegisterStateMachine<'a>(eid : Eid, initState, registerState) =
-        let state = new DisposableReference<IDisposable>(Disposable.empty)
+        let state = new DisposableReference<IDisposable>(Disposable.Null)
         let components = c.Get<'a>()
         let setState e =
             // store state as component 
@@ -446,7 +446,7 @@ type Container with
             // register subscriptions specific to it, replacing prior
             state.Set(fun () -> registerState e c)
         setState initState
-        Disposable.list [
+        Disposable.Create [
             // when state message arrives
             c.On<'a> setState
             state :> IDisposable
@@ -466,7 +466,7 @@ type Container with
 /// Allows container creation in actor thread instead of main thread
 type LazyContainerInbox(actorId, register) =
     let container = Container()
-    let mutable sub = Disposable.empty
+    let mutable sub = Disposable.Null
     let mutable isCreated = false
     interface IInbox with
         member c.Receive(e) =

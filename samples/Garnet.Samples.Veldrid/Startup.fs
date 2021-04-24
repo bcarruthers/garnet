@@ -49,9 +49,7 @@ type WindowController(device, window : Sdl2Window, root : IRenderer) =
 module Window =
     let run title (assetPath : string) (c : Container) =
         // Register event handlers
-        VeldridSystems.definition 
-        |> Registration.registerTo c 
-        |> ignore
+        VeldridSystems.register c |> ignore
         // Create device resources.
         let windowCI = 
             WindowCreateInfo(

@@ -4,9 +4,6 @@ open Garnet.Samples.Veldrid
 
 [<EntryPoint>]
 let main argv =
-    let c = Container()
-    Flocking.Systems.definition 
-    |> Registration.registerTo c 
-    |> ignore
+    let c = Container.Create(Flocking.Systems.register)
     Window.run "Flocking" "assets" c
     0
