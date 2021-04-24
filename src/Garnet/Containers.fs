@@ -223,7 +223,7 @@ type EidPool(partition) =
                     let u = used.[i]
                     if k ||| u <> 0UL then
                         yield sprintf "%d %s" i (formatBits k u)
-                } |> formatSegments ("    "))
+                } |> listToString "    " "")
 
 type EidPools() =
     let pools = Array.init Eid.partitionCount EidPool
