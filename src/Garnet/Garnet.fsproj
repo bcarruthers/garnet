@@ -21,6 +21,7 @@
     <Compile Include="Coroutines.fs" />
     <Compile Include="Channels.fs" />
     <Compile Include="Containers.fs" />
+    <Compile Include="Events.fs" />
     <Compile Include="Actors.fs" />
     <Compile Include="Resources.fs" />
   </ItemGroup>

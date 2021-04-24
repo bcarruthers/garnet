@@ -1,6 +1,7 @@
 ﻿namespace Garnet
 
 open System
+open System.Buffers
 
 module Buffer =
     let private log2 x =
@@ -34,19 +35,44 @@ module Buffer =
         let dest = Span(arr, destOffset, src.Length)
         src.CopyTo(dest)
 
+/// Similar to ArrayBufferWriter, but provides additional read/write access to 
+/// the underlying array.
 type internal ResizableBuffer<'a>(capacity) =
-    let mutable array = Array.zeroCreate<'a> capacity
-    let mutable count = 0
+    let mutable buffer = Array.zeroCreate<'a> capacity
+    let mutable pos = 0
     member c.Item 
-        with get i = array.[i]
-        and set i x = array.[i] <- x
-    member c.Array = array
-    member c.Count = count
-    member c.Capacity = array.Length
-    member c.Buffer = ReadOnlyMemory(array, 0, count)
-    member c.Add x = Buffer.addToArray &count &array x
-    member c.AddAll x = Buffer.addAllToArray &count &array x
+        with get i = buffer.[i]
+        and set i x = buffer.[i] <- x
+    member c.WrittenCount = pos
+    member c.WrittenSpan =
+        ReadOnlySpan(buffer, 0, pos)
+    member c.WrittenMemory =
+        ReadOnlyMemory(buffer, 0, pos)
+    member c.GetMemory(count) =
+        // note min allocation in case count is zero
+        let required = pos + max count 8
+        Buffer.resizeArray required &buffer
+        buffer.AsMemory().Slice(pos)
+    member c.GetSpan(count) =
+        c.GetMemory(count).Span
+    member c.Advance(count) = 
+        if count < 0 then failwithf "Cannot advance a negative value: %d" count
+        pos <- pos + count
+    member c.WriteValue(value) =
+        if pos >= buffer.Length then
+            Buffer.resizeArray (pos + 1) &buffer
+        buffer.[pos] <- value
+        pos <- pos + 1
     member c.RemoveLast() =
-        count <- count - 1
-    member c.Clear() = count <- 0
+        pos <- pos - 1
+    member c.Clear() =
+        Array.Clear(buffer, 0, buffer.Length)
+        pos <- 0
+    interface IBufferWriter<'a> with
+        member c.GetSpan(count) =
+            c.GetSpan(count)
+        member c.GetMemory(count) =
+            c.GetMemory(count)
+        member c.Advance(count) = 
+            c.Advance(count)        
     

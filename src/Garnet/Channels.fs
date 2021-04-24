@@ -1,6 +1,7 @@
 ﻿namespace Garnet.Composition
 
 open System
+open System.Buffers
 open System.Collections.Generic
 open System.Text
 open Garnet
@@ -8,17 +9,8 @@ open Garnet.Comparisons
 open Garnet.Formatting
 open Garnet.Metrics
 
-type Start = struct end    
-type Stop = struct end    
-
 /// Event published when commit occurs    
 type Commit = struct end
-
-[<Struct>]
-type Update = {
-    currentTime : int64
-    deltaTime : int64
-    }
 
 type internal EventHandler<'a> = ReadOnlyMemory<'a> -> unit
 
@@ -66,45 +58,56 @@ type Channel<'a>() =
     member c.Clear() =
         stack.Clear()
         pending.Clear()
-    member c.SetPublisher p =
-        publisher <- p
+    member c.SetPublisher(newPublisher) =
+        publisher <- newPublisher
     member c.PublishAll(batch : ReadOnlyMemory<'a>) =
         match publisher with 
-        | ValueNone -> Publisher.publishAll batch handlers.Buffer.Span
-        | ValueSome publisher -> publisher.PublishAll(batch, handlers.Buffer)
+        | ValueNone -> Publisher.publishAll batch handlers.WrittenSpan
+        | ValueSome publisher -> publisher.PublishAll(batch, handlers.WrittenMemory)
     /// Dispatches event immediately/synchronously
-    member c.Publish event =
-        stack.Add event
+    member c.Publish(event) =
+        stack.WriteValue(event)
         try
-            let mem = ReadOnlyMemory(stack.Array, stack.Count - 1, 1)
-            c.PublishAll mem
+            let mem = stack.WrittenMemory.Slice(stack.WrittenCount - 1, 1)
+            c.PublishAll(mem)
         finally
             stack.RemoveLast()
     member c.Send(event) =
-        pending.Add(event)
+        pending.WriteValue(event)
         total <- total + 1
     member c.SendAll(events : ReadOnlyMemory<_>) =
-        pending.AddAll(events.Span)
+        pending.Write(events.Span)
         total <- total + events.Length
+    member c.Advance(count) =
+        pending.Advance(count)
+        total <- total + count
+    member c.GetMemory(sizeHint) =
+        pending.GetMemory(sizeHint)
+    member c.GetSpan(sizeHint) =
+        pending.GetSpan(sizeHint)
+    interface IBufferWriter<'a> with
+        member c.Advance(count) = c.Advance(count)
+        member c.GetMemory(sizeHint) = c.GetMemory(sizeHint)
+        member c.GetSpan(sizeHint) = c.GetSpan(sizeHint)
     member c.OnAll(handler : EventHandler<_>) =
-        handlers.Add(handler)
-        Disposable.Create (fun () -> unsubscribed.Add(handler))
+        handlers.WriteValue(handler)
+        Disposable.Create(fun () -> unsubscribed.Add(handler))
     /// Calls handler behaviors and prunes subscriptions after
     member c.Publish() =
-        if events.Count = 0 then false
+        if events.WrittenCount = 0 then false
         else
-            c.PublishAll events.Buffer
+            c.PublishAll(events.WrittenMemory)
             true
     /// Commit pending events to publish list and resets
     member c.Commit() =
         if unsubscribed.Count > 0 then
             let mutable i = 0
-            while i < handlers.Count do
+            while i < handlers.WrittenCount do
                 // only remove one occurrence
                 if unsubscribed.Remove handlers.[i] then
                     // note ordering changes, but subscribers of the same
                     // event type should not have any ordering dependencies
-                    handlers.[i] <- handlers.[handlers.Count - 1]
+                    handlers.[i] <- handlers.[handlers.WrittenCount - 1]
                     handlers.RemoveLast()
                 else i <- i + 1
             unsubscribed.Clear()
@@ -117,10 +120,10 @@ type Channel<'a>() =
         member c.Clear() = c.Clear()
         member c.Publish() = c.Publish()
         member c.Commit() = c.Commit()
-        member c.SetPublisher p = c.SetPublisher p
+        member c.SetPublisher(p) = c.SetPublisher(p)
     override c.ToString() =            
         sprintf "%s: %dH %dP %dE %dT %dSE" (typeof<'a> |> typeToString) 
-            handlers.Count pending.Count events.Count total stack.Count
+            handlers.WrittenCount pending.WrittenCount events.WrittenCount total stack.WrittenCount
 
 type IChannels =
     abstract member GetChannel<'a> : unit -> Channel<'a>
@@ -189,23 +192,23 @@ module Channels =
             c.GetChannel<'a>().Send
 
         member c.Send(msg) =
-            c.GetChannel<'a>().Send msg
+            c.GetChannel<'a>().Send(msg)
 
         member c.OnAll<'a>(handler) =
             c.GetChannel<'a>().OnAll(handler)
 
         member c.Publish<'a>(event : 'a) =
-            c.GetChannel<'a>().Publish event
+            c.GetChannel<'a>().Publish(event)
 
         member c.OnAll<'a>() =
             c.GetChannel<'a>().OnAll
 
-        member c.On<'a>(handler) =
+        member c.On<'a>(handle) =
             c.GetChannel<'a>().OnAll(
                 fun batch -> 
                     let span = batch.Span
                     for i = 0 to span.Length - 1 do
-                        handler span.[i])
+                        handle span.[i])
 
         /// Buffers incoming events in a second set of channels and subscribes
         /// handler to the buffered channel. THis is useful for holding events
@@ -235,7 +238,7 @@ module Channels =
 
     type IChannels with    
         member c.Wait(msg) =
-            c.GetChannel<'a>().Wait msg
+            c.GetChannel<'a>().Wait(msg)
 
 type internal NullPublisher() =
     static let mutable instance = NullPublisher() :> IPublisher
