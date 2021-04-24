@@ -198,7 +198,7 @@ module internal Streaming =
             member c.Start (header : MessageHeader) (outbox : IOutbox) =
                 writer <- outbox.BeginSend<'a>()
                 writer.SetSource header.sourceId
-                writer.AddRecipient header.destinationId
+                writer.AddDestination header.destinationId
             member c.Read stream =
                 let msg = serializer.Read stream
                 writer.WriteValue msg
@@ -216,8 +216,8 @@ module internal Streaming =
         interface IMessageWriter<'a> with
             member c.SetSource id =
                 logWriter.SetSource id
-            member c.AddRecipient id =
-                logWriter.AddRecipient id
+            member c.AddDestination id =
+                logWriter.AddDestination id
             member c.Advance count =
                 logWriter.Advance count
             member c.GetMemory minSize =
@@ -232,7 +232,7 @@ module internal Streaming =
                         logger.Receive { 
                             outbox = nullOutbox
                             sourceId = logWriter.SourceId
-                            destinationId = id
+                            destinationId = id.destinationId
                             message = logWriter.Memory
                             }
                 logWriter.CopyTo(baseWriter)

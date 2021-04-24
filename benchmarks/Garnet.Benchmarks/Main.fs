@@ -1,11 +1,12 @@
 ﻿module Garnet.Benchmarks.Program
 
+open BenchmarkDotNet.Jobs
 open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
 open Garnet.Composition
 open Garnet.Benchmarks
 
-[<CoreJob>]
+[<SimpleJob(RuntimeMoniker.CoreRt50)>]
 type SegmentStorageBenchmark() =
     let c = Container()
     [<Params(10000)>]
@@ -24,7 +25,7 @@ type SegmentStorageBenchmark() =
         c.DestroyAll()
         c.Commit()            
 
-[<CoreJob>]
+[<SimpleJob(RuntimeMoniker.CoreRt50)>]
 type IterationBenchmark() =
     let c = Container()
     [<Params(100000)>]

@@ -1,5 +1,6 @@
 ﻿module Garnet.Benchmarks.Actors
 
+open BenchmarkDotNet.Jobs
 open BenchmarkDotNet.Attributes
 open System.Collections.Generic
 open System.Diagnostics
@@ -152,7 +153,7 @@ type Run = struct end
 type Ping = struct end
 type Pong = struct end
 
-[<CoreJob>]
+[<SimpleJob(RuntimeMoniker.CoreRt50)>]
 type SimplePingPongBenchmark() =
     let a = new ActorSystem(0)
     let mutable count = 0

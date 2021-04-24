@@ -9,7 +9,7 @@ open Garnet
 open Garnet.Formatting
 
 [<AutoOpen>]
-module internal Sending =           
+module internal Sending =       
     type internal IOutboxSender =
         abstract member Send<'a> : Message<'a> -> unit
 
@@ -24,14 +24,14 @@ module internal Sending =
     // only one thread clears.
     and internal Message<'a>() =
         let mutable buffer = Array.zeroCreate<'a> 1
-        let mutable recipients = Array.zeroCreate<int> 1
+        let mutable recipients = Array.zeroCreate<Destination> 1
         let mutable bufferLength = 0
         let mutable recipientCount = 0
         let mutable receiveCount = 0
         let mutable sourceId = ActorId.undefined
         member c.SourceId = sourceId
         member c.Buffer = ReadOnlyMemory(buffer, 0, bufferLength)
-        member c.Recipients = ReadOnlyMemory(recipients, 0, recipientCount)
+        member c.Destinations = ReadOnlyMemory(recipients, 0, recipientCount)
         member val Sender = NullOutboxSender.Instance with get, set
         member val Recycle : Action<Message<'a>> = null with get, set
         member val OriginPool : obj = null with get, set
@@ -51,18 +51,18 @@ module internal Sending =
             bufferLength <- 0
             recipientCount <- 0
         interface IMessageWriter<'a> with
-            member c.SetSource id = 
+            member c.SetSource(id) = 
                 sourceId <- id
-            member c.AddRecipient x =
-                Buffer.addToArray &recipientCount &recipients x.value
-            member c.Advance count =
+            member c.AddDestination(x) =
+                Buffer.addToArray &recipientCount &recipients x
+            member c.Advance(count) =
                 bufferLength <- bufferLength + count
-            member c.GetMemory minSize =
+            member c.GetMemory(minSize) =
                 let required = bufferLength + max 1 minSize
                 if buffer.Length < required then
                     Buffer.resizeArray required &buffer
                 Memory(buffer, bufferLength, buffer.Length - bufferLength)
-            member c.GetSpan minSize =
+            member c.GetSpan(minSize) =
                 let required = bufferLength + max 1 minSize
                 if buffer.Length < required then
                     Buffer.resizeArray required &buffer
@@ -455,11 +455,11 @@ module internal Dispatchers =
                 actors.Add(destId, actor)
                 actor
         member c.Send<'a>(message : Message<'a>) =
-            // Avoiding foreach since recipients will be cleared.
-            let recipients = message.Recipients.Span
-            for i = 0 to recipients.Length - 1 do
-                let recipientId = recipients.[i]
-                queue.Enqueue(c.Get(recipientId), recipientId, message)
+            // Avoiding foreach since recipients will be cleared on last iteration.
+            let destinations = message.Destinations.Span
+            for i = 0 to destinations.Length - 1 do
+                let dest = destinations.[i]
+                queue.Enqueue(c.Get(dest.recipientId.value), dest.destinationId.value, message)
         interface IOutboxSender with
             member c.Send<'a>(message) =
                 c.Send<'a> message
@@ -480,13 +480,13 @@ module internal Dispatchers =
         interface IOutboxSender with
             member c.Send<'a>(message : Message<'a>) =
                 // Avoiding foreach since recipients will be cleared.
-                let recipients = message.Recipients.Span
+                let destinations = message.Destinations.Span
                 let sourceId = message.SourceId.value
-                for i = 0 to recipients.Length - 1 do
-                    let recipientId = recipients.[i]
+                for i = 0 to destinations.Length - 1 do
+                    let dest = destinations.[i]
                     // Using shared map here
-                    let actor = actors.GetProcessor(recipientId)
-                    match actor.Enqueue<'a>(sourceId, recipientId, message) with
+                    let actor = actors.GetProcessor(dest.recipientId.value)
+                    match actor.Enqueue<'a>(sourceId, dest.destinationId.value, message) with
                     | ValueSome dispatcher -> dispatcher.Enqueue(actor)
                     | ValueNone -> ()
 
@@ -892,7 +892,7 @@ module ActorSystem =
                 
     type ActorReference with
         member c.BeginSend<'a>() =
-            c.pump.BeginSend c.actorId
+            c.pump.BeginSend(c.actorId)
 
         member c.Send(msg) =
             c.pump.Send(c.actorId, msg)
