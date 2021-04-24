@@ -1,12 +1,17 @@
 ﻿namespace Garnet.Resources
 
 open System
+open System.Diagnostics
 open System.Collections.Generic
 open System.IO
+open System.IO.Compression
+open System.Text
 open System.Threading
 
-type IStreamSource =
+type IFolder =
+    inherit IDisposable
     abstract GetFiles : unit -> string seq
+    abstract Contains : string -> bool
     abstract OpenRead : string -> Stream
     abstract OpenWrite : string -> Stream
     abstract FlushChanged : Action<string> -> unit
@@ -50,8 +55,10 @@ type private ResourceInvalidationSet() =
         Monitor.Exit sync
 
 /// Thread-safe
-type FileStreamSource(rootDir, delay) =
-    let rootDir = Path.GetFullPath rootDir
+type FileFolder(rootDir, delay) =
+    let rootDir = 
+        let path = if String.IsNullOrEmpty(rootDir) then Directory.GetCurrentDirectory() else rootDir
+        Path.GetFullPath(path)
     let changedSet = ResourceInvalidationSet()
     let handler =
         FileSystemEventHandler(fun s e ->              
@@ -61,8 +68,9 @@ type FileStreamSource(rootDir, delay) =
     let disposeWatcher = 
         if delay = Int32.MaxValue then ignore
         else
-            if not (Directory.Exists rootDir) then
-                failwithf "Could not find directory '%s'" rootDir
+            Directory.CreateDirectory(rootDir) |> ignore
+            //if not (Directory.Exists rootDir) then
+            //    failwithf "Could not find directory '%s'" rootDir
             let watcher = 
                 new FileSystemWatcher(
                     Path = rootDir,
@@ -81,43 +89,50 @@ type FileStreamSource(rootDir, delay) =
             else 
                 Thread.Sleep delay
                 openFile path (delay * 2) (retryCount - 1)
-    let getFullPath file =
+    let getFullPath (file : string) =
         if Path.IsPathRooted(file) then file
         else Path.Combine(rootDir, file)
-    new(rootDir) = new FileStreamSource(rootDir, 50)
-    new() = new FileStreamSource("")
+    new(rootDir) = new FileFolder(rootDir, 50)
+    new() = new FileFolder("")
     member c.GetFiles() =
-        if Directory.Exists rootDir 
+        c.GetFiles(".", "*.*")
+    member c.GetFiles(dir, searchPattern) =
+        let subDir = Path.Combine(rootDir, dir)
+        if Directory.Exists subDir 
         then 
-            Directory.EnumerateFiles(rootDir, "*.*")
+            Directory.EnumerateFiles(subDir, searchPattern)
             |> Seq.map (fun file -> 
                 let fullPath = Path.GetFullPath file
                 ResourcePath.getRelativePath rootDir fullPath)
         else Seq.empty
-    member c.OpenRead file =
+    member c.Contains(file) = 
+        let path = getFullPath file
+        File.Exists(path)
+    member c.OpenRead(file) =
         let path = getFullPath file
         openFile path 1 5 :> Stream
-    member c.OpenWrite file =
+    member c.OpenWrite(file) =
         let path = getFullPath file
         let dir = Path.GetDirectoryName path
         Directory.CreateDirectory dir |> ignore
-        File.OpenWrite path :> Stream
-    member c.FlushChanged (action : Action<string>) =
+        File.OpenWrite(path) :> Stream
+    member c.FlushChanged(action : Action<string>) =
         let maxTimestamp = DateTime.UtcNow - TimeSpan.FromMilliseconds(float delay)
         changedSet.FlushChanged(maxTimestamp, action)
     member c.Dispose() =
         disposeWatcher()
-    interface IStreamSource with
+    interface IFolder with
         member c.GetFiles() = c.GetFiles()
-        member c.OpenRead file = c.OpenRead file
-        member c.OpenWrite file = c.OpenWrite file
-        member c.FlushChanged action = c.FlushChanged action
+        member c.Contains(file) = c.Contains(file)
+        member c.OpenRead(file) = c.OpenRead(file)
+        member c.OpenWrite(file) = c.OpenWrite(file)
+        member c.FlushChanged(action) = c.FlushChanged(action)
     interface IDisposable with
         member c.Dispose() =
             c.Dispose()
 
 /// Note Dispose() is absent
-type private NonDisposingStream(stream : Stream, onClose) =
+type NonDisposingStream(stream : Stream, onClose) =
     inherit Stream()
     override c.Position
         with get() = stream.Position
@@ -141,24 +156,38 @@ type private NonDisposingStream(stream : Stream, onClose) =
 /// Stream lookup is thread-safe, but reading/writing is not
 type MemoryStreamLookup<'k when 'k : equality>() =
     let updated = List<'k>()
-    let logs = Dictionary<'k, MemoryStream>()
+    let streams = Dictionary<'k, MemoryStream>()
     let sync = obj()
-    member private c.Open (id : 'k) =
-        lock sync <| fun () ->
-            match logs.TryGetValue id with
-            | true, x -> x
-            | false, _ ->            
-                raise (FileNotFoundException(sprintf "Could not find %A" id, id.ToString()))
     member c.OpenWrite (id : 'k) =
-        new NonDisposingStream(c.Open id, fun () -> updated.Add id) :> Stream
+        let ms = 
+            lock sync <| fun () ->
+                match streams.TryGetValue id with
+                | true, x -> x
+                | false, _ -> 
+                    let ms = new MemoryStream()
+                    streams.Add(id, ms)
+                    ms
+        new NonDisposingStream(ms, fun () -> updated.Add id) :> Stream
     member c.GetKeys() =
         lock sync <| fun () ->
-            logs.Keys |> Seq.cache
-    member c.OpenRead (id : 'k) =
-        let ms = c.Open id
-        let length = int ms.Length
-        let buffer = ms.GetBuffer()
-        new MemoryStream(buffer, 0, length, false) :> Stream 
+            streams.Keys |> Seq.cache
+    member c.Contains(key) =
+        lock sync <| fun () ->
+            streams.ContainsKey(key)
+    member c.TryOpenRead(id) =
+        lock sync <| fun () ->
+            match streams.TryGetValue id with
+            | true, x -> ValueSome x
+            | false, _ -> ValueNone
+        |> ValueOption.map (fun ms ->
+            let length = int ms.Length
+            let buffer = ms.GetBuffer()
+            new MemoryStream(buffer, 0, length, false) :> Stream)
+    member c.OpenRead(id : 'k) =
+        match c.TryOpenRead(id) with
+        | ValueSome x -> x
+        | ValueNone ->
+            raise (FileNotFoundException(sprintf "Could not find %A" id, id.ToString()))
     member c.FlushChanged (action : Action<'k>) =
         let count = updated.Count
         for i = 0 to count - 1 do
@@ -167,32 +196,95 @@ type MemoryStreamLookup<'k when 'k : equality>() =
         updated.RemoveRange(0, count)
     override c.ToString() =
         String.Join("\n",
-            logs |> Seq.map (fun kvp ->
+            streams |> Seq.map (fun kvp ->
                 sprintf "%A: %d" kvp.Key kvp.Value.Length))
 
-type MemoryStreamSource() =
+type MemoryFolder() =
     let lookup = MemoryStreamLookup<string>()
-    interface IStreamSource with
+    interface IFolder with
         member c.GetFiles() =
             lookup.GetKeys()
-        member c.OpenRead file =
-            lookup.OpenRead file
-        member c.OpenWrite file =
-            lookup.OpenWrite file
-        member c.FlushChanged (action : Action<string>) =
-            lookup.FlushChanged action
+        member c.Contains(file) =
+            lookup.Contains(file)
+        member c.OpenRead(file) =
+            lookup.OpenRead(file)
+        member c.OpenWrite(file) =
+            lookup.OpenWrite(file)
+        member c.FlushChanged(action : Action<string>) =
+            lookup.FlushChanged(action)
+        member c.Dispose() =
+            ()
+    override c.ToString() =
+        lookup.ToString()
+
+type GZipStreamSource(streams : IFolder) =
+    interface IFolder with
+        member c.GetFiles() =
+            streams.GetFiles()
+        member c.Contains(file) =
+            streams.Contains(file)
+        member c.OpenRead(file) =
+            new GZipStream(streams.OpenRead file, CompressionMode.Decompress, false)
+            :> Stream
+        member c.OpenWrite(file) =
+            new GZipStream(streams.OpenWrite file, CompressionLevel.Optimal, false)
+            :> Stream
+        member c.FlushChanged(action : Action<string>) =
+            streams.FlushChanged(action)
+        member c.Dispose() =
+            streams.Dispose()
+    override c.ToString() =
+        streams.ToString()
+
+type IStreamSource =
+    abstract TryOpen : string -> ValueOption<Stream>
+
+type private Disposable(onDispose) =
+    interface IDisposable with
+        member c.Dispose() =
+            onDispose()
+
+type FolderCollection() =
+    let sources = List<IFolder>()
+    member c.AddSource(source) =
+        sources.Add(source)
+        new Disposable(fun () -> sources.Remove(source) |> ignore) :> IDisposable
+    member c.InvalidateChanged(invalidate) =
+        for source in sources do
+            source.FlushChanged(invalidate)
+    interface IStreamSource with
+        member c.TryOpen(key) =
+            let mutable result = ValueNone
+            let mutable i = 0
+            while result = ValueNone && i < sources.Count do
+                if sources.[i].Contains(key) then
+                    result <- ValueSome (sources.[i].OpenRead(key))
+                i <- i + 1
+            result
+
+[<AutoOpen>]
+module FileFolder =
+    type IStreamSource with
+        member c.Open(key) =
+            match c.TryOpen(key) with
+            | ValueNone -> failwithf "Could not open %s" key
+            | ValueSome x -> x
 
 type IResourceLoader<'a> =
-    abstract Load : Stream -> 'a
+    abstract Load : string * IStreamSource -> 'a
     abstract Dispose : 'a -> unit
 
 type ResourceLoader() =
     let loaders = Dictionary<struct(string * Type), obj>()
     member private c.GetKey<'a> format =
         struct(format, typeof<'a>)
+    member private c.Unregister<'a>(format) =
+        let key = c.GetKey<'a> format
+        loaders.Remove(key) |> ignore
     member c.Register<'a>(format, loader : IResourceLoader<'a>) =
         let key = c.GetKey<'a> format
         loaders.[key] <- loader
+        new Disposable(fun () -> c.Unregister<'a>(format)) :> IDisposable
     member c.GetLoader<'a>(format : string) =
         let key = c.GetKey<'a> format
         match loaders.TryGetValue key with
@@ -205,12 +297,16 @@ type ResourceLoader() =
 
 type ResourceLoader<'a>(load) =
     interface IResourceLoader<'a> with
-        member c.Load stream = load stream
+        member c.Load(key, source) = 
+            use stream = source.Open(key)
+            load stream
         member c.Dispose resource = ()
 
 type DisposableLoader<'a when 'a :> IDisposable>(load) =
     interface IResourceLoader<'a> with
-        member c.Load stream = load stream
+        member c.Load(key, source) = 
+            use stream = source.Open(key)
+            load stream
         member c.Dispose resource = resource.Dispose()
 
 type IResource =
@@ -227,19 +323,22 @@ type private Subscription<'a>(subs : List<'a>, item : 'a) =
         member c.Dispose() =
             subs.Remove item |> ignore
 
-type Resource<'a>(load, dispose) =
+type Resource<'a>(load, dispose, name) =
+    let mutable loadDuration = 0L
     let mutable loaded : 'a voption = ValueNone
     let subs = List<unit -> unit>()
     let tempSubs = List<unit -> unit>()
+    new(load, dispose) =
+        new Resource<'a>(load, dispose, "")
     /// Immediately calls action and subscribes to further changes.
-    member c.Subscribe action =
-        subs.Add action
+    member c.Subscribe(action) =
+        subs.Add(action)
         new Subscription<_>(subs, action) :> IDisposable      
     member c.Invalidate() =
         c.Dispose()
         // Copy list to avoid problems if modified during invalidation.
         for sub in subs do
-            tempSubs.Add sub
+            tempSubs.Add(sub)
         for sub in tempSubs do
             sub()
         tempSubs.Clear()
@@ -253,7 +352,10 @@ type Resource<'a>(load, dispose) =
         match loaded with
         | ValueSome x -> x
         | ValueNone ->
+            let start = Stopwatch.GetTimestamp()
             let x = load()
+            let stop = Stopwatch.GetTimestamp()
+            loadDuration <- stop - start
             loaded <- ValueSome x
             x
     interface IResource<'a> with
@@ -266,7 +368,9 @@ type Resource<'a>(load, dispose) =
         member c.Dispose() =
             c.Dispose()
     override c.ToString() =
-        sprintf "%s %A" typeof<'a>.Name loaded
+        let duration = loadDuration * 1000L / Stopwatch.Frequency
+        let loadStr = if loaded.IsSome then sprintf "loaded in %A ms" duration else "unloaded"
+        sprintf "%s (%s) %s" name typeof<'a>.Name loadStr
 
 type IResourceSet =
     abstract GetResource<'a> : string -> 'a
@@ -274,24 +378,15 @@ type IResourceSet =
 type ResourceSet() =
     let loader = ResourceLoader()
     let resources = Dictionary<string, IResource>()
-    let sources = List<IStreamSource>()
+    let streamSource = FolderCollection()
     let invalidate = 
         Action<_>(fun key ->
             let key = ResourcePath.getCanonical key
             match resources.TryGetValue key with
             | true, resource -> resource.Invalidate()
             | false, _ -> ())//printfn "%s not found" key)
-    member private c.Open key =
-        let mutable result = ValueNone
-        let mutable i = 0
-        while result = ValueNone && i < sources.Count do
-            result <- ValueSome (sources.[i].OpenRead key)
-            i <- i + 1
-        match result with
-        | ValueNone -> failwithf "Could not open %s" key
-        | ValueSome x -> x
-    member c.AddSource source =
-        sources.Add source
+    member c.AddSource(source) =
+        streamSource.AddSource(source)
     member c.Register(format : string, typeLoader) =
         loader.Register(format.ToLowerInvariant(), typeLoader)
     member c.AddResource<'a>(key, resource) =
@@ -302,36 +397,40 @@ type ResourceSet() =
         | false, _ -> ()
         // replace with new
         resources.[key] <- resource
-    member c.GetResource<'a> key =
-        let key = ResourcePath.getCanonical key
-        match resources.TryGetValue key with
+    member c.GetResource<'a>(originalKey) =
+        let key = ResourcePath.getCanonical originalKey
+        match resources.TryGetValue(key) with
         | true, resource -> resource :?> Resource<'a>
         | false, _ ->
             let format = Path.GetExtension(key)
             let load = 
                 fun _ -> 
                     let loader = loader.GetLoader<'a>(format)
-                    use stream = c.Open(key)
-                    loader.Load stream
+                    loader.Load(key, streamSource)
             let dispose =
                 fun resource ->
                     let loader = loader.GetLoader<'a>(format)
-                    loader.Dispose resource
-            let resource = new Resource<'a>(load, dispose)
+                    loader.Dispose(resource)
+            let resource = new Resource<'a>(load, dispose, originalKey)
             resources.Add(key, resource)
             resource
     member c.LoadResource<'a> key =
         c.GetResource<'a>(key).Load()
     member c.InvalidateChanged() =
-        for source in sources do
-            source.FlushChanged invalidate
+        streamSource.InvalidateChanged(invalidate)
     member c.Dispose() =
         for resource in resources.Values do
             resource.Dispose()
     interface IDisposable with
         member c.Dispose() =
             c.Dispose()
-
+    override c.ToString() =
+        let sb = StringBuilder()
+        sb.Append(sprintf "Resources (%d):" resources.Count) |> ignore
+        for r in resources.Values do
+            sb.AppendLine().Append("  " + r.ToString()) |> ignore
+        sb.ToString()
+            
 [<AutoOpen>]
 module private Resource =
     let load (r : Resource<_>) = r.Load()
@@ -346,6 +445,9 @@ type Resource =
 
     static member Create<'a>(load, dispose) =
         new Resource<'a>(load, dispose)
+
+    static member CreateDisposable<'a when 'a :> IDisposable>(create : unit -> 'a) =
+        new Resource<'a>(create, fun x -> x.Dispose())
 
     static member DeriveFrom<'a, 'b>(r1, map : 'b -> 'a, dispose) =
         let subs = List<IDisposable>()

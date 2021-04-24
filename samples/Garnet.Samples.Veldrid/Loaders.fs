@@ -4,12 +4,14 @@ open System.IO
 open System.Text
 open Veldrid
 open Veldrid.ImageSharp
+open Garnet.Composition
 open Garnet.Resources
 //open Newtonsoft.Json
 
 type ShaderLoader(stage) =
     interface IResourceLoader<ShaderDescription> with
-        member c.Load(stream) =
+        member c.Load(key, source) =
+            use stream = source.Open(key)
             let r = new StreamReader(stream)
             let code = r.ReadToEnd()
             ShaderDescription(
@@ -19,7 +21,8 @@ type ShaderLoader(stage) =
 
 type TextureLoader(device : GraphicsDevice) =
     interface IResourceLoader<Texture> with
-        member c.Load(stream) =
+        member c.Load(key, source) =
+            use stream = source.Open(key)
             let tex = ImageSharpTexture(stream)
             tex.CreateDeviceTexture(device, device.ResourceFactory)
         member c.Dispose x =
@@ -37,7 +40,8 @@ type TextureLoader(device : GraphicsDevice) =
 
 type TextLoader() =
     interface IResourceLoader<string> with
-        member c.Load(stream) =
+        member c.Load(key, source) =
+            use stream = source.Open(key)
             let r = new StreamReader(stream)
             r.ReadToEnd()
         member c.Dispose x = ()
@@ -46,13 +50,14 @@ type TextLoader() =
 module LoaderExtensions =
     type ResourceSet with
         member c.RegisterGraphics(device : GraphicsDevice) =
-            c.Register<ShaderDescription>(".vert", ShaderLoader(ShaderStages.Vertex))
-            c.Register<ShaderDescription>(".tesc", ShaderLoader(ShaderStages.TessellationControl))
-            c.Register<ShaderDescription>(".tese", ShaderLoader(ShaderStages.TessellationEvaluation))
-            c.Register<ShaderDescription>(".geom", ShaderLoader(ShaderStages.Geometry))
-            c.Register<ShaderDescription>(".frag", ShaderLoader(ShaderStages.Fragment))
-            c.Register<ShaderDescription>(".comp", ShaderLoader(ShaderStages.Compute))
-            c.Register<Texture>(".png", TextureLoader(device))
-            c.Register<Texture>(".jpg", TextureLoader(device))
-
+            Disposable.list [
+                c.Register<ShaderDescription>(".vert", ShaderLoader(ShaderStages.Vertex))
+                c.Register<ShaderDescription>(".tesc", ShaderLoader(ShaderStages.TessellationControl))
+                c.Register<ShaderDescription>(".tese", ShaderLoader(ShaderStages.TessellationEvaluation))
+                c.Register<ShaderDescription>(".geom", ShaderLoader(ShaderStages.Geometry))
+                c.Register<ShaderDescription>(".frag", ShaderLoader(ShaderStages.Fragment))
+                c.Register<ShaderDescription>(".comp", ShaderLoader(ShaderStages.Compute))
+                c.Register<Texture>(".png", TextureLoader(device))
+                c.Register<Texture>(".jpg", TextureLoader(device))
+                ]
 

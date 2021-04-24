@@ -65,10 +65,10 @@ module Window =
         window.LimitPollRate <- true
         use device = VeldridStartup.CreateGraphicsDevice(window)
         // Connect file system source to shared resources
-        use fileSource = new FileStreamSource(assetPath)
+        use fileSource = new FileFolder(assetPath)
         let resources = c.GetInstance<ResourceSet>()
-        resources.RegisterGraphics(device)
-        resources.AddSource fileSource
+        use sub = resources.RegisterGraphics(device)
+        use sub = resources.AddSource fileSource
         // Create renderer pointing to shared canvas
         let canvas = c.GetInstance<Canvas>()
         use ren = new Renderer(device, resources, canvas)
