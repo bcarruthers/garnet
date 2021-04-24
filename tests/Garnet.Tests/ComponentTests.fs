@@ -7,7 +7,7 @@ open Garnet.Composition
 
 [<Tests>]
 let tests =
-    let create() = Components(Eid.eidToComponentKey)
+    let create() = Components<_,_,EidSegmentKeyMapper,_>.Create()
     testList "components" [
         testCase "get component" <| fun () ->
             let s = create()

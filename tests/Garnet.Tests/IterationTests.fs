@@ -9,7 +9,7 @@ open Garnet.Composition
 let tests =
     testList "iteration" [
         testCase "iter2" <| fun () ->
-            let c = ComponentStore(Eid.eidToComponentKey)
+            let c = ComponentStore<_,_,EidSegmentKeyMapper>()
             for i = 1 to 100 do
                 let e = c.Get(Eid i)
                 if i % 2 = 0 then e.Add(i)
@@ -34,7 +34,7 @@ let tests =
             r.Count |> shouldEqual 16
             
         testCase "where" <| fun () ->
-            let c = ComponentStore(Eid.eidToComponentKey)
+            let c = ComponentStore<_,_,EidSegmentKeyMapper>()
             for i = 1 to 100 do
                 let e = c.Get(Eid i)
                 e.Add(i)

@@ -1,6 +1,7 @@
 ﻿namespace Garnet.Composition
 
 open System
+open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Garnet
 open Garnet.Comparisons
@@ -80,9 +81,6 @@ module Eid =
     let formatEid eid =
         sprintf "%d %d %d" (getGen eid) (getPartition eid) (getIndex eid)
 
-    let inline eidToComponentKey (id : Eid) =
-        struct(getSegmentIndex id, getComponentIndex id)
-
     let segmentToPartitionBits = indexBits - Segment.segmentBits
     let segmentInPartitionMask = (1 <<< segmentToPartitionBits) - 1
 
@@ -97,7 +95,15 @@ type Eid with
     member i.IsDefined = i.value <> 0
     member i.IsUndefined = i.value = 0
 
-type Entity = Entity<int, Eid>
+[<Struct>]
+type EidSegmentKeyMapper =
+    interface ISegmentKeyMapper<int, Eid> with
+        [<MethodImpl(MethodImplOptions.AggressiveInlining)>]
+        member c.GetSegmentKey(id) = Eid.getSegmentIndex id
+        [<MethodImpl(MethodImplOptions.AggressiveInlining)>]
+        member c.GetComponentIndex(id) = Eid.getComponentIndex id
+
+type Entity = Entity<int, Eid, EidSegmentKeyMapper>
 
 type EidPool(partition) =
     let mutable known = Array.zeroCreate 1
@@ -157,7 +163,7 @@ type EidPool(partition) =
         let eid = eids.[current]        
         mask <- mask >>> 1
         eid
-    member c.Recyle(eid : Eid) =
+    member c.Recycle(eid : Eid) =
         c.Apply {
             data = null
             id = Eid.getSegmentIndex eid
@@ -256,7 +262,7 @@ type Container() =
     let segments = reg.GetInstance<SegmentStore<int>>()
     let outbox = reg.GetInstance<Outbox>()
     let eidPools = reg.GetInstance<EidPools>()
-    let components = ComponentStore(segments, Eid.eidToComponentKey)
+    let components = ComponentStore(segments)
     let eids = segments.GetSegments<Eid>()
     member c.Get<'a>() = components.Get<'a>()
     member c.GetSegments<'a>() = segments.GetSegments<'a>()
@@ -300,7 +306,8 @@ type Container() =
         while c.RunOnce() do
             c.DispatchAll()
     member c.Contains(eid : Eid) =
-        let struct(sid, ci) = Eid.eidToComponentKey eid
+        let sid = Eid.getSegmentIndex eid
+        let ci = Eid.getComponentIndex eid
         let mask = eids.GetMask sid
         (mask &&& (1UL <<< ci)) <> 0UL
     member c.Get(eid) = { 
@@ -309,7 +316,8 @@ type Container() =
         }
     member internal c.CreateEid(partition) =
         let eid = eidPools.Next(partition)
-        let struct(sid, ci) = Eid.eidToComponentKey eid
+        let sid = Eid.getSegmentIndex eid
+        let ci = Eid.getComponentIndex eid
         let data = eids.Add(sid, 1UL <<< ci)
         data.[ci] <- eid
         eid
@@ -320,7 +328,8 @@ type Container() =
     member c.Destroy(eid : Eid) =
         // Only removing from eids and relying on commit to remove
         // other components.
-        let struct(sid, ci) = Eid.eidToComponentKey eid
+        let sid = Eid.getSegmentIndex eid
+        let ci = Eid.getComponentIndex eid
         eids.Remove(sid, 1UL <<< ci)
     member c.Step deltaTime =
         scheduler.Step deltaTime
@@ -341,7 +350,7 @@ type Container() =
             c.IterInstances(param, handler)
     interface IChannels with
         member c.GetChannel<'a>() = channels.GetChannel<'a>()
-    interface IComponentStore<int, Eid> with
+    interface IComponentStore<int, Eid, EidSegmentKeyMapper> with
         member c.Get<'a>() = 
             components.Get<'a>()
     interface ISegmentStore<int> with
@@ -365,13 +374,8 @@ type Container() =
             c.Receive(e)
     override c.ToString() = 
         reg.ToString()
-    static member Create(register : Container -> IDisposable) =
-        let c = Container()
-        register c |> ignore
-        c.Commit()
-        c
 
-type private Disposable<'a when 'a :> IDisposable>(init : 'a) =
+type DisposableReference<'a when 'a :> IDisposable>(init : 'a) =
     let mutable current = init
     member c.Value = current
     member c.Set(create) =
@@ -412,16 +416,33 @@ type Container with
     member c.Respond(msg) =
         c.Send(c.GetAddresses().sourceId, msg)
 
+    member c.Register(actorId, actorOutbox, register : Container -> IDisposable) =
+        let outbox = c.GetInstance<Outbox>()
+        use s = outbox.Push {
+            outbox = actorOutbox
+            sourceId = ActorId.undefined
+            destinationId = actorId
+            message = ()
+            }
+        let sub = register c
+        c.Commit()
+        sub
+
+    member c.Register(actorId, register) =
+        c.Register(actorId, NullOutbox.Instance, register)
+
     /// Uses a state type as both a component and event subscription. This is useful
     /// for allowing a container to have multiple states with their own subscriptions
     /// and transition logic.
-    member c.RegisterStateMachine<'a>(eid, initState, registerState) =
-        let state = new Disposable<IDisposable>(Disposable.empty)
+    member c.RegisterStateMachine<'a>(eid : Eid, initState, registerState) =
+        let state = new DisposableReference<IDisposable>(Disposable.empty)
+        let components = c.Get<'a>()
         let setState e =
             // store state as component 
-            c.Get(eid).Add e
+            let entity = c.Create(eid)
+            components.Add(entity.id, e)
             // force commit so state is immediately accessible
-            c.Commit()
+            components.Commit()
             // register subscriptions specific to it, replacing prior
             state.Set(fun () -> registerState e c)
         setState initState
@@ -431,9 +452,37 @@ type Container with
             state :> IDisposable
             ]        
     
+    static member Create(register : Container -> IDisposable) =
+        let c = Container()
+        register c |> ignore
+        c.Commit()
+        c
+
+    static member Create(actorId, register : Container -> IDisposable) =
+        let c = Container()
+        c.Register(actorId, register) |> ignore
+        c
+
+/// Allows container creation in actor thread instead of main thread
+type LazyContainerInbox(actorId, register) =
+    let container = Container()
+    let mutable sub = Disposable.empty
+    let mutable isCreated = false
+    interface IInbox with
+        member c.Receive(e) =
+            if not isCreated then                
+                sub <- container.Register(actorId, e.outbox, register)
+                isCreated <- true
+            container.Receive(e)
+    member c.Dispose() =
+        sub.Dispose()
+    interface IDisposable with
+        member c.Dispose() =
+            c.Dispose()
+
 [<AutoOpen>]
 module internal Prefab =
-    let cmp c (e : Entity<_,_>) = e.Add c
+    let cmp c (e : Entity<_,_,_>) = e.Add c
 
     let create prefab (c : Container) =
         let e = c.Create()

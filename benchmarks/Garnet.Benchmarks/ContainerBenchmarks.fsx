@@ -1,5 +1,4 @@
-﻿#r "netstandard"
-#r "bin/Release/netcoreapp2.1/Garnet.dll"
+﻿#r "bin/Release/netcoreapp2.1/Garnet.dll"
 #load "ContainerBenchmarks.fs"
 
 open Garnet.Benchmarks.Containers

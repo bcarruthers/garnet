@@ -17,14 +17,13 @@ type Loc = { x : int; y : int }
 [<Struct>]
 type Size = { w : int; h : int }
 
-module Loc =
-    // Components are stored in size 64 segments, so
-    // we need to define a mapping from component keys
-    // to tuple of (segment key, index within segment)
-    let toKeyPair p = 
-        struct(
-            { x = p.x >>> 3; y = p.y >>> 3 }, 
-            ((p.y &&& 7) <<< 3) ||| (p.x &&& 7))
+// Components are stored in size 64 segments, so we need to define a mapping 
+// from component keys to segment key and index within segment.
+[<Struct>]
+type LocSegmentKeyMapper =
+    interface ISegmentKeyMapper<Loc, Loc> with
+        member c.GetSegmentKey(p) = { x = p.x >>> 3; y = p.y >>> 3 }
+        member c.GetComponentIndex(p) = ((p.y &&& 7) <<< 3) ||| (p.x &&& 7)
 
 // events
 type ResetMap = {
@@ -85,7 +84,7 @@ type UnitSize = {
 
 // storage            
 type WorldGrid() = 
-    let store = ComponentStore<Loc, Loc>(Loc.toKeyPair)
+    let store = ComponentStore<Loc, Loc, LocSegmentKeyMapper>()
     let mutable size = { w = 0; h = 0 }
     member c.Size = size
     member c.Reset newSize =
