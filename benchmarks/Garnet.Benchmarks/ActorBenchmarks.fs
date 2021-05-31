@@ -46,11 +46,29 @@ module PingPong =
             }
 
     module Tests =
-        let runLogging log onSend onReceive actorCount workerCount duration initCount maxCount batchSize =
+        let runLogging log onSend onReceive poolCount actorsPerPool workerCount duration initCount maxCount batchSize =
+            let actorCount = actorsPerPool * poolCount
             let receivedcount = ref 0
             let sentCount = ref 0
-            use a = new ActorSystem(workerCount)
-            a.Register <| fun actorId ->
+            let config = {
+                dispatchers = [|
+                    for i = 1 to poolCount do
+                        yield {
+                            // workers
+                            threadCount = workerCount
+                            throughput = 100
+                            dispatcherType = DispatcherType.Background
+                        }
+                    yield {
+                        // main
+                        dispatcherType = DispatcherType.Foreground
+                        threadCount = 0
+                        throughput = 100
+                    }
+                    |]
+                }
+            use a = new ActorSystem(config)
+            a.Register(fun (actorId : ActorId) ->
                 let inbox = Mailbox()
                 inbox.OnAll<int64> <| fun e ->
                     let span = e.Span
@@ -83,7 +101,8 @@ module PingPong =
                         use batch = inbox.BeginSend(destId)
                         for i = 0 to span.Length - 1 do
                             batch.WriteValue(span.[i] + 1L)
-                Actor.inbox inbox
+                let dispatcherId = (actorId.value - 1) / actorsPerPool
+                Actor(inbox, dispatcherId))
             for i = 0 to initCount - 1 do
                 let destId = (i % actorCount) + 1 |> ActorId
                 let payload = (i + 1) * 10000000
@@ -99,7 +118,7 @@ module PingPong =
                         timestamp = Stopwatch.GetTimestamp()
                         dispatcher = ""
                         }
-            a.RunAll()
+            a.ProcessAll()
             let expected = maxCount + initCount
             let actual = receivedcount.Value
             if actual <> expected then
@@ -114,16 +133,16 @@ module PingPong =
 
         let run = runLogging false ignore ignore
 
-        let runHistory log actorCount workerCount duration initCount maxCount batchSize =
+        let runHistory log poolCount actorsPerPool workerCount duration initCount maxCount batchSize =
             let sent = SynchronizedQueue<_>()
             let received = SynchronizedQueue<_>()
-            runLogging log sent.Enqueue received.Enqueue actorCount workerCount duration initCount maxCount batchSize
+            runLogging log sent.Enqueue received.Enqueue poolCount actorsPerPool workerCount duration initCount maxCount batchSize
             let sent = sent.Flush() |> Seq.toArray
             let received = received.Flush() |> Seq.toArray
             let sentSet = sent |> Seq.map (fun x -> (x.destId, x.payload), x) |> Map.ofSeq
             received |> Seq.map (fun x -> sentSet.[x.destId, x.payload], x) |> Seq.toArray
 
-        let runMain log useMain workerCount initCount maxCount =
+        let runMain log useMain (workerCount : int) initCount maxCount =
             let maxActorCount = maxCount * 2 - initCount
             let count = ref 0
             let createInbox id =
@@ -136,16 +155,11 @@ module PingPong =
                             m.WriteValue span.[i]
                 inbox
             use a = new ActorSystem(workerCount)
-            a.Register(ActorFactory.init (ActorId 1) (fun () ->
-                createInbox()
-                |> Actor.inbox))
-            a.Register(ActorFactory.init (ActorId 2) (fun () ->
-                createInbox()
-                |> Actor.inbox
-                |> (if useMain then Actor.execMain else id)))
+            a.Register(ActorId 1, fun _ -> Actor(createInbox()))
+            a.Register(ActorId 2, fun _ -> Actor(createInbox(), if useMain then 1 else 0))
             for i = 1 to initCount do
                 a.Send(ActorId 1, int64 i, ActorId 2)
-            a.RunAll()
+            a.ProcessAll()
             if log then
                 printfn "%s\n%d" (a.ToString()) count.Value
 
@@ -161,21 +175,24 @@ type SimplePingPongBenchmark() =
     member val N = 1 with get, set
     [<GlobalSetup>]
     member this.Setup() =
-        a.Register(ActorId 1, fun h ->
+        a.Register(ActorId 1, fun _ ->
+            let h = Mailbox()
             h.On<Run> <| fun e ->
                 h.Send(ActorId 2, Ping())
             h.On<Pong> <| fun e ->
                 count <- count + 1
                 if count < this.N then
                     h.Respond(Ping())
-            )
-        a.Register(ActorId 2, fun h -> 
+            Actor(h))
+        a.Register(ActorId 2, fun _ -> 
+            let h = Mailbox()
             h.On<Ping> <| fun e -> 
                 h.Respond(Pong())
+            Actor(h)
             )
     [<Benchmark>]
     member this.SingleThread() = 
         count <- 0
-        a.Run(ActorId 1, Run())
-        a.RunAll()
+        a.Process(ActorId 1, Run())
+        a.ProcessAll()
         count

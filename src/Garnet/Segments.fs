@@ -434,6 +434,12 @@ type Segments<'k, 'a
     member c.Count = current.Count        
     /// Takes segment index, not ID
     member c.Item with get i = current.[i]
+    /// Returns the number of current components stored
+    member c.GetComponentCount() = 
+        let mutable total = 0
+        for i = 0 to c.Count - 1 do
+            total <- total + bitCount64 c.[i].mask
+        total
     /// Given a segment ID, returns true if the segment is present and assigns its index
     member c.TryFind(sid, [<Out>] i : byref<_>) = 
         current.TryFind(sid, &i)
@@ -516,6 +522,15 @@ type Segments<'k, 'a
         for i = 0 to c.Count - 1 do
             let seg = c.[i]
             c.Remove(seg.id, seg.mask)
+    member c.GetSegmentOrEmpty(sid) =
+        match c.TryFind(sid) with
+        | true, i -> c.[i]
+        | false, _ -> Segment.init sid 0UL null
+    /// Given a segment ID, returns segment index if found or -1 if not found
+    member c.Find(sid) = 
+        match c.TryFind(sid) with
+        | true, i -> i
+        | false, _ -> -1
 
 type ISegmentStore<'k
     when 'k :> IComparable<'k> 

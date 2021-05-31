@@ -152,12 +152,12 @@ type Pong = struct end
 
 // actor definitions
 let a = new ActorSystem()
-a.Register(ActorId 1, fun c ->
+a.Register(ActorId 1, fun (c : Container) ->
     c.On<Ping> <| fun e -> 
         printf "ping "
         c.Respond(Pong())
     )
-a.Register(ActorId 2, fun c ->
+a.Register(ActorId 2, fun (c : Container) ->
     c.On<Pong> <| fun e -> 
         printf "pong "
     )
@@ -165,7 +165,7 @@ a.Register(ActorId 2, fun c ->
 // send a message and run until all complete
 // output: ping pong
 a.Send(ActorId 1, Ping(), sourceId = ActorId 2)
-a.RunAll()
+a.ProcessAll()
 
 // Subscribing to event batch
 
@@ -187,14 +187,11 @@ let entity =
 // Defining a container actor
 let test() =
     use a = new ActorSystem()
-    a.Register(ActorId 1, fun h ->
-        h.On<Ping> <| fun e ->
-            h.Respond(Pong()))
-    a.Register(ActorId 2, 
-        let c = Container()
-        let sub =
-            c.On<Ping> <| fun e ->
-                c.Respond(Pong())        
-        c)
+    a.Register(ActorId 1, fun (c : Container) ->
+        c.On<Ping> <| fun e ->
+            c.Respond(Pong()))
+    a.Register(ActorId 2, fun (c : Container) ->
+        c.On<Ping> <| fun e ->
+            c.Respond(Pong()))
     a.Send(ActorId 1, Ping())
-    a.RunAll()
+    a.ProcessAll()

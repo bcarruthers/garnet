@@ -49,8 +49,8 @@ type Registry() =
     // The intent is to provide a single, immutable reference that does
     // not depend on order of access or dynamic params such as settings.
     // Dynamic values should be handled separately.
-    member c.Register<'a>(f : unit -> 'a) =
-        resolvers.Add(typeof<'a>, f) |> ignore
+    member c.Register<'a>(factory : unit -> 'a) =
+        resolvers.Add(typeof<'a>, factory) |> ignore
     member c.RegisterInstance<'a>(x : 'a) =
         instances.Add(typeof<'a>, RegistryEntry.init x) |> ignore
     member c.TryGetInstance<'a>([<Out>] r : byref<'a>) =
@@ -79,17 +79,22 @@ type Registry() =
         for i = 0 to instances.Count - 1 do
             instances.[i].handler.Handle(param, offset + i, handler)
     interface IRegistry with
-        member c.Register f = c.Register f
+        member c.Register(factory) = c.Register(factory)
         member c.RegisterInstance x = c.RegisterInstance x
         member c.TryGetInstance<'a>([<Out>] r : byref<_>) = 
             c.TryGetInstance<'a>(&r)
         member c.IterInstances(param, handler) =
             c.IterInstances(param, handler)
+    member c.ToString(writer : IStringBlockWriter) =
+        if writer.BeginList("Types", instances.Count) then
+            let sorted = 
+                instances.Items 
+                |> Seq.sortBy (fun x -> x.instance.GetType().Name)
+            for item in sorted do
+                writer.Write(item.instance.ToString().Replace("\n", "\n  "))
+            writer.End()
     override c.ToString() =
-        let prefix = ""
-        instances.Items
-        |> Seq.map (fun item -> item.ToString().Replace("\n", "\n  "))
-        |> listToString (prefix + "  ") (prefix + "Types")
+        StringBlockWriter.Format(c.ToString)
         
 type private CopyRegistryHandler() =
     interface IHandler<IRegistry> with

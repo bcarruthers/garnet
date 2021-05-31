@@ -259,86 +259,15 @@ module internal RecordingInternal =
         seek reg filter range.messageTypeId range.start ms
         let sender = StreamMessageSender(reg, filter)
         while getSentCount sender range.messageTypeId < range.count && sender.Send(ms, a) do
-            a.RunAll()
+            a.ProcessAll()
 
     let createPrintActorSystem (options : PrintOptions) =
         // share counter/formatter since no threads
         let formatter = options.createFormatter()
         let counter = ref 0
-        let a = new ActorSystem(threadCount = 0)
-        a.Register(fun id ->
-            if options.filter.destinationFilter id then
-                let h = PrintInbox(id, formatter, counter, options.print) 
-                h.IsEnabled <- true
-                h |> Actor.inbox
-            else Actor.none)
+        let a = new ActorSystem(workerCount = 0)
+        a.Register(options.filter.destinationFilter, fun createId ->
+            let h = PrintInbox(createId, formatter, counter, options.print) 
+            h.IsEnabled <- true
+            Actor(h))
         a
-
-[<AutoOpen>]
-module Recording =          
-    module Actor =        
-        let print id formatter =
-            PrintInbox(id, formatter, ref 0, printfn "%s") 
-            |> Actor.inbox
-    
-    module ActorFactory =
-        let withPrinting createFormatter print createActor =
-            fun id ->
-                let formatter = createFormatter()
-                let h = PrintInbox(id, formatter, ref 0, print) 
-                h.IsEnabled <- true
-                Actor.combine [
-                    createActor id
-                    Actor.inbox h
-                    ]
-            
-        let withLogging createRegistry openStream createActor =
-            fun id ->
-                let def = createActor id
-                let stream = openStream id
-                let registry = createRegistry()
-                let logHandler = StreamInbox(registry, stream)
-                { def with
-                    dispose = fun () ->
-                        def.dispose()
-                        stream.Dispose()
-                    inbox = 
-                        LogInbox(id, def.inbox, logHandler)
-                        :> IInbox
-                }
-
-    type IActorStreamReader with
-        member c.CopyTo (writer : IActorStreamWriter) =
-            for id in c.GetActorIds() do
-                use input = c.OpenRead id
-                use output = writer.OpenWrite id
-                input.CopyTo(output)
-
-        member c.Save path =
-            c.CopyTo (FileActorStreamSource(path))
-
-        member c.SaveTimestamped path =
-            let path = Path.Combine(path, DateTime.Now.ToString("yyyyMMdd-hhmmss"))
-            c.Save path
-
-        member c.Replay (a : IMessagePump) (options : ReplayOptions) =
-            let actorIds =
-                c.GetActorIds() 
-                |> Seq.filter options.filter.actorFilter
-                |> Seq.toArray
-            for actorId in actorIds do
-                let reg = options.createMessageRegistry()
-                use input = c.OpenRead actorId
-                replayTo a reg options.filter options.range input
-
-        member c.Print (options : PrintOptions) =
-            let actorIds =
-                c.GetActorIds() 
-                |> Seq.filter options.filter.actorFilter
-                |> Seq.toArray
-            let a = createPrintActorSystem options
-            for actorId in actorIds do
-                options.print (sprintf "Log %A --------------------------" actorId)
-                let reg = options.createMessageRegistry()
-                use input = c.OpenRead actorId
-                replayTo a reg options.filter options.range input

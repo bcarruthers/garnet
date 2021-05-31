@@ -479,16 +479,3 @@ type LazyContainerInbox(actorId, register) =
     interface IDisposable with
         member c.Dispose() =
             c.Dispose()
-
-[<AutoOpen>]
-module internal Prefab =
-    let cmp c (e : Entity<_,_,_>) = e.Add c
-
-    let create prefab (c : Container) =
-        let e = c.Create()
-        prefab e
-        e
-
-    let compose components =
-        let arr = components |> Seq.toArray
-        fun e -> for c in arr do c e    

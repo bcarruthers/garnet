@@ -47,9 +47,12 @@ type TimingPoint = {
     /// Ends timing point, reporting elapsed time.
     member p.Stop count = 
         p.report (p.GetTiming(count))
+    member p.Dispose() = 
+        p.Stop(1)
     interface IDisposable with
         /// Ends timing point, reporting time for a single sample.
-        member p.Dispose() = p.Stop(1)
+        member p.Dispose() = 
+            p.Stop(1)
     override t.ToString() = 
         let stop = Timing.getTimestamp()
         sprintf "%A, %A to %A (%A)" t.name t.start stop (stop - t.start)

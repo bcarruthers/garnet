@@ -14,11 +14,6 @@ type Run = struct end
 type Ping = struct end
 type Pong = struct end
 
-module ActorFactory =
-    let main actorId register = 
-        ActorFactory.handler actorId register 
-        |> ActorFactory.map Actor.execMain
-
 type Inbox() =
     let dict = Dictionary<Type, obj>()
     member c.OnAll<'a>(action : Envelope<ReadOnlyMemory<'a>> -> unit) =
@@ -43,10 +38,14 @@ type Inbox() =
         member c.Receive e =
             c.TryReceive e |> ignore
 
+let bgDispatcherId = 0
+let mainDispatcherId = 1
+
 let runPingPong onPing onPong iterations =
     let mutable count = 0
     use a = new ActorSystem(0)
-    a.Register(ActorId 1, fun h ->
+    a.Register(ActorId 1, fun _ ->
+        let h = Mailbox()
         h.On<Run> <| fun e ->
             h.Send(ActorId 2, Ping())
         h.On<Pong> <| fun e ->
@@ -54,14 +53,15 @@ let runPingPong onPing onPong iterations =
             if count < iterations then
                 onPing(e)
                 h.Respond(Ping())
-        )
-    a.Register(ActorId 2, fun h -> 
+        Actor(h))
+    a.Register(ActorId 2, fun _ -> 
+        let h = Mailbox()
         h.On<Ping> <| fun e -> 
             onPong e
             h.Respond(Pong())
-        )
-    a.Run(ActorId 1, Run())
-    a.RunAll()
+        Actor(h))
+    a.Process(ActorId 1, Run())
+    a.ProcessAll()
     count
 
 let mapEnvelope f (mail : Envelope<_>) = {
@@ -77,9 +77,9 @@ let sendReceiveMessages send =
     let h = Inbox()
     h.OnAll<int> <| fun e ->
         results.Add(e |> mapEnvelope (fun m -> m.ToArray()))
-    a.Register(ActorId 1, h)
+    a.Register(ActorId 1, fun _ -> Actor(h))
     send (a.Get(ActorId 1))
-    a.RunAll()
+    a.ProcessAll()
     results |> List.ofSeq
     
 [<Tests>]
@@ -88,7 +88,7 @@ let tests =
         testCase "send to undefined actor" <| fun () ->
             use a = new ActorSystem()
             a.Send(ActorId 1, 10)
-            a.RunAll()
+            a.ProcessAll()
 
         testCase "send batch" <| fun () ->
             let results = sendReceiveMessages <| fun a ->
@@ -119,48 +119,11 @@ let tests =
             let inbox = Mailbox()
             inbox.On<int> msgs.Add
             use a = new ActorSystem()
-            a.Register(ActorFactory.any (fun id -> Actor.inbox inbox))
+            a.Register(fun id -> Actor(inbox))
             a.Send(ActorId 1, 10)
-            a.RunAll()
+            a.ProcessAll()
             msgs.Count |> shouldEqual 1
 
-        testCase "get routed actor" <| fun () ->
-            let route = ActorFactory.route (fun id -> ActorId (id.value + 1))
-            let actor = route(ActorId 1)
-            actor.routedId |> shouldEqual (ActorId 2)
-            actor.execution |> shouldEqual Execution.Route
-
-        testCase "route to self" <| fun () ->
-            use a = new ActorSystem()
-            a.Register (ActorFactory.route id)
-            a.Send(ActorId 1, 10)
-            a.RunAll()
-
-        testCase "get combined factory with route" <| fun () ->
-            let list1 = List<_>()
-            let list2 = List<_>()
-            let create = 
-                ActorFactory.combine [
-                    ActorFactory.handler (ActorId 5) (fun h -> h.On<int> list1.Add)
-                    ActorFactory.route (fun id -> ActorId (id.value + 1))
-                    ActorFactory.handler (ActorId 6) (fun h -> h.On<int> list2.Add)
-                ]
-            let actor = create(ActorId 4)
-            actor.execution |> shouldEqual Execution.Route
-            actor.routedId |> shouldEqual (ActorId 5)
-            let actor = create(ActorId 5)
-            actor.execution |> shouldEqual Execution.Default
-            actor.routedId |> shouldEqual ActorId.undefined
-            use a = new ActorSystem()
-            a.Register create
-            a.Send(ActorId 4, 10)
-            a.Send(ActorId 5, 10)
-            a.Send(ActorId 6, 10)
-            a.Send(ActorId 7, 10)
-            a.RunAll()
-            list1.Count |> shouldEqual 2
-            list2.Count |> shouldEqual 1
-            
         testCase "create ping pong actors" <| fun () ->
             let iterations = 10
             runPingPong ignore ignore iterations |> shouldEqual iterations
@@ -168,33 +131,35 @@ let tests =
         testCase "send message to self" <| fun () ->
             let mutable count = 0
             use a = new ActorSystem(0)
-            a.RegisterAll [
-                ActorFactory.main (ActorId 1) <| fun c ->
-                    c.On<int> <| fun e ->
-                        if e < 10 then
-                            count <- count + 1
-                            c.Send(ActorId 1, e + 1)
-                ]
-            a.Run(ActorId 1, 0)
+            a.Register(ActorId 1, fun _ ->
+                let c = Mailbox()
+                c.On<int> <| fun e ->
+                    if e < 10 then
+                        count <- count + 1
+                        c.Send(ActorId 1, e + 1)
+                Actor(c, mainDispatcherId))
+            a.Process(ActorId 1, 0)
             count |> shouldEqual 10
 
         testCase "send message to other" <| fun () ->
             let mutable count1 = 0
             let mutable count2 = 0
             use a = new ActorSystem(0)
-            a.RegisterAll [
-                ActorFactory.handler (ActorId 1) <| fun c ->
-                    c.On<int> <| fun e ->
-                        if e < 10 then
-                            count1 <- count1 + 1
-                            c.Send(ActorId 2, e + 1)
-                ActorFactory.handler (ActorId 2) <| fun c ->
-                    c.On<int> <| fun e ->
-                        if e < 10 then
-                            count2 <- count2 + 1
-                            c.Send(ActorId 1, e + 1)
-                ]
-            a.Run(ActorId 1, 0)
+            a.Register(ActorId 1, fun _ ->
+                let c = Mailbox()
+                c.On<int> <| fun e ->
+                    if e < 10 then
+                        count1 <- count1 + 1
+                        c.Send(ActorId 2, e + 1)
+                Actor(c))
+            a.Register(ActorId 2, fun _ ->
+                let c = Mailbox()
+                c.On<int> <| fun e ->
+                    if e < 10 then
+                        count2 <- count2 + 1
+                        c.Send(ActorId 1, e + 1)
+                Actor(c))
+            a.Process(ActorId 1, 0)
             count1 |> shouldEqual 5
             count2 |> shouldEqual 5
 
@@ -202,42 +167,63 @@ let tests =
             let mutable count1 = 0
             let mutable count2 = 0
             use a = new ActorSystem(1)
-            a.RegisterAll [
-                ActorFactory.main (ActorId 1) <| fun c ->
-                    c.On<Thread> <| fun e ->
-                        // bg thread should be different
-                        Expect.notEqual Thread.CurrentThread.ManagedThreadId e.ManagedThreadId ""
-                    c.On<int> <| fun e ->
-                        if e < 10 then
-                            count1 <- count1 + 1
-                            //printfn "FG: %d" Thread.CurrentThread.ManagedThreadId
-                            c.Send(ActorId 2, e + 1)
-                ActorFactory.handler (ActorId 2) <| fun c ->
-                    c.On<int> <| fun e ->
-                        if e < 10 then
-                            count2 <- count2 + 1
-                            //printfn "BG: %d" Thread.CurrentThread.ManagedThreadId
-                            c.Send(ActorId 1, Thread.CurrentThread)
-                            c.Send(ActorId 1, e + 1)
-                ]            
-            a.Run(ActorId 1, 0)
-            a.RunAll()
+            a.Register(ActorId 1, fun _ ->
+                let c = Mailbox()
+                c.On<Thread> <| fun e ->
+                    // bg thread should be different
+                    Expect.notEqual Thread.CurrentThread.ManagedThreadId e.ManagedThreadId ""
+                c.On<int> <| fun e ->
+                    if e < 10 then
+                        count1 <- count1 + 1
+                        //printfn "FG: %d" Thread.CurrentThread.ManagedThreadId
+                        c.Send(ActorId 2, e + 1)
+                Actor(c, mainDispatcherId))
+            a.Register(ActorId 2, fun _ ->
+                let c = Mailbox()
+                c.On<int> <| fun e ->
+                    if e < 10 then
+                        count2 <- count2 + 1
+                        //printfn "BG: %d" Thread.CurrentThread.ManagedThreadId
+                        c.Send(ActorId 1, Thread.CurrentThread)
+                        c.Send(ActorId 1, e + 1)
+                Actor(c))    
+            a.Process(ActorId 1, 0)
+            a.ProcessAll()
             count1 |> shouldEqual 5
             count2 |> shouldEqual 5
 
+        testCase "respond to messages" <| fun () ->
+            let config = { 
+                dispatchers = 
+                    [|
+                        {
+                            dispatcherType = DispatcherType.Background
+                            threadCount = 2
+                            throughput = 100
+                        }                
+                    |]
+                }
+            use a = new ActorSystem(config)
+            a.Register(ActorFactory.Create(fun _ m ->
+                m.On<Ping> <| fun e -> 
+                    //printfn "Responding from %A to %A" m.DestinationId m.SourceId
+                    m.Respond(Pong())))
+            for i = 1 to 10 do
+                a.Send(ActorId i, Ping(), ActorId (i * 2))
+            a.ProcessAll()
+
         testCase "send random messages to background actors" <| fun () ->
             use a = new ActorSystem(2)
-            a.RegisterAll [
-                //ActorId.consoleOut, fun id -> PrintMessageHandler.Handler 
-                ActorFactory.filterHandler (fun id -> true) <| fun id c -> 
-                    let rand = Random(id.value)
-                    c.On<int> <| fun e -> 
-                        //printfn "%d: %d" id.id e
-                        if e < 1000 then
-                            let nextId = rand.Next(1, 256)
-                            c.Send(ActorId nextId, e + 1)
-                ]
-            a.Run(ActorId 1, 123)
+            a.Register(fun (createId : ActorId) -> 
+                let rand = Random(createId.value)
+                let c = Mailbox()
+                c.On<int> <| fun e -> 
+                    //printfn "%d: %d" id.id e
+                    if e < 1000 then
+                        let nextId = rand.Next(1, 256)
+                        c.Send(ActorId nextId, e + 1)
+                Actor(c))
+            a.Process(ActorId 1, 123)
 
         testCase "actor thread stress test" <| fun () ->
             let mutable count = 0L
@@ -252,23 +238,33 @@ let tests =
                 r.Register 6 <| RawSerializer<int8>()
                 r
             let start = DateTime.Now
+            let config = { 
+                dispatchers = 
+                    [|
+                        {
+                            dispatcherType = DispatcherType.Background
+                            threadCount = 4
+                            throughput = 100
+                        }                
+                    |]
+                }
             use a = new ActorSystem(4)
             let rules = 
                 [
-                ActorFactory.handler (ActorId 1) <| fun c ->
+                ActorFactory.Create(ActorId 1, fun _ (c : Mailbox) ->
                     c.On<int> <| fun e ->
                         for i = 1 to 1000 do
                             c.Send(ActorId 2, uint32 i)
-                            c.Send(ActorId 2, uint16 i)
-                ActorFactory.handler (ActorId 2) <| fun c ->
+                            c.Send(ActorId 2, uint16 i))
+                ActorFactory.Create(ActorId 2, fun _ (c : Mailbox) ->
                     c.On<int> <| fun e ->
                         for i = 1 to 1 do
                             c.Send(ActorId 3, uint32 i)
                             c.Send(ActorId 4, uint16 i)
                     c.On<uint32> <| fun e ->
                         for i = 1 to 1 do
-                            c.Send(ActorId 3, uint8 i)
-                ActorFactory.handler (ActorId 3) <| fun c ->
+                            c.Send(ActorId 3, uint8 i))
+                ActorFactory.Create(ActorId 3, fun _ (c : Mailbox) ->
                     c.On<uint8> <| fun e ->
                         for i = 1 to 1 do
                             c.Send(ActorId 4, int8 i)
@@ -276,30 +272,30 @@ let tests =
                         for i = 1 to 1 do
                             c.Send(ActorId 4, int8 i)
                     c.On<uint32> <| fun e ->
-                        Interlocked.Increment(&count) |> ignore
-                ActorFactory.handler (ActorId 4) <| fun c ->
+                        Interlocked.Increment(&count) |> ignore)
+                ActorFactory.Create(ActorId 4, fun _ (c : Mailbox) ->
                     c.On<int8> <| fun e ->
                         for i = 1 to 1 do
                             c.Send(ActorId 2, int i)
                     c.On<uint16> <| fun e ->
-                        Interlocked.Increment(&count) |> ignore
+                        Interlocked.Increment(&count) |> ignore)
                 ]     
-                |> List.map (ActorFactory.withLogging createRegistry log.OpenWrite)
-            a.RegisterAll rules
+                //|> List.map (ActorFactory.withLogging createRegistry log.OpenWrite)
+            a.Register(rules)
             for i = 1 to 100 do
-                a.Run(ActorId 1, 0)
+                a.Process(ActorId 1, 0)
                 Thread.Sleep(0)
-            a.RunAll()
-            let duration = DateTime.Now - start
+            a.ProcessAll()
+            //let duration = DateTime.Now - start
             // printfn "%s" <| a.ToString()
             // printfn "%A" <| duration
-            log.Print {
-                createMessageRegistry = createRegistry
-                createFormatter = Formatter
-                print = ignore
-                range = MessageRange.count 1000
-                filter = ActorLogFilter.all
-                }
+            //log.Print {
+            //    createMessageRegistry = createRegistry
+            //    createFormatter = Formatter
+            //    print = ignore
+            //    range = MessageRange.count 1000
+            //    filter = ActorLogFilter.all
+            //    }
 
         testCase "threaded actor logging" <| fun () ->
             let log = MemoryActorStreamSource()
@@ -313,28 +309,28 @@ let tests =
             use a = new ActorSystem(4)
             let rules = 
                 [
-                ActorFactory.handler (ActorId 1) <| fun c ->
+                ActorFactory.Create(ActorId 1, fun _ c ->
                     c.On<int> <| fun e ->
                         for i = 1 to 100 do
-                            c.Send(ActorId 2, uint32 i)
-                ActorFactory.handler (ActorId 2) <| fun c ->
+                            c.Send(ActorId 2, uint32 i))
+                ActorFactory.Create(ActorId 2, fun _ c ->
                     c.On<uint32> <| fun e ->
                         for i = 1 to 1 do
-                            c.Send(ActorId 3, uint8 i)
+                            c.Send(ActorId 3, uint8 i))
                 ]     
-                |> List.map (ActorFactory.withLogging createRegistry log.OpenWrite)
-            a.RegisterAll rules
+                //|> List.map (ActorFactory.withLogging createRegistry log.OpenWrite)
+            a.Register(rules)
             for i = 1 to 100 do
-                a.Run(ActorId 1, 0)
+                a.Process(ActorId 1, 0)
                 Thread.Sleep(0)
-            a.RunAll()
-            log.Print {
-                createMessageRegistry = createRegistry
-                createFormatter = Formatter
-                print = ignore
-                range = MessageRange.count 1000
-                filter = ActorLogFilter.all
-                }
+            a.ProcessAll()
+            //log.Print {
+            //    createMessageRegistry = createRegistry
+            //    createFormatter = Formatter
+            //    print = ignore
+            //    range = MessageRange.count 1000
+            //    filter = ActorLogFilter.all
+            //    }
 
         testCase "serialize string" <| fun () ->
             let s = StringSerializer() :> ISerializer<_>
@@ -354,21 +350,21 @@ let tests =
             use a = new ActorSystem(0)
             let id1 = ActorId 15
             let id2 = ActorId 25
-            a.RegisterAll [
-                ActorFactory.init id1 <| fun () ->
+            a.Register [
+                ActorFactory.Create(id1, fun _ ->
                     let h = Mailbox()
                     h.On<int> <| fun e -> 
                         h.Send(id2, "msg" + e.ToString())
-                    Actor.inbox (LogInbox(id1, h, StreamInbox(reg, ms)))
+                    Actor(LogInbox(id1, h, StreamInbox(reg, ms))))
                 ]
-            a.Run(id1, 100)
+            a.Process(id1, 100)
             ms.Position <- 0L
             use a2 = new ActorSystem(0)
-            a2.Register <| ActorFactory.any (fun id -> 
-                PrintInbox(id, Formatter(), ref 0, ignore) |> Actor.inbox)
-            a2.Run(id1, { enableActorLog = true })
-            a2.Run(id2, { enableActorLog = true })
+            a2.Register <| ActorFactory.Create(fun id -> 
+                Actor(PrintInbox(id, Formatter(), ref 0, ignore)))
+            a2.Process(id1, { enableActorLog = true })
+            a2.Process(id2, { enableActorLog = true })
             let sender = StreamMessageSender(reg, fun h -> true)
             sender.SendAll(ms, a2)
-            a2.RunAll()
+            a2.ProcessAll()
     ]

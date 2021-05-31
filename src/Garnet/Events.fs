@@ -34,6 +34,11 @@ type FixedUpdate = {
 type ClockUpdate = {
     time : int64
     }
+    
+[<Struct>]
+type ClockRequest = {
+    dueTime : int64
+    }
 
 [<Struct>]
 type Closing = struct end

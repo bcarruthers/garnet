@@ -55,7 +55,6 @@ for i = 1 to 10 do
     * [Systems](#systems)
     * [Actors](#actors)
     * [Integration](#integration)
-* [Roadmap](#roadmap)
 * [FAQ](#faq)
 * [License](#license)
 * [Maintainers](#maintainers)
@@ -72,8 +71,6 @@ Note that for .NET Core, if you encounter warnings about FSharp.Core package dow
 
 
 ## Background
-
-Garnet emerged from [Triverse](http://cragwind.com/blog/posts/grid-projectiles/), a 2D game under development where players build and command drone fleets in a large tri-grid world. The game serves as a performance testbed and ensures the library meets the actual needs of at least one moderately complex game.
 
 ECS is a common architecture for games, often contrasted with OOP inheritance. It focuses on separation of data and behavior and is typically implemented in a data-oriented way to achieve high performance. It's similar to a database, where component tables are related using a common entity ID, allowing systems to query and iterate over entities with specific combinations of components present. EC (entity-component) is a related approach that attaches behavior to components and avoids systems.
 
@@ -296,7 +293,7 @@ When any code creates or modifies entities, sends events, or starts coroutines, 
 
 ```fsharp
 // run the container
-c.Run()
+c.Process()
 ```
 
 ### Events
@@ -341,7 +338,7 @@ c.Start <| seq {
 
 // run until completion
 // output: 1 2 3
-c.Run()
+c.Process()
 ```
 
 Time-based coroutines are useful for animations or delayed effects. You can use any unit of time as long as it's consistent.
@@ -360,7 +357,7 @@ c.Start <| seq {
 for i = 1 to 9 do
     // increment time units and run pending coroutines
     c.Step 1L
-    c.Run()
+    c.Process()
     printf "%d " i
 ```
 
@@ -429,12 +426,12 @@ type Pong = struct end
 
 // actor definitions
 let a = new ActorSystem()
-a.Register(ActorId 1, fun c ->
+a.Register(ActorId 1, fun (c : Container) ->
     c.On<Ping> <| fun e -> 
         printf "ping "
         c.Respond(Pong())
     )
-a.Register(ActorId 2, fun c ->
+a.Register(ActorId 2, fun (c : Container) ->
     c.On<Pong> <| fun e -> 
         printf "pong "
     )
@@ -442,12 +439,12 @@ a.Register(ActorId 2, fun c ->
 // send a message and run until all complete
 // output: ping pong
 a.Send(ActorId 1, Ping(), sourceId = ActorId 2)
-a.RunAll()
+a.ProcessAll()
 ```
 
 ### Actor messages versus container events
 
-"Events" and "messages" are often used interchangeably, but here we use separate terms to distinguish container 'events' from actor 'messages'. Containers already have their own internal event system, but the semantics are a bit different from actors because container events are always stored in separate channels by event type rather than a single serialized channel for all actor message types. The use of separate channels within containers allows for efficient batch processing in cases where event types have no ordering dependencies, but ordering by default is preferable in many other cases involving actors.
+Containers already have their own internal event system, but the semantics are a bit different from actors because container events are always stored in separate channels by event type rather than a single serialized channel for all actor message types. The use of separate channels within containers allows for efficient batch processing in cases where event types have no ordering dependencies, but ordering by default is preferable in many other cases involving actors.
 
 ### Wrapping containers
 
@@ -506,19 +503,6 @@ To minimize your dependency on Garnet and your chosen framework, you can organiz
 - Startup code
 
 See the [sample code](https://github.com/bcarruthers/garnet/tree/master/samples) for more detail.
-
-## Roadmap
-
-- Performance improvements
-- Container snapshots and entity replication 
-- More samples
-- More test coverage
-- Benchmarks
-- Comprehensive docs
-- Urho scripts with hot reloading
-- Extensions or samples for networking and compression
-- Fault tolerance in actor system
-- Guidance for managing game states
 
 ## FAQ
 

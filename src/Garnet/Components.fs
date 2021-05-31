@@ -28,11 +28,7 @@ type Components<'k, 'c, 'm, 'a
         segs : Segments<'k, 'a>
     ) =
     member c.Segments = segs
-    member c.Count = 
-        let mutable total = 0
-        for i = 0 to segs.Count - 1 do
-            total <- total + bitCount64 segs.[i].mask
-        total
+    member c.Count = segs.GetComponentCount()
     member internal c.Components = segs.Components
     member c.Clear() =
         segs.Clear()

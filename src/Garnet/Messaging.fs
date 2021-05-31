@@ -122,6 +122,10 @@ module Mailbox =
                 recipientId = recipientId
                 }
 
+        member c.AddDestinations(recipients : ActorId[]) =
+            for id in recipients do
+                c.AddDestination(id)
+
         member c.AddDestinations(recipients : ReadOnlySpan<ActorId>) =
             for id in recipients do
                 c.AddDestination(id)
@@ -253,6 +257,10 @@ type Mailbox() =
             outbox.BeginSend<'a>()
     override c.ToString() =
         outbox.ToString()
+    static member Create(register) =
+        let inbox = Mailbox()
+        register inbox
+        inbox
 
 type Mailbox with
     member c.BeginRespond() =
@@ -274,109 +282,97 @@ type private InboxCollection(handlers : IInbox[]) =
                 handler.Receive<'a> e
     override c.ToString() =
          formatList "Inboxes" handlers.Length (String.Join("\n", handlers))
-     
-/// Defines how an actor is executed or run
-type Execution =
-    /// Null endpoint which ignores all messages
-    | None = 0
-    /// Routes incoming messages to another actor ID
-    | Route = 1
-    /// Actor which can be run on a background thread
-    | Default = 2
-    /// Actor which must be run on the main thread
-    | Main = 3
 
 [<Struct>]
-type Actor = {
-    routedId : ActorId
-    execution : Execution
-    inbox : IInbox
-    dispose : unit -> unit
-    }
+type Actor(inbox : IInbox, dispatcherId : int, dispose : unit -> unit) =
+    static let mutable instance = new Actor(NullInbox.Instance)
+    static member Null = instance
+    new(inbox, dispose) = Actor(inbox, 0, dispose)
+    new(inbox, dispatcherId) = Actor(inbox, dispatcherId, ignore)
+    new(inbox) = Actor(inbox, 0)
+    member _.Inbox = inbox
+    member _.DispatcherId = dispatcherId
+    member _.Dispose() = dispose()
+    member _.WithDispatcher(newId) =
+        Actor(inbox, newId, dispose)
 
-module Actor =
-    let init exec inbox dispose = {
-        routedId = ActorId.undefined
-        execution = exec
-        inbox = inbox
-        dispose = dispose
-        }
-
-    let none = init Execution.None (NullInbox()) ignore
-
-    let route routedId = { 
-        none with 
-            routedId = routedId 
-            execution = Execution.Route
-            }
-
-    let disposable inbox dispose =
-        init Execution.Default inbox dispose
-
-    let inbox inbox = disposable inbox ignore
-
-    let handler register = 
-        let inbox = Mailbox()
-        register inbox
-        disposable inbox ignore
-
-    let execMain a =
-        { a with execution = Execution.Main }
-
-    let combine actors =
-        let actors = actors |> Seq.toArray
-        if actors.Length = 0 then none
-        else
-            let inboxes = actors |> Array.map (fun d -> d.inbox)
-            let exec = 
-                actors 
-                |> Seq.map (fun a -> a.execution) 
-                |> Seq.reduce max
-            let inbox = InboxCollection(inboxes) :> IInbox
-            let dispose = fun () -> for d in actors do d.dispose() 
-            init exec inbox dispose
+type IActorFactory =
+    abstract member TryCreate : ActorId -> ValueOption<Actor>
 
 type internal ActorFactoryCollection() =
-    let factories = List<_>()
-    member c.Add(desc : ActorId -> Actor) =
-        factories.Add(desc)
-    member c.Create actorId =
-        // first priority is execution type, then order where last wins
-        let mutable result = Actor.none
+    let factories = List<IActorFactory>()
+    member c.Add(factory) =
+        factories.Add(factory)
+    member c.TryCreate(createId : ActorId) =
+        let mutable result = ValueNone
         let mutable i = factories.Count - 1
-        while int result.execution <> int Execution.Default && i >= 0 do
-            let actor = factories.[i] (ActorId actorId)
-            if int actor.execution > int result.execution then
-                result <- actor
+        while result.IsNone && i >= 0 do
+            result <- factories.[i].TryCreate(createId)
             i <- i - 1
         result
+    interface IActorFactory with
+        member c.TryCreate(createId) =
+            c.TryCreate(createId)
 
+type ActorFactory(tryCreate) =
+    static let mutable instance = 
+        new ActorFactory(fun _ -> ValueSome Actor.Null) 
+        :> IActorFactory
+    static member Null = instance
+    member c.TryCreate(createId : ActorId) =
+        tryCreate createId
+    interface IActorFactory with
+        member c.TryCreate(createId) =
+            c.TryCreate(createId)
+    static member Create(tryCreate) =
+        ActorFactory(tryCreate) :> IActorFactory
+    static member Create(factories) =
+        let c = ActorFactoryCollection()
+        for factory in factories do
+            c.Add(factory)
+        c :> IActorFactory
+    /// Creates for any actor ID
+    static member Create(create : ActorId -> Actor) =
+        ActorFactory(fun (createId : ActorId) ->
+            create createId |> ValueSome)
+    /// Creates conditionally for actor ID
+    static member Create(predicate : ActorId -> bool, create : ActorId -> Actor) =
+        ActorFactory(fun (createId : ActorId) ->
+            if predicate createId then create createId |> ValueSome
+            else ValueNone) :> IActorFactory
+    /// Creates for a specific actor ID
+    static member Create(actorId : ActorId, create : ActorId -> Actor) =
+        ActorFactory.Create((=)actorId, create)
+    /// Creates conditionally for actor ID
+    static member Create(predicate : ActorId -> bool, register : ActorId -> Mailbox -> unit) =
+        let create (createId : ActorId) =
+            Actor(Mailbox.Create(register createId))
+        ActorFactory.Create(predicate, create)
+    /// Creates for any actor ID
+    static member Create(register : ActorId -> Mailbox -> unit) =
+        let predicate (_ : ActorId) = true
+        ActorFactory.Create(predicate, register)
+    /// Creates for a specific actor ID
+    static member Create(actorId : ActorId, register : ActorId -> Mailbox -> unit) =
+        ActorFactory.Create((=)actorId, register)
+
+[<AutoOpen>]
 module ActorFactory =
-    let route map =
-        fun (id : ActorId) -> Actor.route (map id)
+    type IActorFactory with
+        member c.Wrap(map) =
+            let tryCreate (createId : ActorId) =
+                match c.TryCreate(createId) with
+                | ValueSome actor -> ValueSome (map createId actor)
+                | ValueNone -> ValueNone
+            ActorFactory.Create(tryCreate)
 
-    let filter canCreate create =
-        fun id -> if canCreate id then create id else Actor.none
+        member c.WithDispatcher(dispatcherId) =
+            c.Wrap(fun createId actor -> actor.WithDispatcher(dispatcherId))
 
-    let any create =
-        filter (fun id -> true) create
-
-    let init actorId create =
-        filter ((=)actorId) (fun id -> create())
-
-    let filterHandler canCreate register =
-        filter canCreate (fun id -> Actor.handler (register id))
-
-    let handler actorId register =
-        init actorId (fun () -> Actor.handler register)
-
-    let map (f : Actor -> Actor) create =
-        fun (id : ActorId) -> create id |> f
-
-    let combine factories =
-        let collection = ActorFactoryCollection()
-        for f in factories do collection.Add f
-        fun (id : ActorId) -> collection.Create id.value
+        member c.Create(actorId) =
+            match c.TryCreate(actorId) with
+            | ValueSome actor -> actor
+            | ValueNone -> Actor.Null
 
 type internal DisposableCollection<'a when 'a :> IDisposable>(items : 'a[]) =
     interface IDisposable with

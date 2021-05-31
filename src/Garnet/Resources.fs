@@ -4,17 +4,19 @@ open System
 open System.Diagnostics
 open System.Collections.Generic
 open System.IO
-open System.IO.Compression
 open System.Text
 open System.Threading
 
-type IFolder =
+type IReadOnlyFolder =
     inherit IDisposable
     abstract GetFiles : unit -> string seq
     abstract Contains : string -> bool
     abstract OpenRead : string -> Stream
-    abstract OpenWrite : string -> Stream
     abstract FlushChanged : Action<string> -> unit
+
+type IFolder =
+    inherit IReadOnlyFolder
+    abstract OpenWrite : string -> Stream
 
 module private ResourcePath =
     let getCanonical (path : string) =
@@ -55,7 +57,7 @@ type private ResourceInvalidationSet() =
         Monitor.Exit sync
 
 /// Thread-safe
-type FileFolder(rootDir, delay) =
+type FileFolder(rootDir, delay, log) =
     let rootDir = 
         let path = if String.IsNullOrEmpty(rootDir) then Directory.GetCurrentDirectory() else rootDir
         Path.GetFullPath(path)
@@ -63,7 +65,7 @@ type FileFolder(rootDir, delay) =
     let handler =
         FileSystemEventHandler(fun s e ->              
             let path = ResourcePath.getRelativePath rootDir e.FullPath
-            printfn "'%s' %A" path e.ChangeType
+            log <| sprintf "'%s' %A" path e.ChangeType
             changedSet.Invalidate(path, DateTime.UtcNow))
     let disposeWatcher = 
         if delay = Int32.MaxValue then ignore
@@ -92,7 +94,7 @@ type FileFolder(rootDir, delay) =
     let getFullPath (file : string) =
         if Path.IsPathRooted(file) then file
         else Path.Combine(rootDir, file)
-    new(rootDir) = new FileFolder(rootDir, 50)
+    new(rootDir) = new FileFolder(rootDir, 50, printfn "%s")
     new() = new FileFolder("")
     member c.GetFiles() =
         c.GetFiles(".", "*.*")
@@ -115,7 +117,7 @@ type FileFolder(rootDir, delay) =
         let path = getFullPath file
         let dir = Path.GetDirectoryName path
         Directory.CreateDirectory dir |> ignore
-        File.OpenWrite(path) :> Stream
+        File.Open(path, FileMode.Create) :> Stream
     member c.FlushChanged(action : Action<string>) =
         let maxTimestamp = DateTime.UtcNow - TimeSpan.FromMilliseconds(float delay)
         changedSet.FlushChanged(maxTimestamp, action)
@@ -130,6 +132,8 @@ type FileFolder(rootDir, delay) =
     interface IDisposable with
         member c.Dispose() =
             c.Dispose()
+    override c.ToString() =
+        rootDir
 
 /// Note Dispose() is absent
 type NonDisposingStream(stream : Stream, onClose) =
@@ -195,7 +199,7 @@ type MemoryStreamLookup<'k when 'k : equality>() =
             action.Invoke(key)
         updated.RemoveRange(0, count)
     override c.ToString() =
-        String.Join("\n",
+        sprintf "Streams (%d):\n" streams.Count + String.Join("\n",
             streams |> Seq.map (fun kvp ->
                 sprintf "%A: %d" kvp.Key kvp.Value.Length))
 
@@ -217,25 +221,6 @@ type MemoryFolder() =
     override c.ToString() =
         lookup.ToString()
 
-type GZipStreamSource(streams : IFolder) =
-    interface IFolder with
-        member c.GetFiles() =
-            streams.GetFiles()
-        member c.Contains(file) =
-            streams.Contains(file)
-        member c.OpenRead(file) =
-            new GZipStream(streams.OpenRead file, CompressionMode.Decompress, false)
-            :> Stream
-        member c.OpenWrite(file) =
-            new GZipStream(streams.OpenWrite file, CompressionLevel.Optimal, false)
-            :> Stream
-        member c.FlushChanged(action : Action<string>) =
-            streams.FlushChanged(action)
-        member c.Dispose() =
-            streams.Dispose()
-    override c.ToString() =
-        streams.ToString()
-
 type IStreamSource =
     abstract TryOpen : string -> ValueOption<Stream>
 
@@ -244,8 +229,8 @@ type private Disposable(onDispose) =
         member c.Dispose() =
             onDispose()
 
-type FolderCollection() =
-    let sources = List<IFolder>()
+type ReadOnlyFolderCollection() =
+    let sources = List<IReadOnlyFolder>()
     member c.AddSource(source) =
         sources.Add(source)
         new Disposable(fun () -> sources.Remove(source) |> ignore) :> IDisposable
@@ -378,7 +363,7 @@ type IResourceSet =
 type ResourceSet() =
     let loader = ResourceLoader()
     let resources = Dictionary<string, IResource>()
-    let streamSource = FolderCollection()
+    let sources = ReadOnlyFolderCollection()
     let invalidate = 
         Action<_>(fun key ->
             let key = ResourcePath.getCanonical key
@@ -386,7 +371,7 @@ type ResourceSet() =
             | true, resource -> resource.Invalidate()
             | false, _ -> ())//printfn "%s not found" key)
     member c.AddSource(source) =
-        streamSource.AddSource(source)
+        sources.AddSource(source)
     member c.Register(format : string, typeLoader) =
         loader.Register(format.ToLowerInvariant(), typeLoader)
     member c.AddResource<'a>(key, resource) =
@@ -406,7 +391,7 @@ type ResourceSet() =
             let load = 
                 fun _ -> 
                     let loader = loader.GetLoader<'a>(format)
-                    loader.Load(key, streamSource)
+                    loader.Load(key, sources)
             let dispose =
                 fun resource ->
                     let loader = loader.GetLoader<'a>(format)
@@ -417,7 +402,7 @@ type ResourceSet() =
     member c.LoadResource<'a> key =
         c.GetResource<'a>(key).Load()
     member c.InvalidateChanged() =
-        streamSource.InvalidateChanged(invalidate)
+        sources.InvalidateChanged(invalidate)
     member c.Dispose() =
         for resource in resources.Values do
             resource.Dispose()

@@ -171,7 +171,7 @@ type RingBufferPool<'a>(create) =
         pool.ToString()
 
 [<AutoOpen>]
-module DictionarySlim =    
+module internal DictionarySlim =    
     [<Struct>]
     type Entry<'TKey, 'TValue 
         when 'TKey :> IEquatable<'TKey>

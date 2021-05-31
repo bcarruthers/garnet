@@ -606,6 +606,53 @@ module Join =
                     i3 <- i3 + 1
                     i4 <- i4 + 1
 
+        let add5 action struct(r, a, b, c, d, e) param =
+            let c1 = count a
+            let c2 = count b
+            let c3 = count c
+            let c4 = count d
+            let c5 = count e
+            let mutable i1 = 0
+            let mutable i2 = 0
+            let mutable i3 = 0
+            let mutable i4 = 0
+            let mutable i5 = 0
+            while i1 < c1 && i2 < c2 && i3 < c3 && i4 < c4 && i5 < c5 do
+                let s1 = get a i1
+                let s2 = get b i2
+                let s3 = get c i3
+                let s4 = get d i4
+                let s5 = get e i5
+                let n1 = s1.id
+                let n2 = s2.id
+                let n3 = s3.id
+                let n4 = s4.id
+                let n5 = s5.id
+                if n1 < n2 || n1 < n3 || n1 < n4 || n1 < n5 then i1 <- i1 + 1
+                elif n2 < n1 || n2 < n3 || n2 < n4 || n2 < n5 then i2 <- i2 + 1
+                elif n3 < n1 || n3 < n2 || n3 < n4 || n3 < n5 then i3 <- i3 + 1
+                elif n4 < n1 || n4 < n2 || n4 < n3 || n4 < n5 then i4 <- i4 + 1
+                elif n5 < n1 || n5 < n2 || n5 < n3 || n5 < n4 then i5 <- i5 + 1
+                else
+                    let mask = s1.mask &&& s2.mask &&& s3.mask &&& s4.mask &&& s5.mask
+                    if mask <> 0UL then 
+                        let sid = s1.id
+                        let ir = find r sid
+                        if ir < 0 then
+                            let data = r.Add(sid, mask)
+                            action param mask struct(data, s1.data, s2.data, s3.data, s4.data, s5.data)
+                        else
+                            let sr = r.[ir]
+                            let addMask = mask &&& ~~~sr.mask
+                            if addMask <> 0UL then
+                                let data = r.Add(sid, addMask)
+                                action param addMask struct(data, s1.data, s2.data, s3.data, s4.data, s5.data)
+                    i1 <- i1 + 1
+                    i2 <- i2 + 1
+                    i3 <- i3 + 1
+                    i4 <- i4 + 1
+                    i5 <- i5 + 1
+
         let fold1 action a initState param =
             let mutable state = initState
             let c1 = count a
@@ -718,6 +765,7 @@ module Join =
         let add2 a c = get3 c |> Joins.add2 a
         let add3 a c = get4 c |> Joins.add3 a
         let add4 a c = get5 c |> Joins.add4 a
+        let add5 a c = get6 c |> Joins.add5 a
 
         let fold1 a c = get c |> Joins.fold1 a
         let fold2 a c = get2 c |> Joins.fold2 a
@@ -736,6 +784,7 @@ module Join =
     let add2 a = a |> Array.add2 |> Segments.add2        
     let add3 a = a |> Array.add3 |> Segments.add3
     let add4 a = a |> Array.add4 |> Segments.add4
+    let add5 a = a |> Array.add5 |> Segments.add5
 
     let update1 a = a |> Array.update1 |> Segments.iter1
     let update2 a = a |> Array.update2 |> Segments.iter2
