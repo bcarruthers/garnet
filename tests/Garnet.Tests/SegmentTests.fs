@@ -6,6 +6,14 @@ open Garnet.Composition
 
 [<Tests>]
 let tests =
+    let copyArrayMask mask (src : _[]) (dest : _[]) =
+        let mutable m = mask
+        let mutable i = 0
+        while m <> 0UL do
+            if m &&& 1UL <> 0UL then dest.[i] <- src.[i]
+            m <- m >>> 1
+            i <- i + 1
+
     testList "segments" [
         testCase "add" <| fun () ->
             let s = Segments()
@@ -47,7 +55,7 @@ let tests =
         testCase "copy masked data" <| fun () ->
             let a = Array.init 64 id
             let b = Array.zeroCreate<int> 64
-            Utility.copyArrayMask 0x00ff00ff00ffUL a b
+            copyArrayMask 0x00ff00ff00ffUL a b
             b.[1] |> shouldEqual 1
             b.[8] |> shouldEqual 0
             b.[16] |> shouldEqual 16

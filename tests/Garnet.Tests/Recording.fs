@@ -3,8 +3,8 @@ namespace Garnet.Streaming
 open System
 open System.IO
 open System.Collections.Generic
-open Garnet
-//open Garnet.Comparisons
+open System.Text
+open Garnet.Comparisons
 open Garnet.Formatting
 open Garnet.Composition
 
@@ -208,9 +208,23 @@ type MemoryActorStreamSource() =
 
 [<Struct>]
 type ActorLogCommand = {
-    enableActorLog : bool }
+    enableActorLog : bool 
+    }
     
 type PrintInbox(id : ActorId, formatter : IFormatter, counter : ref<int>, print) =
+    let formatMessagesTo (sb : StringBuilder) (formatMsg : _ -> string) (batch : ReadOnlySpan<_>) maxCount =
+        let printCount = min batch.Length maxCount
+        for i = 0 to printCount - 1 do
+            let msg = batch.[i]
+            sb.AppendLine() |> ignore
+            sb.Append("  ") |> ignore
+            sb.Append(formatMsg msg) |> ignore
+            //sb.Append(sprintf "%A" msg) |> ignore
+        // count of messages not printed
+        let remaining = batch.Length - printCount
+        if remaining > 0 then
+            sb.AppendLine() |> ignore
+            sb.Append(sprintf "  +%d" remaining) |> ignore
     let sb = System.Text.StringBuilder()
     let mutable batchCount = 0
     let mutable messageCount = 0
@@ -233,10 +247,8 @@ type PrintInbox(id : ActorId, formatter : IFormatter, counter : ref<int>, print)
                 sb.Append(sprintf "%d: %d->%d %d/%d/%d: %dx %s" 
                     id.value e.sourceId.value e.destinationId.value 
                     counter.Value batchCount messageCount
-                    e.message.Length (typeof<'a> |> typeToString)) |> ignore
-                let typeInfo = CachedTypeInfo<'a>.Info
-                if not typeInfo.isEmpty then
-                    formatMessagesTo sb formatter.Format e.message.Span maxMessages
+                    e.message.Length (typeof<'a>.Name)) |> ignore
+                formatMessagesTo sb formatter.Format e.message.Span maxMessages
                 sb.ToString() |> print//printfn "%s"
                 sb.Clear() |> ignore
             counter.Value <- counter.Value + 1

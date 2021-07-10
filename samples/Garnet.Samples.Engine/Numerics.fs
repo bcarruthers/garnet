@@ -1,0 +1,183 @@
+﻿namespace Garnet.Engine
+
+open System
+open System.Numerics
+open Veldrid
+
+[<Struct>]
+type Vector2i = 
+    val X : int
+    val Y : int
+    new(x, y) = { X = x; Y = y }
+    member c.ToVector2() = Vector2(float32 c.X, float32 c.Y)
+    override v.ToString() = sprintf "%A %A" v.X v.Y
+    static member Zero = Vector2i(0, 0)
+    static member One = Vector2i(1, 1)
+    static member UnitX = Vector2i(1, 0)
+    static member UnitY = Vector2i(0, 1)
+    static member inline Dot(a: Vector2i, b: Vector2i) = a.X * b.X + a.Y * b.Y
+    static member inline (~-) (v: Vector2i) = Vector2i(-v.X, -v.Y)
+    static member inline (+) (a: Vector2i, c) = Vector2i(a.X + c, a.Y + c) 
+    static member inline (-) (a: Vector2i, c) = Vector2i(a.X - c, a.Y - c)
+    static member inline (*) (a: Vector2i, c) = Vector2i(a.X * c, a.Y * c) 
+    static member inline (/) (a: Vector2i, c) = Vector2i(a.X / c, a.Y / c)
+    static member inline (>>>) (a: Vector2i, c) = Vector2i(a.X >>> c, a.Y >>> c)
+    static member inline (<<<) (a: Vector2i, c) = Vector2i(a.X <<< c, a.Y <<< c)
+    static member inline (&&&) (a: Vector2i, c) = Vector2i(a.X &&& c, a.Y &&& c)
+    static member inline (+) (a: Vector2i, b: Vector2i) = Vector2i(a.X + b.X, a.Y + b.Y)
+    static member inline (-) (a: Vector2i, b: Vector2i) = Vector2i(a.X - b.X, a.Y - b.Y)
+    static member inline (*) (a: Vector2i, b: Vector2i) = Vector2i(a.X * b.X, a.Y * b.Y) 
+    static member inline (/) (a: Vector2i, b: Vector2i) = Vector2i(a.X / b.X, a.Y / b.Y) 
+    static member inline Perpendicular(v : Vector2i) = Vector2i(-v.Y, v.X)    
+    static member inline FromVector2(v : Vector2) = Vector2i(int v.X, int v.Y)
+
+[<Struct>]
+type Rangei =
+    val Min : int
+    val Max : int
+    new(min, max) = { Min = min; Max = max }
+    member c.Size = c.Max - c.Min
+    member c.IsEmpty = c.Min >= c.Max
+    member c.Contains(x) = x >= c.Min && x < c.Max
+    member c.Expand(margin) = Rangei(c.Min - margin, c.Max + margin)
+    member c.Clamp(x) = x |> max c.Min |> min c.Max
+    override v.ToString() = sprintf "%A to %A" v.Min v.Max
+    static member ZeroToOne = Rangei(0, 1)
+    static member inline (+) (a: Rangei, c) = Rangei(a.Min + c, a.Max + c)
+    static member inline (-) (a: Rangei, c) = Rangei(a.Min - c, a.Max - c)
+    static member inline (*) (a: Rangei, c) = Rangei(a.Min * c, a.Max * c)
+    static member inline (/) (a: Rangei, c) = Rangei(a.Min / c, a.Max / c)
+    static member inline Sized(min, size) = 
+        Rangei(min, min + size)
+    static member inline Centered(center, size) = 
+        Rangei.Sized(center - size / 2, size)
+    static member inline Intersection(a : Rangei, b : Rangei) = 
+        Rangei(max a.Min b.Min, min a.Max b.Max)
+    static member inline Union(a : Rangei, b : Rangei) = 
+        Rangei(min a.Min b.Min, max a.Max b.Max)
+
+[<Struct>]
+type Range2i =
+    val Min : Vector2i
+    val Max : Vector2i
+    new(min, max) = { Min = min; Max = max }
+    new(x : Rangei, y : Rangei) = { 
+        Min = Vector2i(x.Min, y.Min)
+        Max = Vector2i(x.Max, y.Max) 
+        }
+    member c.X = Rangei(c.Min.X, c.Max.X)
+    member c.Y = Rangei(c.Min.Y, c.Max.Y)
+    member c.Size = c.Max - c.Min
+    member c.IsEmpty = c.X.IsEmpty || c.Y.IsEmpty
+    member c.GetCount() =
+        let s = c.Size
+        s.X * s.Y
+    member c.Contains (p : Vector2i) = 
+        c.X.Contains p.X && 
+        c.Y.Contains p.Y
+    member c.Expand(margin : Vector2i) = 
+        Range2i(
+            c.X.Expand(margin.X),
+            c.Y.Expand(margin.Y))
+    member c.Clamp(p : Vector2i) = 
+        Vector2i(c.X.Clamp p.X, c.Y.Clamp p.Y)
+    override i.ToString() = 
+        sprintf "%A to %A" i.Min i.Max
+    static member ZeroToOne = Range2i(Vector2i.Zero, Vector2i.One)
+    static member inline (+) (a: Range2i, c) = Range2i(a.X + c, a.Y + c)
+    static member inline (-) (a: Range2i, c) = Range2i(a.X - c, a.Y - c)
+    static member inline (*) (a: Range2i, c) = Range2i(a.X * c, a.Y * c)
+    static member inline (/) (a: Range2i, c) = Range2i(a.X / c, a.Y / c)
+    static member inline (+) (a: Range2i, v : Vector2i) = Range2i(a.X + v.X, a.Y + v.Y)
+    static member inline (-) (a: Range2i, v : Vector2i) = Range2i(a.X - v.X, a.Y - v.Y)
+    static member inline (*) (a: Range2i, v : Vector2i) = Range2i(a.X * v.X, a.Y * v.Y)
+    static member inline (/) (a: Range2i, v : Vector2i) = Range2i(a.X / v.X, a.Y / v.Y)
+    static member inline Sized(min : Vector2i, size : Vector2i) = 
+        Range2i(min, min + size)
+    static member inline Centered(center : Vector2i, size : Vector2i) = 
+        Range2i.Sized(center - size / 2, size)
+    static member inline Intersection(a : Range2i, b : Range2i) = 
+        Range2i(
+            Rangei.Intersection(a.X, b.X), 
+            Rangei.Intersection(a.Y, b.Y))
+    static member inline Union(a : Range2i, b : Range2i) =         
+        Range2i(
+            Rangei.Union(a.X, b.X), 
+            Rangei.Union(a.Y, b.Y))
+
+[<Struct>]
+type HsvaFloat =
+    val H : float32
+    val S : float32
+    val V : float32
+    val A : float32
+    new(h, s, v, a) = { H = h; S = s; V = v; A = a; }
+    new(c : RgbaFloat) =
+        let m = min (min c.R c.G) c.B
+        let v = max (max c.R c.G) c.B
+        let s = if v > Single.Epsilon then 1.0f - m / v else 0.0f
+        let l = (m + v) / 2.0f
+        if l < Single.Epsilon || v < m 
+        then HsvaFloat(0.0f, s, v, c.A)
+        else
+            let vm = v - m
+            let r2 = (v - c.R) / vm
+            let g2 = (v - c.G) / vm
+            let b2 = (v - c.B) / vm
+            let hx = 
+                if c.R = v then if c.G = m then 5.0f + b2 else 1.0f - g2
+                else if c.G = v then if c.B = m then 1.0f + r2 else 3.0f - b2
+                else if c.R = m then 3.0f + g2 else 5.0f - r2
+                / 6.0f
+            let h = if hx >= 1.0f then hx - 1.0f else hx
+            HsvaFloat(h, s, v, c.A)
+    member c.ToRgba() =
+        // from: http://alvyray.com/Papers/CG/hsv2rgb.htm
+        // H is given on [0, 6] or UNDEFINED. S and V are given on [0, 1].  
+        // RGB are each returned on [0, 1].
+        let f = c.H - floor c.H
+        let h = f * 6.0f
+        let v = c.V
+        let i = int32(floor h)
+        // if i is even
+        let g = if (i &&& 1) = 0 then 1.0f - f else f
+        let m = v * (1.0f - c.S)
+        let n = v * (1.0f - c.S * g)
+        match i with
+        | 6 -> RgbaFloat(v, n, m, c.A)
+        | 0 -> RgbaFloat(v, n, m, c.A)
+        | 1 -> RgbaFloat(n, v, m, c.A)
+        | 2 -> RgbaFloat(m, v, n, c.A)
+        | 3 -> RgbaFloat(m, n, v, c.A)
+        | 4 -> RgbaFloat(n, m, v, c.A)
+        | _ -> RgbaFloat(v, m, n, c.A)
+
+module Vector2 =
+    let fromRadians a =
+        Vector2(cos a, sin a)
+
+[<AutoOpen>]
+module Vector2Extensions =
+    type Vector2 with
+        member v.GetRadians() =
+            atan2 v.Y v.X
+
+        member v.DivideOrZero(c) =
+            if abs c > 1e-7f then v * (1.0f / c) else Vector2.Zero
+
+        member v.NormalizeOrZero() =
+            v.DivideOrZero(v.Length())
+
+        member v.TruncateOrZero(maxLength) =
+            let lengthSqr = v.LengthSquared()
+            if lengthSqr <= maxLength * maxLength then v
+            else v.NormalizeOrZero() * maxLength
+        
+        member v.GetPerpendicular() = 
+            Vector2(-v.Y, v.X)    
+
+[<AutoOpen>]
+module RgbaFloatExtensions =
+    type RgbaFloat with
+        member c.MultiplyAlpha(a) =
+            RgbaFloat(c.R, c.G, c.B, c.A * a)

@@ -2,12 +2,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="paket.references" />
-    <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="VisibleTo.fs" />
     <Compile Include="Comparisons.fs" />
     <Compile Include="Timing.fs" />
     <Compile Include="Buffers.fs" />
@@ -26,5 +22,7 @@
     <Compile Include="Actors.fs" />
     <Compile Include="Resources.fs" />
   </ItemGroup>
-  <Import Project="..\..\.paket\Paket.Restore.targets" />
+  <ItemGroup>
+    <PackageReference Include="System.Memory" Version="4.5.4" />
+  </ItemGroup>
 </Project>

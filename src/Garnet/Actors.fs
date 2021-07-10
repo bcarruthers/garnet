@@ -1056,16 +1056,3 @@ module ActorSystem =
         member c.Process msg =
             c.pump.Process(c.actorId, msg)
     
-type Sender = IOutbox -> unit
-
-module Sender =
-    let send actorId msg (a : IOutbox) =
-        a.Send(actorId, msg)
-
-    let sendAll actorId msg (a : IOutbox) =
-        a.SendAll(actorId, msg)
-
-    let list list =
-        fun (a : IOutbox) ->
-            for send in list do
-                send a

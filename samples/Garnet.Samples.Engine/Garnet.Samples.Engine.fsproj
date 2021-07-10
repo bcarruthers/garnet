@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <IsWindows Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Windows)))' == 'true'">true</IsWindows>
+    <IsOSX Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX)))' == 'true'">true</IsOSX>
+    <IsLinux Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))' == 'true'">true</IsLinux>
+    <Is64Bit Condition="'$(Prefer32Bit)' == 'false' Or '$(PlatformTarget)' == 'x64'">true</Is64Bit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Numerics.fs" />
+    <Compile Include="Collections.fs" />
+    <Compile Include="Input.fs" />
+    <Compile Include="Graphics.fs" />
+    <Compile Include="Window.fs" />
+    <Compile Include="Audio.fs" />
+    <Compile Include="Loaders.fs" />
+    <Compile Include="Tiling.fs" />
+    <Compile Include="Sprites.fs" />
+    <Content Condition="'$(IsWindows)' == 'true' And '$(Is64Bit)' == 'false'" Include="..\..\dependencies\win-x86\openal32.dll" Link="openal32.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Condition="'$(IsWindows)' == 'true' And '$(Is64Bit)' == 'true'" Include="..\..\dependencies\win-x64\openal32.dll" Link="openal32.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="Veldrid" Version="4.8.0" />
+    <PackageReference Include="Veldrid.SDL2" Version="4.8.0" />
+    <PackageReference Include="Veldrid.StartupUtilities" Version="4.8.0" />
+    <PackageReference Include="OpenTK.OpenAL" Version="4.6.4" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="1.0.3" />
+  </ItemGroup>
+
+</Project>

@@ -46,8 +46,6 @@ for i = 1 to 10 do
     * [Getting started](#gettingstarted)
     * [Background](#background)
     * [Goals](#goals)
-    * [Building](#building)
-    * [Samples](#samples)
 * Guide
     * [Containers](#containers)
     * [Entities](#entities)
@@ -61,14 +59,9 @@ for i = 1 to 10 do
 
 ## Getting started
 
-1. Create either a .NET Framework or .NET Core application.
+1. Create either a .NET Framework, Core, or 5.0+ application.
 2. Reference the [Garnet NuGet package](https://www.nuget.org/packages/Garnet/). 
-3. See code samples for library usage.
-
-Note that for .NET Core, if you encounter warnings about FSharp.Core package downgrade, you may need to add an explicit reference in your .fsproj file to the newer FSharp.Core version: 
-
-    <PackageReference Include="FSharp.Core" Version="4.6.2" />
-
+3. For samples, see unit tests or sample projects [here](https://github.com/bcarruthers/garnet/tree/master/samples).
 
 ## Background
 
@@ -85,16 +78,6 @@ While ECS focuses on managing shared state, the actor model isolates state into 
 - **Minimal**: The core library focuses on events, scheduling, and storage, and anything game-specific like physics, rendering, or update loops should be implemented separately.
 
 - **Complete**: In addition to traditional ECS, Garnet provides actor-like messaging for scenarios where multiple ECS worlds are beneficial, such as AI agents or networking.
-
-## Building
-
-1. Install [.NET Core SDK](https://dotnet.microsoft.com/download) (2.1 or later)
-2. Install [VS or build tools](https://visualstudio.microsoft.com/downloads) (2017 or later)
-2. Run build.cmd
-
-## Samples
-
-Sample documentation [here](https://github.com/bcarruthers/garnet/tree/master/samples).
 
 ## Containers
 

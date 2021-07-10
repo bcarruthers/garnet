@@ -89,7 +89,7 @@ type RawSerializer<'a>() =
     let storedLength = if isEmptyType typeof<'a> then 0 else bytes.Length
     do
         if not (checkBlittable<'a>()) then
-            failwithf "Type %s is not blittable" (typeof<'a> |> typeToString)
+            failwithf "Type %s is not blittable" (typeof<'a>.Name)
     interface ISerializer<'a> with
         member c.Write (output : Stream) (value : 'a) =
             data.[0] <- value
@@ -137,7 +137,7 @@ type MessageRegistry() =
     member c.Get<'a>() =
         let t = typeof<'a>
         match typeLookup.TryGetValue(t) with
-        | false, _ -> failwithf "Message type %s not registered" (typeToString t)
+        | false, _ -> failwithf "Message type %s not registered" t.Name
         | true, info ->
             {   typeId = info.typeId
                 serializer = info.serializer :?> ISerializer<'a>
