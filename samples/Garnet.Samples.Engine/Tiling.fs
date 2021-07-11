@@ -1,4 +1,4 @@
-﻿namespace Garnet.Engine
+﻿namespace Garnet.Samples.Engine
 
 open System
 open System.Buffers

@@ -13,6 +13,8 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Garnet.Samples.Engine", "sa
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Garnet.Samples.Flocking", "samples\Garnet.Samples.Flocking\Garnet.Samples.Flocking.fsproj", "{16290883-031E-408F-B599-5FEE33355629}"
 EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Garnet.Samples.Roguelike", "samples\Garnet.Samples.Roguelike\Garnet.Samples.Roguelike.fsproj", "{C7826D8F-8343-440B-BD6D-74F73D6814EC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -71,6 +73,18 @@ Global
 		{16290883-031E-408F-B599-5FEE33355629}.Release|x64.Build.0 = Release|Any CPU
 		{16290883-031E-408F-B599-5FEE33355629}.Release|x86.ActiveCfg = Release|Any CPU
 		{16290883-031E-408F-B599-5FEE33355629}.Release|x86.Build.0 = Release|Any CPU
+		{C7826D8F-8343-440B-BD6D-74F73D6814EC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C7826D8F-8343-440B-BD6D-74F73D6814EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C7826D8F-8343-440B-BD6D-74F73D6814EC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C7826D8F-8343-440B-BD6D-74F73D6814EC}.Debug|x64.Build.0 = Debug|Any CPU
+		{C7826D8F-8343-440B-BD6D-74F73D6814EC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C7826D8F-8343-440B-BD6D-74F73D6814EC}.Debug|x86.Build.0 = Debug|Any CPU
+		{C7826D8F-8343-440B-BD6D-74F73D6814EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C7826D8F-8343-440B-BD6D-74F73D6814EC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C7826D8F-8343-440B-BD6D-74F73D6814EC}.Release|x64.ActiveCfg = Release|Any CPU
+		{C7826D8F-8343-440B-BD6D-74F73D6814EC}.Release|x64.Build.0 = Release|Any CPU
+		{C7826D8F-8343-440B-BD6D-74F73D6814EC}.Release|x86.ActiveCfg = Release|Any CPU
+		{C7826D8F-8343-440B-BD6D-74F73D6814EC}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -78,6 +92,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{E0F6649F-E652-4B34-B0AA-1E6716AB60FF} = {1E82F9DC-427D-46D1-9352-FB1E97724CAF}
 		{16290883-031E-408F-B599-5FEE33355629} = {1E82F9DC-427D-46D1-9352-FB1E97724CAF}
+		{C7826D8F-8343-440B-BD6D-74F73D6814EC} = {1E82F9DC-427D-46D1-9352-FB1E97724CAF}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D7FA662D-CCF7-4CEF-82D0-82F96A334562}

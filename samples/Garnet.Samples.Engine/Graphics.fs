@@ -1,4 +1,4 @@
-﻿namespace Garnet.Engine
+﻿namespace Garnet.Samples.Engine
 
 open System
 open System.Buffers
@@ -60,7 +60,7 @@ type ProjectionViewSet(device : GraphicsDevice, slot) =
     interface IDisposable with 
         member c.Dispose() = c.Dispose()
    
-type WorldTextureSet(device : GraphicsDevice, surfaceTexture : Texture, slot) =
+type WorldTextureSet(device : GraphicsDevice, surfaceTexture : Texture, slot, sampler) =
     let factory = device.ResourceFactory
     let worldBuffer = factory.CreateBuffer(BufferDescription(64u, BufferUsage.UniformBuffer))
     let texTransformBuffer = factory.CreateBuffer(BufferDescription(64u, BufferUsage.UniformBuffer))
@@ -91,7 +91,7 @@ type WorldTextureSet(device : GraphicsDevice, surfaceTexture : Texture, slot) =
                 worldBuffer,
                 texTransformBuffer,
                 surfaceTextureView,
-                device.PointSampler))
+                sampler))
     member c.Layout = worldTextureLayout
     member c.Apply(world : Matrix4x4, texTransform : Matrix4x4, cmds : CommandList) =
         cmds.UpdateBuffer(worldBuffer, 0u, world)
@@ -193,9 +193,9 @@ type ShaderSet(device : GraphicsDevice,
         member c.Dispose() =
             c.Dispose()
 
-type ColorTextureTrianglePipeline(device, shaders : ShaderSet, texture : Texture) =
+type ColorTextureTrianglePipeline(device, shaders : ShaderSet, texture : Texture, sampler) =
     let projView = new ProjectionViewSet(device, 0)
-    let worldTexture = new WorldTextureSet(device, texture, 1)
+    let worldTexture = new WorldTextureSet(device, texture, 1, sampler)
     let layouts = [| 
         projView.Layout
         worldTexture.Layout 
@@ -307,9 +307,9 @@ type BufferedQuadMesh<'v
         member c.Dispose() =
             c.Dispose()        
 
-type ColorTextureQuadLayers(device, shaders, texture) =
+type ColorTextureQuadLayers(device, shaders, texture, sampler) =
     let meshes = List<IDrawable>()
-    let pipeline = new ColorTextureTrianglePipeline(device, shaders, texture)
+    let pipeline = new ColorTextureTrianglePipeline(device, shaders, texture, sampler)
     member c.GetLayer<'v
             when 'v : struct 
             and 'v : (new : unit -> 'v) 

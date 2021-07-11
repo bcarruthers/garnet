@@ -1,4 +1,4 @@
-﻿namespace Garnet.Engine
+﻿namespace Garnet.Samples.Engine
 
 open System
 open System.Numerics
@@ -83,6 +83,7 @@ type Range2i =
         Vector2i(c.X.Clamp p.X, c.Y.Clamp p.Y)
     override i.ToString() = 
         sprintf "%A to %A" i.Min i.Max
+    static member Zero = Range2i(Vector2i.Zero, Vector2i.Zero)
     static member ZeroToOne = Range2i(Vector2i.Zero, Vector2i.One)
     static member inline (+) (a: Range2i, c) = Range2i(a.X + c, a.Y + c)
     static member inline (-) (a: Range2i, c) = Range2i(a.X - c, a.Y - c)
@@ -104,6 +105,26 @@ type Range2i =
         Range2i(
             Rangei.Union(a.X, b.X), 
             Rangei.Union(a.Y, b.Y))
+
+[<Struct>]
+type Range =
+    val Min : float32
+    val Max : float32
+    new(min, max) = { Min = min; Max = max }
+    member c.Contains x = x >= c.Min && x < c.Max
+
+[<Struct>]
+type Range2 =
+    val Min : Vector2
+    val Max : Vector2
+    new(min, max) = { Min = min; Max = max }
+    member c.X = Range(c.Min.X, c.Max.X)
+    member c.Y = Range(c.Min.Y, c.Max.Y)
+    member c.Contains (p : Vector2) = 
+        c.X.Contains p.X && c.Y.Contains p.Y
+    override i.ToString() = 
+        sprintf "%A to %A" i.Min i.Max
+    static member ZeroToOne = Range2(Vector2.Zero, Vector2.One)
 
 [<Struct>]
 type HsvaFloat =
@@ -156,6 +177,9 @@ module Vector2 =
     let fromRadians a =
         Vector2(cos a, sin a)
 
+    let fromDegrees a = 
+        fromRadians (a * MathF.PI / 180.0f)
+
 [<AutoOpen>]
 module Vector2Extensions =
     type Vector2 with
@@ -175,6 +199,9 @@ module Vector2Extensions =
         
         member v.GetPerpendicular() = 
             Vector2(-v.Y, v.X)    
+
+        member v.Rotate(a : Vector2) = 
+            Vector2(a.X * v.X - a.Y * v.Y, a.X * v.Y + a.Y * v.X)
 
 [<AutoOpen>]
 module RgbaFloatExtensions =

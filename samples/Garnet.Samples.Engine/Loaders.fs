@@ -1,4 +1,4 @@
-﻿namespace Garnet.Engine
+﻿namespace Garnet.Samples.Engine
 
 open System
 open System.IO
@@ -27,7 +27,7 @@ type FileStreamSource(dir) =
             if File.Exists(path) then ValueSome (File.OpenRead(path) :> Stream)
             else ValueNone
 
-module Shaders =
+module internal Shaders =
     let getBytecodeExtension backend =
         match backend with
         | GraphicsBackend.Direct3D11 -> ".hlsl.bytes"
@@ -53,53 +53,6 @@ module Shaders =
         | ".frag" -> ShaderStages.Fragment
         | ".comp" -> ShaderStages.Compute
         | _ -> raise (Exception($"Invalid extension: {extension}"))
-
-module TextureLoading =
-    let getMipSize original mipLevel =
-        original >>> mipLevel |> max 1
-    
-    let getFormatSize format =
-        match format with
-        | PixelFormat.R8_G8_B8_A8_UNorm -> 4
-        | PixelFormat.BC3_UNorm -> 1
-        | _ -> failwithf "Unsupported format %A" format
-
-    let loadTo (texture : Texture) (device : GraphicsDevice) (desc : TextureDescription) (data : ReadOnlyMemory<byte>) =
-        let factory = device.ResourceFactory
-        // create staging texture
-        use staging = 
-            factory.CreateTexture(
-                TextureDescription(
-                    desc.Width, desc.Height, desc.Depth, desc.MipLevels, 
-                    desc.ArrayLayers, desc.Format, TextureUsage.Staging, 
-                    desc.Type))
-        // copy from buffer to staging
-        use handle = data.Pin()
-        let formatSize = getFormatSize desc.Format
-        let mutable offset = 0
-        for level = 0 to int desc.MipLevels - 1 do
-            let mipWidth = getMipSize (int desc.Width) level
-            let mipHeight = getMipSize (int desc.Height) level
-            let mipDepth = getMipSize (int desc.Depth) level
-            let subresourceSize = mipWidth * mipHeight * mipDepth * formatSize
-            for layer = 0 to int desc.ArrayLayers - 1 do
-                device.UpdateTexture(
-                    staging, IntPtr handle.Pointer + nativeint offset, uint32 subresourceSize,
-                    0u, 0u, 0u, uint32 mipWidth, uint32 mipHeight, uint32 mipDepth,
-                    uint32 level, 
-                    uint32 layer)
-                offset <- offset + subresourceSize
-        // copy from staging to final
-        use cl = factory.CreateCommandList()
-        cl.Begin()
-        cl.CopyTexture(staging, texture)
-        cl.End()
-        device.SubmitCommands(cl)
-        texture
-
-    let load (device : GraphicsDevice) (desc : TextureDescription) data =
-        let texture = device.ResourceFactory.CreateTexture(desc)
-        loadTo texture device desc data
 
 [<AutoOpen>]
 module LoaderExtensions =
@@ -128,30 +81,13 @@ module LoaderExtensions =
             use stream = c.Open(key)
             Image.Load<Rgba32>(stream)
 
-        member c.LoadTexture(device, image : Image<Rgba32>) =
-            let w = image.Width
-            let h = image.Height
-            let bytes = Array.zeroCreate<byte>(w * h * 4)
-            for y = 0 to h - 1 do
-                let row = image.GetPixelRowSpan(y)
-                let src = MemoryMarshal.Cast<Rgba32, byte>(row)
-                let dest = bytes.AsSpan().Slice(w * 4 * y, w * 4)
-                src.CopyTo(dest)
-            let desc = 
-                TextureDescription(
-                    Width = uint32 image.Width, 
-                    Height = uint32 image.Height, 
-                    Depth = 1u, 
-                    MipLevels = 1u, 
-                    ArrayLayers = 1u, 
-                    Format = PixelFormat.R8_G8_B8_A8_UNorm,
-                    Usage = TextureUsage.Sampled,
-                    Type = TextureType.Texture2D)
-            TextureLoading.load device desc (ReadOnlyMemory(bytes))
-
-        member c.LoadTexture(device, key) =
+        member c.LoadTexture(device : GraphicsDevice, key) =
             let image = c.LoadImage(key)
-            c.LoadTexture(device, image)
+            device.CreateTexture(image)
+
+        member c.LoadTextureAtlas(device : GraphicsDevice, atlasWidth, atlasHeight, keys) =
+            let images = keys |> Seq.map (fun key -> key, c.LoadImage(key))
+            device.CreateTextureAtlas(atlasWidth, atlasHeight, images)
 
         member c.LoadWave(device : AudioDevice, key) =
             use stream = c.Open(key)

@@ -16,6 +16,7 @@
     <Compile Include="Graphics.fs" />
     <Compile Include="Window.fs" />
     <Compile Include="Audio.fs" />
+    <Compile Include="Textures.fs" />
     <Compile Include="Loaders.fs" />
     <Compile Include="Tiling.fs" />
     <Compile Include="Sprites.fs" />

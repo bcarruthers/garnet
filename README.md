@@ -61,7 +61,7 @@ for i = 1 to 10 do
 
 1. Create either a .NET Framework, Core, or 5.0+ application.
 2. Reference the [Garnet NuGet package](https://www.nuget.org/packages/Garnet/). 
-3. For samples, see unit tests or sample projects [here](https://github.com/bcarruthers/garnet/tree/master/samples).
+3. For sample code, see unit tests or [sample projects](https://github.com/bcarruthers/garnet/tree/master/samples).
 
 ## Background
 
@@ -471,21 +471,6 @@ For the reverse direction, when you want the framework to call your code, you ca
     override c.Draw gameTime = 
         world.Run <| Draw()
 ```
-
-### Code organization
-
-To minimize your dependency on Garnet and your chosen framework, you can organize your code into layers:
-
-- Math code
-- Domain types
-- Domain logic
-- Framework interface types
-- [Garnet]
-- System definitions
-- [Framework]
-- Startup code
-
-See the [sample code](https://github.com/bcarruthers/garnet/tree/master/samples) for more detail.
 
 ## FAQ
 

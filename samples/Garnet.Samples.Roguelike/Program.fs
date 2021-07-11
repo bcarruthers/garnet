@@ -1,5 +1,5 @@
 open Garnet.Samples.Engine
-open Garnet.Samples.Flocking
+open Garnet.Samples.Roguelike
 
 [<EntryPoint>]
 let main argv =

@@ -4,7 +4,7 @@ open System
 open System.Collections.Generic
 open System.Numerics
 open Veldrid
-open Garnet.Engine
+open Garnet.Samples.Engine
 open Garnet.Composition
 open Garnet.Samples.Flocking.Types
         
@@ -123,42 +123,44 @@ module CoreSystems =
 module ViewSystems =
     let registerVehicleSprites (c : Container) =
         let update =
-            fun (mesh : BufferedQuadMesh<PositionTextureDualColorVertex>) 
+            fun struct(texBounds, mesh : BufferedQuadMesh<PositionTextureDualColorVertex>) 
                 struct(_ : Vehicle, p : Position, faction : Faction, h : Heading) -> 
                 mesh.DrawSprite(
                     center = p.pos, 
                     rotation = h.direction,
-                    size = 0.1f * Vector2.One * 120.0f,
-                    t0 = Vector2.Zero,
-                    t1 = Vector2.One,
+                    size = 0.1f * Vector2(1.0f, 1.0f) * 140.0f,
+                    texBounds = texBounds,
                     fg = Faction.toColor faction,
                     bg = RgbaFloat.Clear)
             |> Join.iter4
             |> Join.over c
         c.On<Draw> <| fun e ->
+            let atlas = c.GetInstance<TextureAtlas>()
             let layers = c.GetInstance<ColorTextureQuadLayers>()
+            let texBounds = atlas.GetBounds("triangle.png")
             let mesh = layers.GetLayer(2)
-            update mesh
+            update struct(texBounds, mesh)
             mesh.Flush()
 
     let registerTrailSprites (c : Container) =
         let update =
-            fun (mesh : BufferedQuadMesh<PositionTextureDualColorVertex>) 
+            fun struct(texBounds, mesh : BufferedQuadMesh<PositionTextureDualColorVertex>) 
                 struct(_ : Trail, p : Position, faction : Faction, ls : Lifespan, r : Rotation) ->
                 mesh.DrawSprite(
                     center = p.pos, 
                     rotation = Vector2.fromRadians r.radians,
-                    size = ls.lifespan * 0.3f * Vector2.One * 120.0f,
-                    t0 = Vector2.Zero,
-                    t1 = Vector2.One,
+                    size = ls.lifespan * 0.3f * Vector2.One * 60.0f,
+                    texBounds = texBounds,
                     fg = (Faction.toColor faction).MultiplyAlpha(ls.lifespan * 0.3f),
                     bg = RgbaFloat.Clear)
             |> Join.iter5
             |> Join.over c
         c.On<Draw> <| fun e ->
+            let atlas = c.GetInstance<TextureAtlas>()
             let layers = c.GetInstance<ColorTextureQuadLayers>()
+            let texBounds = atlas.GetBounds("hex.png")
             let mesh = layers.GetLayer(1)
-            update mesh
+            update struct(texBounds, mesh)
             mesh.Flush()
 
     let register (c : Container) =
