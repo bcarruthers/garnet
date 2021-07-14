@@ -1,6 +1,7 @@
 ﻿namespace Garnet.Samples.Roguelike
 
 open System
+open System.Collections.Generic
 open Garnet.Samples.Roguelike.Types
 
 module Vector =
@@ -20,13 +21,6 @@ module Vector =
         x = a.x - b.x
         y = a.y - b.y
         }
-
-    let getNextLocation loc dir =
-        match dir with
-        | East -> { loc with x = loc.x + 1 } 
-        | West -> { loc with x = loc.x - 1 }
-        | North -> { loc with y = loc.y - 1 }
-        | South -> { loc with y = loc.y + 1 }
 
 module Bounds =
     let init min max = { min = min; max = max }
@@ -73,12 +67,83 @@ module Bounds =
         |> Seq.fold including maxToMin
         |> expand zeroToOne
 
+module Direction =
+    let all = [|
+        East
+        North
+        West
+        South
+        |]
+
+    let getNext loc dir =
+        match dir with
+        | East -> { loc with x = loc.x + 1 } 
+        | West -> { loc with x = loc.x - 1 }
+        | North -> { loc with y = loc.y - 1 }
+        | South -> { loc with y = loc.y + 1 }
+    
+module DistanceMap =
+    let empty = {
+        distances = Map.empty
+        }
+
+    let create isPassable (tiles : Map<Vector, _>) seeds =
+        let result = Dictionary<Vector, int>()
+        let queue = Queue<struct(Vector * int)>()
+        let enqueue p dist =
+            if not (result.ContainsKey(p)) then
+                let canVisit =
+                    match tiles.TryGetValue(p) with
+                    | false, _ -> false
+                    | true, tile -> isPassable tile
+                result.Add(p, if canVisit then dist else Int32.MaxValue)
+                if canVisit then queue.Enqueue(struct(p, dist))                            
+        for seed in seeds do
+            enqueue seed 0
+        while queue.Count > 0 do
+            let struct(p, dist) = queue.Dequeue()
+            let nextDist = dist + 1
+            for dir in Direction.all do
+                let next = Direction.getNext p dir
+                enqueue next nextDist
+        {
+            distances = 
+                result
+                |> Seq.map (fun kvp -> kvp.Key, kvp.Value)
+                |> Map.ofSeq
+        }
+
+    let getDistance p map =
+        match map.distances.TryGetValue(p) with
+        | true, dist -> dist
+        | false, _ -> Int32.MaxValue
+
+    let distanceToChar x =
+        if x = 0 then '.'
+        elif x < 10 then '0' + char x
+        elif x < 36 then 'a' + char (x - 10)
+        elif x < 62 then 'A' + char (x - 36)
+        elif x = Int32.MaxValue then '#'
+        else '+'
+    
+    let format map =
+        let b = map.distances |> Seq.map (fun kvp -> kvp.Key) |> Bounds.includingAll
+        let size = Bounds.getSize b
+        let dw = size.x + 1
+        let data = Array.create (dw * size.y) ' '
+        for y = 0 to size.y - 1 do
+            data.[y * dw + dw - 1] <- '\n'
+        for kvp in map.distances do
+            let p = Vector.subtract kvp.Key b.min
+            data.[p.y * dw + p.x] <- distanceToChar kvp.Value
+        String(data)
+
 module Tile =
     let getChar tile =
         match tile.entity with
         | Some e ->
             match e.entityType with
-            | Player -> '@'
+            | Rogue -> '@'
             | Minion -> 'm'
         | None ->
             match tile.terrain with
@@ -107,9 +172,14 @@ module Tile =
     let removeEntity tile =
         { tile with entity = None }
 
+    let isPassable tile =
+        match tile.terrain with
+        | Wall -> false
+        | Floor -> true
+        
 module Entity =
-    let player = {
-        entityType = Player
+    let rogue = {
+        entityType = Rogue
         hits = 3
     }
 
@@ -136,22 +206,49 @@ module World =
         animations = List.empty
         }
 
-    let generate seed =
+    let generate mapRadius seed =
+        let r = mapRadius + 1
+        let extent = r * 2 + 1 
+        let count = extent * extent
+        let rand = Random(seed)
+        // draw random walls with border
+        let cells1 = Array.zeroCreate count
+        for y = -r to r do
+            for x = -r to r do
+                let i = (y + r) * extent + (x + r)
+                let dist = max (abs x) (abs y)
+                let cell = dist = r || (dist > 2 && rand.Next(10) = 0)
+                cells1.[i] <- cell
+        // apply morphological dilate
+        let cells2 = Array.zeroCreate count
+        let rm = r - 1
+        for y = -rm to rm do
+            for x = -rm to rm do
+                let i = (y + r) * extent + (x + r)
+                let cell =
+                    if cells1.[i] then true
+                    else
+                        let ix0 = i - 1
+                        let ix1 = i + 1
+                        let iy0 = i - extent
+                        let iy1 = i + extent
+                        cells1.[ix0] || cells1.[ix1] || cells1.[iy0] || cells1.[iy1]
+                cells2.[i] <- cell
+        // populate tiles
         let tiles = seq {
-            let rand = System.Random seed
-            let r = 10
-            for y = -r to r do
-                for x = -r to r do
+            for y = -rm to rm do
+                for x = -rm to rm do
+                    let i = (y + r) * extent + (x + r)
+                    let terrain = if cells2.[i] then Wall else Floor
                     let p = Vector.init x y
-                    let terrain = if max (abs x) (abs y) = r then Wall else Floor
                     yield p, {
                         terrain = terrain
                         entity =
                             match terrain with
                             | Wall -> None
                             | Floor ->
-                                if p = Vector.zero then Some Entity.player
-                                elif rand.Next 8 = 0 then Some Entity.minion
+                                if p = Vector.zero then Some Entity.rogue
+                                elif rand.Next(8) = 0 then Some Entity.minion
                                 else None
                     }
             }
@@ -184,6 +281,18 @@ module World =
     let format world =
         $"Turn {world.turn}:\n{formatAnimations world}\n{formatTiles world}"
 
+    let getEntityLocations entityType world = seq {
+        for kvp in world.tiles do
+            match kvp.Value.entity with
+            | Some entity -> if entity.entityType = entityType then yield kvp.Key
+            | None -> ()
+        }
+        
+    let isOccupied loc world =
+        match Map.tryFind loc world.tiles with
+        | Some tile -> tile.terrain = Wall || tile.entity.IsSome
+        | None -> true
+        
     let tryGetEntity loc world =
         Map.tryFind loc world.tiles
         |> Option.bind (fun tile -> tile.entity)
@@ -221,6 +330,9 @@ module World =
             |> Option.bind (fun e -> 
                 if e.entityType = entityType then Some (loc, e) else None))
 
+    let getDistanceMap map targets =
+        DistanceMap.create Tile.isPassable map.tiles targets
+
     let stepTurn world =
         { world with turn = world.turn + 1 }
 
@@ -228,13 +340,13 @@ module Action =
     let getEvents action loc world =
         match action with
         | Move dir ->
-            let nextLoc = Vector.getNextLocation loc dir
+            let nextLoc = Direction.getNext loc dir
             match Map.tryFind nextLoc world.tiles with
             | Some tile -> Tile.getMoveEvents loc nextLoc dir tile
             | None -> Seq.empty
 
     let getPlayerEvents action world =
-        match World.find EntityType.Player world with
+        match World.find Rogue world with
         | Some (loc, _) -> getEvents action loc world
         | None -> Seq.empty
 
@@ -245,7 +357,7 @@ module Event =
             match World.tryGetEntity e.attackerLoc world with
             | None -> world
             | Some attacker ->
-                let targetLoc = Vector.getNextLocation e.attackerLoc e.attackDir
+                let targetLoc = Direction.getNext e.attackerLoc e.attackDir
                 match World.tryGetEntity targetLoc world with
                 | None -> world
                 | Some target ->
@@ -259,7 +371,7 @@ module Event =
                         targetEntityType = target.entityType
                         })
         | Moved e -> 
-            let targetLoc = Vector.getNextLocation e.sourceLoc e.moveDir
+            let targetLoc = Direction.getNext e.sourceLoc e.moveDir
             world
             |> World.moveEntity e.sourceLoc targetLoc
             |> World.appendAnimation (Moving {
@@ -298,14 +410,42 @@ module Loop =
     let printWorld world =
         world |> World.format |> printfn "%s"
 
+    let applyPlayerEvents action world =
+        Action.getPlayerEvents action world
+        |> Seq.fold Event.applyEvent world
+        
+    let getHostileMoveEvents p dm world =
+        let dirs =
+            Direction.all
+            |> Seq.filter (fun dir ->
+                let next = Direction.getNext p dir
+                not (World.isOccupied next world))
+            |> Seq.toArray
+        if dirs.Length = 0 then world
+        else
+            let nearestDir =
+                dirs
+                |> Seq.minBy (fun dir ->
+                    let next = Direction.getNext p dir
+                    DistanceMap.getDistance next dm)
+            Moved {
+                sourceLoc = p
+                moveDir = nearestDir
+                }
+            |> Event.applyEvent world
+        
+    let applyHostileEvents world =
+        let targetLocs = World.getEntityLocations Rogue world
+        let dm = World.getDistanceMap world targetLocs
+        World.getEntityLocations Minion world
+        |> Seq.sortBy (fun p -> DistanceMap.getDistance p dm)
+        |> Seq.fold (fun state p -> getHostileMoveEvents p dm state) world           
+            
     let stepWorld world action =
-        let resetWorld = { world with animations = List.empty }
-        let events = Action.getPlayerEvents action resetWorld
-        let newWorld = 
-            events
-            |> Seq.fold Event.applyEvent resetWorld
-            |> World.stepTurn
-        newWorld
+        { world with animations = List.empty }
+        |> applyPlayerEvents action
+        |> applyHostileEvents
+        |> World.stepTurn
 
     let run world =
         readPlayerActions()

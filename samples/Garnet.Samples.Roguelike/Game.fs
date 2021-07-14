@@ -10,6 +10,7 @@ open Garnet.Samples.Roguelike.Types
 module Command =
     let getCommand =
         function
+        | Key.R -> Command.Reset
         | Key.Right -> Command.MoveEast
         | Key.Up -> Command.MoveNorth
         | Key.Left -> Command.MoveWest
@@ -28,14 +29,16 @@ module Command =
 type Game(fs : IStreamSource) =
     // Image is a tilemap of ASCII chars (16x16=256 tiles)
     let image = fs.LoadImage("drake-10x10-transparent.png")
-    let tileScale = 3
+    let tileScale = 2
     let tileWidth = image.Width / 16
     let tileHeight = image.Height / 16
+    let mapRadius = 15
+    let mapExtent = mapRadius * 2 + 1
     let ren = new WindowRenderer { 
         CreateWindow.defaults with 
             title = "Roguelike" 
-            windowWidth = 21 * tileWidth * tileScale
-            windowHeight = 21 * tileHeight * tileScale
+            windowWidth = mapExtent * tileWidth * tileScale
+            windowHeight = mapExtent * tileHeight * tileScale
         }
     let shaders = 
         fs.LoadShaderSet(ren.Device, 
@@ -46,32 +49,25 @@ type Game(fs : IStreamSource) =
     // Use point sampling for pixelated appearance
     let layers = new ColorTextureQuadLayers(ren.Device, shaders, texture, ren.Device.PointSampler)
     let audio = new AudioDevice()
-    //let blip = fs.LoadWave(audio, "blip.wav")
     do 
         // Set transforms so drawing code can use tile coords for source (16x16 tileset) 
         // and destination (80x25 display tiles)
         let texTileSize = 1.0f / 16.0f
         layers.WorldTransform <- Matrix4x4.CreateScale(float32 tileWidth, float32 tileHeight, 1.0f)
         layers.TextureTransform <- Matrix4x4.CreateScale(texTileSize, texTileSize, 1.0f)
+        ren.Background <- RgbaFloat.Black
         ren.Add(layers)
-    member private c.Draw() =
-        // Update transforms according to window size so we can draw using pixel coords
-        // with origin in upper left of view
-        let displayScale = float32 tileScale
-        let size = ren.WindowSize.ToVector2() / displayScale
-        layers.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, -size.Y, -100.0f, 100.0f)
-        layers.ViewTransform <- Matrix4x4.CreateTranslation(-size.X * 0.5f, -size.Y * 0.5f, 0.0f)
-        ren.Draw(RgbaFloat.Blue)
     member private c.DrawWorld(world) =
         let tiles = layers.GetLayer(1)
         tiles.DrawWorld(world)
         tiles.Flush()
+        // Note we only invalidate when something changes instead of every frame
         ren.Invalidate()
     member c.Run() =
         // Start loop
-        let mutable state = World.generate 1
+        let mutable state = World.generate mapRadius 1
         c.DrawWorld(state)
-        while ren.Update() do
+        while ren.Update(0.0f) do
             for e in ren.Inputs.KeyDownEvents do
                 match Command.getCommand e.keyCode with
                 | Command.FullScreen -> ren.ToggleFullScreen()
@@ -82,7 +78,13 @@ type Game(fs : IStreamSource) =
                     | Some action -> 
                         state <- Loop.stepWorld state action
                         c.DrawWorld(state)
-            c.Draw()
+            // Update transforms according to window size so we can draw using pixel coords
+            // with origin in upper left of view
+            let displayScale = float32 tileScale
+            let size = ren.WindowSize.ToVector2() / displayScale
+            layers.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, -size.Y, -100.0f, 100.0f)
+            layers.ViewTransform <- Matrix4x4.CreateTranslation(-size.X * 0.5f, -size.Y * 0.5f, 0.0f)
+            ren.Draw()
             // Sleep to avoid spinning CPU (note sleep(1) typically takes ~15 ms)
             Thread.Sleep(1)
     interface IDisposable with

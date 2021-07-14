@@ -257,7 +257,27 @@ type PositionTextureDualColorVertex = {
 type IDrawable =
     inherit IDisposable
     abstract Draw : CommandList -> unit
+    
+type Drawable(draw) =
+    interface IDrawable with
+        member c.Draw(cmds) = draw cmds
+        member c.Dispose() = ()
 
+/// Adding drawables passes ownership and responsibility for disposal
+type DrawableCollection() =
+    let drawables = List<IDrawable>()
+    member c.Add(drawable) =
+        drawables.Add(drawable)
+    member c.Draw(cmds) =
+        for drawable in drawables do
+            drawable.Draw(cmds)
+    member c.Dispose() =
+        for drawable in drawables do
+            drawable.Dispose()
+    interface IDrawable with
+        member c.Draw(cmds) = c.Draw(cmds)
+        member c.Dispose() = c.Dispose()
+    
 type BufferedQuadMesh<'v
                 when 'v : struct 
                 and 'v : (new : unit -> 'v) 
@@ -291,6 +311,21 @@ type BufferedQuadMesh<'v
             indexSpan.[ii + 3] <- vi + 0
             indexSpan.[ii + 4] <- vi + 2
             indexSpan.[ii + 5] <- vi + 3
+        indexes.Advance(indexCount)
+        mesh.WriteIndexes(indexes.WrittenMemory)
+        indexes.Clear()
+        mesh.WriteVertices(vertices.WrittenMemory)
+        vertices.Clear()
+    member c.FlushTriangles() =
+        let triCount = vertices.WrittenCount / 3
+        let indexCount = triCount * 3
+        let indexSpan = indexes.GetSpan(indexCount).Slice(0, indexCount)
+        for i = 0 to triCount - 1 do
+            let vi = i * 3
+            let ii = i * 3
+            indexSpan.[ii + 0] <- vi + 0
+            indexSpan.[ii + 1] <- vi + 1
+            indexSpan.[ii + 2] <- vi + 2
         indexes.Advance(indexCount)
         mesh.WriteIndexes(indexes.WrittenMemory)
         indexes.Clear()
@@ -341,7 +376,7 @@ type ColorTextureQuadLayers(device, shaders, texture, sampler) =
             c.Dispose()
 
 type Renderer(device : GraphicsDevice) =
-    let drawables = List<IDrawable>()
+    let drawables = new DrawableCollection()
     let cmds = device.ResourceFactory.CreateCommandList()
     let mutable size = Vector2i.Zero
     let mutable valid = false
@@ -363,8 +398,7 @@ type Renderer(device : GraphicsDevice) =
             // Clear viewports
             cmds.ClearColorTarget(0u, bgColor)
             // Call drawing
-            for drawable in drawables do
-                drawable.Draw(cmds)
+            drawables.Draw(cmds)
             // End() must be called before commands can be submitted for execution.
             cmds.End()
             device.SubmitCommands(cmds)
@@ -372,8 +406,7 @@ type Renderer(device : GraphicsDevice) =
             // the application window.
             device.SwapBuffers()
     member c.Dispose() =
-        for drawable in drawables do
-            drawable.Dispose()
+        drawables.Dispose()
         cmds.Dispose()
     interface IDisposable with
         member c.Dispose() =

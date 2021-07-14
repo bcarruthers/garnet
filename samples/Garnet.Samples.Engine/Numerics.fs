@@ -112,19 +112,47 @@ type Range =
     val Max : float32
     new(min, max) = { Min = min; Max = max }
     member c.Contains x = x >= c.Min && x < c.Max
+    static member Lerp(r : Range, t) = r.Min * (1.0f - t) + r.Max * t
+    static member inline Sized(min, size) = 
+        Range(min, min + size)
+    static member inline Centered(center, size) = 
+        Range.Sized(center - size * 0.5f, size)
+    static member inline Intersection(a : Range, b : Range) = 
+        Range(max a.Min b.Min, min a.Max b.Max)
+    static member inline Union(a : Range, b : Range) = 
+        Range(min a.Min b.Min, max a.Max b.Max)
 
 [<Struct>]
 type Range2 =
     val Min : Vector2
     val Max : Vector2
     new(min, max) = { Min = min; Max = max }
+    new(x : Range, y : Range) = { 
+        Min = Vector2(x.Min, y.Min)
+        Max = Vector2(x.Max, y.Max) 
+        }
     member c.X = Range(c.Min.X, c.Max.X)
     member c.Y = Range(c.Min.Y, c.Max.Y)
     member c.Contains (p : Vector2) = 
         c.X.Contains p.X && c.Y.Contains p.Y
     override i.ToString() = 
         sprintf "%A to %A" i.Min i.Max
+    static member Zero = Range2(Vector2.Zero, Vector2.Zero)
     static member ZeroToOne = Range2(Vector2.Zero, Vector2.One)
+    static member Lerp(r : Range2, v : Vector2) = 
+        Vector2(Range.Lerp(r.X, v.X), Range.Lerp(r.Y, v.Y))
+    static member inline Sized(min : Vector2, size : Vector2) = 
+        Range2(min, min + size)
+    static member inline Centered(center : Vector2, size : Vector2) = 
+        Range2.Sized(center - size * 0.5f, size)
+    static member inline Intersection(a : Range2, b : Range2) = 
+        Range2(
+            Range.Intersection(a.X, b.X), 
+            Range.Intersection(a.Y, b.Y))
+    static member inline Union(a : Range2, b : Range2) =         
+        Range2(
+            Range.Union(a.X, b.X), 
+            Range.Union(a.Y, b.Y))
 
 [<Struct>]
 type HsvaFloat =
@@ -204,7 +232,24 @@ module Vector2Extensions =
             Vector2(a.X * v.X - a.Y * v.Y, a.X * v.Y + a.Y * v.X)
 
 [<AutoOpen>]
+module RgbaByteExtensions =
+    type RgbaByte with
+        member c.ToRgbaFloat() =
+            RgbaFloat(
+                float32 c.R / 255.0f,
+                float32 c.G / 255.0f,
+                float32 c.B / 255.0f,
+                float32 c.A / 255.0f)
+
+[<AutoOpen>]
 module RgbaFloatExtensions =
     type RgbaFloat with
         member c.MultiplyAlpha(a) =
             RgbaFloat(c.R, c.G, c.B, c.A * a)
+
+        member c.ToRgbaByte() =
+            RgbaByte(
+                byte (c.R * 255.0f |> max 0.0f |> min 255.0f),
+                byte (c.G * 255.0f |> max 0.0f |> min 255.0f),
+                byte (c.B * 255.0f |> max 0.0f |> min 255.0f),
+                byte (c.A * 255.0f |> max 0.0f |> min 255.0f))

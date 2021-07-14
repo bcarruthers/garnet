@@ -6,6 +6,41 @@ open Veldrid
 open Garnet.Samples.Engine
 open Garnet.Samples.Roguelike.Types
 
+[<Struct>]
+type DisplayTile = {
+    ch : char
+    fg : RgbaFloat
+    bg : RgbaFloat
+    }
+
+module DisplayTile =
+    let fromTile tile =
+        match tile.entity with
+        | Some entity ->
+            match entity.entityType with
+            | Rogue -> {
+                ch = '@'
+                fg = RgbaFloat(0.3f, 1.0f, 1.0f, 1.0f)
+                bg = RgbaFloat(0.3f, 1.0f, 1.0f, 0.3f)
+                }
+            | Minion -> {
+                ch = 'm'
+                fg = RgbaFloat(1.0f, 0.3f, 0.3f, 1.0f)
+                bg = RgbaFloat(1.0f, 0.3f, 0.3f, 0.3f)
+                }
+        | None ->
+            match tile.terrain with
+            | Floor -> {
+                ch = '.'
+                fg = RgbaFloat(0.3f, 0.4f, 0.5f, 0.5f)
+                bg = RgbaFloat(0.3f, 0.4f, 0.5f, 0.1f)
+                }
+            | Wall -> {
+                ch = '#'
+                fg = RgbaFloat(0.3f, 0.4f, 0.5f, 1.0f)
+                bg = RgbaFloat(0.3f, 0.4f, 0.5f, 0.3f)
+                }
+            
 [<Extension>]
 type ViewExtensions =
     [<Extension>]
@@ -15,10 +50,7 @@ type ViewExtensions =
         let mutable i = 0
         for kvp in world.tiles do
             let p = Vector.subtract kvp.Key min
-            let tile = kvp.Value
-            let ch = Tile.getChar tile
-            let fg = RgbaFloat.White
-            let bg = RgbaFloat.Black
-            span.Slice(i * 4).DrawTile(p.x, p.y, ch, fg, bg)
+            let tile = DisplayTile.fromTile kvp.Value
+            span.Slice(i * 4).DrawTile(p.x, p.y, tile.ch, tile.fg, tile.bg)
             i <- i + 1
         w.Advance(span.Length)

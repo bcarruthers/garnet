@@ -15,13 +15,17 @@ type Direction =
     | West
     | North
     | South
+
+type DistanceMap = {
+    distances : Map<Vector, int>
+    }
     
 type Terrain =
     | Floor
     | Wall
 
 type EntityType =
-    | Player
+    | Rogue
     | Minion
 
 type Entity = {
@@ -93,4 +97,5 @@ type Command =
     | MoveNorth = 2
     | MoveWest = 3
     | MoveSouth = 4
-    | FullScreen = 5
+    | Reset = 5
+    | FullScreen = 6

@@ -40,15 +40,9 @@ type Game(fs : IStreamSource) =
             PositionTextureDualColorVertex.Description)
     let atlas = fs.LoadTextureAtlas(ren.Device, 512, 512, [ "hex.png"; "triangle.png" ])
     let layers = new ColorTextureQuadLayers(ren.Device, shaders, atlas.Texture, ren.Device.LinearSampler)
-    do 
+    do
+        ren.Background <- RgbaFloat(0.0f, 0.1f, 0.2f, 1.0f) 
         ren.Add(layers)
-    member private c.Draw() =
-        // Update transforms so origin is in the center of the screen and we use pixel coords
-        // with +Y as up.
-        let displayScale = 1.0f
-        let size = ren.WindowSize.ToVector2() / displayScale
-        layers.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, size.Y, -100.0f, 100.0f)
-        ren.Draw(RgbaFloat(0.0f, 0.1f, 0.2f, 1.0f))
     member c.Run() =
         // Create ECS container to hold game state and handle messages
         let container = Container.Create(Systems.register)
@@ -58,23 +52,20 @@ type Game(fs : IStreamSource) =
         // Start loop
         container.Run(Start())
         let timer = UpdateTimer(16L)
-        while ren.Update() do
+        while ren.Update(0.0f) do
+            // Call systems to update
             let e = timer.Update()
-            // Call systems to update/draw
             container.Run<Update>(e)
+            // Update transforms so origin is in the center of the screen and we use pixel coords
+            // with +Y as up.
+            let displayScale = 1.0f
+            let size = ren.WindowSize.ToVector2() / displayScale
+            layers.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, size.Y, -100.0f, 100.0f)
+            // Call systems to draw
             container.Run(Draw())
-            //let mesh = layers.GetLayer(3)
-            //mesh.DrawSprite(
-            //    center = Vector2(0.0f, 0.0f), 
-            //    rotation = Vector2.UnitX.Rotate(Vector2.fromDegrees 10.0f),
-            //    size = Vector2.One * 300.0f,
-            //    texBounds = atlas.GetBounds("triangle.png"),
-            //    fg = RgbaFloat.White,
-            //    bg = RgbaFloat.Clear)
-            //mesh.Flush()
             // Draw to window
             ren.Invalidate()
-            c.Draw()
+            ren.Draw()
             // Sleep to avoid spinning CPU (note sleep(1) typically takes ~15 ms)
             Thread.Sleep(1)
     interface IDisposable with

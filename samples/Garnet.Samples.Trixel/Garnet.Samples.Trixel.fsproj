@@ -1,0 +1,47 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net5.0</TargetFramework>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>Link</TrimMode>
+    <RootNamespace>Garnet.Samples.Trixel</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="assets\square.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="assets\texture-dual-color.frag">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="assets\texture-dual-color.frag.hlsl.bytes">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="assets\texture-dual-color.vert">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="assets\texture-dual-color.vert.hlsl.bytes">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <Compile Include="Types.fs" />
+    <Compile Include="Functions.fs" />
+    <Compile Include="Imaging.fs" />
+    <Compile Include="View.fs" />
+    <Compile Include="Gui.fs" />
+    <Compile Include="Game.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Garnet\Garnet.fsproj" />
+    <ProjectReference Include="..\Garnet.Samples.Engine\Garnet.Samples.Engine.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="Veldrid.ImGui" Version="5.72.0" />
+  </ItemGroup>
+
+</Project>
