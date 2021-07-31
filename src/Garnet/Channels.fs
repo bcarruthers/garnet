@@ -3,14 +3,12 @@
 open System
 open System.Buffers
 open System.Collections.Generic
+open System.Diagnostics
 open System.Text
 open Garnet
 open Garnet.Comparisons
 open Garnet.Formatting
 open Garnet.Metrics
-
-/// Event published when commit occurs    
-type Commit = struct end
 
 type internal EventHandler<'a> = ReadOnlyMemory<'a> -> unit
 
@@ -25,7 +23,7 @@ type internal IChannel =
 
 module internal Publisher =
     let formatBatch (messages : ReadOnlySpan<_>) =
-        let sb = System.Text.StringBuilder()
+        let sb = StringBuilder()
         let count = min 20 messages.Length
         for i = 0 to count - 1 do 
             let msg = messages.[i]
@@ -44,7 +42,7 @@ module internal Publisher =
             | ex -> 
                 let str = 
                     sprintf "Error in handler %d on %s batch (%d):%s" 
-                        i (typeof<'a> |> typeToString) batch.Length (formatBatch batch.Span)
+                        i (typeof<'a> |> Format.typeToString) batch.Length (formatBatch batch.Span)
                 exn(str, ex) |> raise                
 
 type Channel<'a>() =
@@ -122,7 +120,7 @@ type Channel<'a>() =
         member c.Commit() = c.Commit()
         member c.SetPublisher(p) = c.SetPublisher(p)
     override c.ToString() =            
-        sprintf "%s: %dH %dP %dE %dT %dSE" (typeof<'a> |> typeToString) 
+        sprintf "%s: %dH %dP %dE %dT %dSE" (typeof<'a> |> Format.typeToString) 
             handlers.WrittenCount pending.WrittenCount events.WrittenCount total stack.WrittenCount
 
 type IChannels =
@@ -265,13 +263,13 @@ type internal PrintPublisher(options) =
     let mutable count = 0
     interface IPublisher with        
         member c.PublishAll<'a>(batch : ReadOnlyMemory<'a>, handlers) =
-            let start = Timing.getTimestamp()
+            let start = Stopwatch.GetTimestamp()
             let mutable completed = false
             try
                 options.basePublisher.PublishAll(batch, handlers)
                 completed <- true
             finally
-                let typeInfo = CachedTypeInfo<'a>.Info
+                let typeInfo = Format.CachedTypeInfo<'a>.Info
                 let canLog =
                     options.enableLog &&
                     options.canSendLog typeof<'a> && 
@@ -279,30 +277,30 @@ type internal PrintPublisher(options) =
                 let canTime =
                     options.canSendTiming typeof<'a>
                 // stop timer
-                let stop = Timing.getTimestamp()
+                let stop = Stopwatch.GetTimestamp()
                 // send timing
                 if canTime then
                     options.sendTiming {
-                        name = typeInfo.typeName
-                        start = start
-                        stop = stop
-                        count = batch.Length 
+                        Name = typeInfo.typeName
+                        Start = start
+                        Stop = stop
+                        Count = batch.Length 
                         }
                 // send log message
                 if canLog then
                     let duration = stop - start
-                    let usec = duration * 1000L / Timing.ticksPerMs |> int
+                    let usec = duration * 1000L * 1000L / Stopwatch.Frequency |> int
                     if not completed || usec >= options.minDurationUsec then
                         sb.Append(
                             sprintf "[%s] %d: %dx %s to %d handlers in %dus%s"
                                 options.logLabel count batch.Length 
-                                (typeof<'a> |> typeToString)
+                                (typeof<'a> |> Format.typeToString)
                                 handlers.Length usec
                                 (if completed then "" else " failed")
                             ) |> ignore
                         // print messages
                         if not typeInfo.isEmpty then
-                            formatMessagesTo sb options.formatter.Format batch.Span options.messageSizeLimit
+                            Format.formatMessagesTo sb options.formatter.Format batch.Span options.messageSizeLimit
                         sb.AppendLine() |> ignore
                         options.sendLog (sb.ToString())
                         sb.Clear() |> ignore
@@ -325,8 +323,8 @@ module PrintPublisherOptions =
         minDurationUsec = 0
         sendLog = printfn "%s"
         sendTiming = ignore
-        canSendLog = fun t -> not (t.Equals(typeof<Commit>))
-        canSendTiming = fun t -> not (t.Equals(typeof<Commit>))
+        canSendLog = fun t -> true
+        canSendTiming = fun t -> true
         basePublisher = Publisher.Default
         formatter = Formatter()
         }

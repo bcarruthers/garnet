@@ -44,14 +44,14 @@ type Components<'k, 'c, 'm, 'a
         let ci = IdSegmentMapper.getComponentIndex<'k, 'c, 'm> id
         let seg = segs.Get(sid)
         if seg.mask &&& (1UL <<< ci) = 0UL then 
-            failwithf "Cannot get %s %s" (typeToString typeof<'a>) (id.ToString())
+            failwithf "Cannot get %s %s" (Format.typeToString typeof<'a>) (id.ToString())
         seg.data.[ci]
     member c.Set(id, value) =
         let sid = IdSegmentMapper.getSegmentKey<'k, 'c, 'm> id
         let ci = IdSegmentMapper.getComponentIndex<'k, 'c, 'm> id
         let seg = segs.Get(sid)
         if seg.mask &&& (1UL <<< ci) = 0UL then 
-            failwithf "Cannot set %s %s" (typeToString typeof<'a>) (id.ToString())
+            failwithf "Cannot set %s %s" (Format.typeToString typeof<'a>) (id.ToString())
         seg.data.[ci] <- value
     member c.TryGet(id, [<Out>] value : byref<_>)=        
         let sid = IdSegmentMapper.getSegmentKey<'k, 'c, 'm> id
@@ -128,6 +128,8 @@ type ComponentStore<'k, 'c, 'm
         let ci = IdSegmentMapper.getComponentIndex<'k, 'c, 'm> id
         let mask = 1UL <<< ci
         segs.Handle(param, sid, mask, handler)
+    member c.Handle(param, sid, mask, handler) =        
+        segs.Handle(param, sid, mask, handler)
     member c.Handle(param, handler) =      
         segs.Handle(param, handler)
     /// Removes ID component and assumes other components
@@ -144,6 +146,8 @@ type ComponentStore<'k, 'c, 'm
     interface ISegmentStore<'k> with
         member c.Handle(param, handler) =      
             c.Handle(param, handler)
+        member c.Handle(param, sid, mask, handler) =        
+            c.Handle(param, sid, mask, handler)
         member c.GetSegments<'a>() = 
             segs.GetSegments<'a>()
     override c.ToString() =

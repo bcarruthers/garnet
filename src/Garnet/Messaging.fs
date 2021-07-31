@@ -281,7 +281,7 @@ type private InboxCollection(handlers : IInbox[]) =
             for handler in handlers do
                 handler.Receive<'a> e
     override c.ToString() =
-         formatList "Inboxes" handlers.Length (String.Join("\n", handlers))
+         Format.formatList "Inboxes" handlers.Length (String.Join("\n", handlers))
 
 [<Struct>]
 type Actor(inbox : IInbox, dispatcherId : int, dispose : unit -> unit) =

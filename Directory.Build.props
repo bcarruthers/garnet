@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <Version>0.3.0</Version>
-    <Authors>Ben Caruthers</Authors>
+    <Authors>Ben Carruthers</Authors>
     <Copyright>Copyright © 2021 Ben Carruthers</Copyright>
     <Description>F# game composition library</Description>
   </PropertyGroup>

@@ -7,11 +7,14 @@ open System.IO
 open System.Text
 open System.Threading
 
+type IStreamSource =
+    abstract TryOpen : string -> ValueOption<Stream>
+
 type IReadOnlyFolder =
+    inherit IStreamSource
     inherit IDisposable
-    abstract GetFiles : unit -> string seq
+    abstract GetFiles : string * string -> string seq
     abstract Contains : string -> bool
-    abstract OpenRead : string -> Stream
     abstract FlushChanged : Action<string> -> unit
 
 type IFolder =
@@ -57,7 +60,7 @@ type private ResourceInvalidationSet() =
         Monitor.Exit sync
 
 /// Thread-safe
-type FileFolder(rootDir, delay, log) =
+type FileFolder(rootDir, delay) =
     let rootDir = 
         let path = if String.IsNullOrEmpty(rootDir) then Directory.GetCurrentDirectory() else rootDir
         Path.GetFullPath(path)
@@ -65,7 +68,7 @@ type FileFolder(rootDir, delay, log) =
     let handler =
         FileSystemEventHandler(fun s e ->              
             let path = ResourcePath.getRelativePath rootDir e.FullPath
-            log <| sprintf "'%s' %A" path e.ChangeType
+            //log <| sprintf "'%s' %A" path e.ChangeType
             changedSet.Invalidate(path, DateTime.UtcNow))
     let disposeWatcher = 
         if delay = Int32.MaxValue then ignore
@@ -94,10 +97,8 @@ type FileFolder(rootDir, delay, log) =
     let getFullPath (file : string) =
         if Path.IsPathRooted(file) then file
         else Path.Combine(rootDir, file)
-    new(rootDir) = new FileFolder(rootDir, 50, printfn "%s")
+    new(rootDir) = new FileFolder(rootDir, Int32.MaxValue)
     new() = new FileFolder("")
-    member c.GetFiles() =
-        c.GetFiles(".", "*.*")
     member c.GetFiles(dir, searchPattern) =
         let subDir = Path.Combine(rootDir, dir)
         if Directory.Exists subDir 
@@ -110,9 +111,10 @@ type FileFolder(rootDir, delay, log) =
     member c.Contains(file) = 
         let path = getFullPath file
         File.Exists(path)
-    member c.OpenRead(file) =
+    member c.TryOpen(file) =
         let path = getFullPath file
-        openFile path 1 5 :> Stream
+        if File.Exists(path) then ValueSome (openFile path 1 5 :> Stream)
+        else ValueNone
     member c.OpenWrite(file) =
         let path = getFullPath file
         let dir = Path.GetDirectoryName path
@@ -124,9 +126,9 @@ type FileFolder(rootDir, delay, log) =
     member c.Dispose() =
         disposeWatcher()
     interface IFolder with
-        member c.GetFiles() = c.GetFiles()
+        member c.GetFiles(dir, searchPattern) = c.GetFiles(dir, searchPattern)
         member c.Contains(file) = c.Contains(file)
-        member c.OpenRead(file) = c.OpenRead(file)
+        member c.TryOpen(file) = c.TryOpen(file)
         member c.OpenWrite(file) = c.OpenWrite(file)
         member c.FlushChanged(action) = c.FlushChanged(action)
     interface IDisposable with
@@ -174,11 +176,11 @@ type MemoryStreamLookup<'k when 'k : equality>() =
         new NonDisposingStream(ms, fun () -> updated.Add id) :> Stream
     member c.GetKeys() =
         lock sync <| fun () ->
-            streams.Keys |> Seq.cache
+            streams.Keys |> Seq.toArray :> seq<_>
     member c.Contains(key) =
         lock sync <| fun () ->
             streams.ContainsKey(key)
-    member c.TryOpenRead(id) =
+    member c.TryOpen(id) =
         lock sync <| fun () ->
             match streams.TryGetValue id with
             | true, x -> ValueSome x
@@ -187,11 +189,6 @@ type MemoryStreamLookup<'k when 'k : equality>() =
             let length = int ms.Length
             let buffer = ms.GetBuffer()
             new MemoryStream(buffer, 0, length, false) :> Stream)
-    member c.OpenRead(id : 'k) =
-        match c.TryOpenRead(id) with
-        | ValueSome x -> x
-        | ValueNone ->
-            raise (FileNotFoundException(sprintf "Could not find %A" id, id.ToString()))
     member c.FlushChanged (action : Action<'k>) =
         let count = updated.Count
         for i = 0 to count - 1 do
@@ -206,12 +203,12 @@ type MemoryStreamLookup<'k when 'k : equality>() =
 type MemoryFolder() =
     let lookup = MemoryStreamLookup<string>()
     interface IFolder with
-        member c.GetFiles() =
+        member c.GetFiles(dir, searchPattern) =
             lookup.GetKeys()
         member c.Contains(file) =
             lookup.Contains(file)
-        member c.OpenRead(file) =
-            lookup.OpenRead(file)
+        member c.TryOpen(file) =
+            lookup.TryOpen(file)
         member c.OpenWrite(file) =
             lookup.OpenWrite(file)
         member c.FlushChanged(action : Action<string>) =
@@ -220,9 +217,6 @@ type MemoryFolder() =
             ()
     override c.ToString() =
         lookup.ToString()
-
-type IStreamSource =
-    abstract TryOpen : string -> ValueOption<Stream>
 
 type private Disposable(onDispose) =
     interface IDisposable with
@@ -243,7 +237,7 @@ type ReadOnlyFolderCollection() =
             let mutable i = 0
             while result = ValueNone && i < sources.Count do
                 if sources.[i].Contains(key) then
-                    result <- ValueSome (sources.[i].OpenRead(key))
+                    result <- sources.[i].TryOpen(key)
                 i <- i + 1
             result
 
@@ -254,6 +248,18 @@ module FileFolder =
             match c.TryOpen(key) with
             | ValueNone -> failwithf "Could not open %s" key
             | ValueSome x -> x
+
+        member c.LoadText(key) =
+            use stream = c.Open(key)
+            use reader = new StreamReader(stream)
+            reader.ReadToEnd()
+
+    type IReadOnlyFolder with
+        member c.GetFiles(dir) =
+            c.GetFiles(dir, "*.*")
+
+        member c.GetFiles() =
+            c.GetFiles(".", "*.*")
 
 type IResourceLoader<'a> =
     abstract Load : string * IStreamSource -> 'a

@@ -1,4 +1,4 @@
-﻿namespace Garnet.Composition
+﻿namespace Garnet.Samples.Engine
 
 type Start = struct end    
 type Stop = struct end    

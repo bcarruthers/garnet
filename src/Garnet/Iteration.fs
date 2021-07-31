@@ -100,6 +100,22 @@ module Join =
                 m <- m >>> 1
                 i <- i + 1
 
+        let update6 map param mask struct(s1 : _[], s2 : _[], s3 : _[], s4 : _[], s5 : _[], s6 : _[]) =
+            let mutable m = mask
+            let mutable i = 0
+            while m <> 0UL do
+                if m &&& 1UL <> 0UL then s1.[i] <- map param struct(s1.[i], s2.[i], s3.[i], s4.[i], s5.[i], s6.[i])
+                m <- m >>> 1
+                i <- i + 1
+
+        let update7 map param mask struct(s1 : _[], s2 : _[], s3 : _[], s4 : _[], s5 : _[], s6 : _[], s7 : _[]) =
+            let mutable m = mask
+            let mutable i = 0
+            while m <> 0UL do
+                if m &&& 1UL <> 0UL then s1.[i] <- map param struct(s1.[i], s2.[i], s3.[i], s4.[i], s5.[i], s6.[i], s7.[i])
+                m <- m >>> 1
+                i <- i + 1
+
         let add1 map param mask struct(sr : _[], s1 : _[]) =
             let mutable m = mask
             let mutable i = 0
@@ -791,6 +807,8 @@ module Join =
     let update3 a = a |> Array.update3 |> Segments.iter3
     let update4 a = a |> Array.update4 |> Segments.iter4
     let update5 a = a |> Array.update5 |> Segments.iter5
+    let update6 a = a |> Array.update6 |> Segments.iter6
+    let update7 a = a |> Array.update7 |> Segments.iter7
 
     let fold1 a = a |> Array.fold1 |> Segments.fold1
     let fold2 a = a |> Array.fold2 |> Segments.fold2

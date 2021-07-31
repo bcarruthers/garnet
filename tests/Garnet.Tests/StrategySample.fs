@@ -33,6 +33,7 @@ type ResetMap = {
 
 type PrintMap = struct end
 type StepSim = struct end
+type CommitMap = struct end
 
 module ResetMap =
     let defaultParams = {
@@ -103,6 +104,8 @@ type WorldGrid() =
             store.GetSegments()
         member c.Handle(param, handler) =      
             store.Handle(param, handler)
+        member c.Handle(param, sid, mask, handler) =      
+            store.Handle(param, sid, mask, handler)
     override c.ToString() =
         store.ToString()
 
@@ -111,7 +114,7 @@ module MapSystem =
     let register (c : Container) =
         let map = c.GetInstance<WorldGrid>()
         Disposable.Create [
-            c.On<Commit> <| fun e ->
+            c.On<CommitMap> <| fun _ ->
                 map.Commit()
             c.On<ResetMap> <| fun e ->
                 let rand = Random(e.worldSeed)
@@ -155,11 +158,11 @@ module MapSystem =
                 // Each sim step, increase the temperature of all
                 // cells with iron. Cells can be iterated over the
                 // same way as non-grid entities.
-                fun param struct(cl : Climate, _ : Ore) ->
+                fun _ struct(cl : Climate, _ : Ore) ->
                     { cl with temperature = cl.temperature + 1 }
                 |> Join.update2
                 |> Join.over map)
-            c.On<PrintMap> <| fun e ->
+            c.On<PrintMap> <| fun _ ->
                 let sb = StringBuilder()
                 for y = 0 to map.Size.h - 1 do
                     for x = 0 to map.Size.w - 1 do
@@ -180,10 +183,7 @@ module MapSystem =
 
 // startup
 let run() =
-    let c = Container()
-    let systems = [
-        MapSystem.register c
-        ]
+    let c = Container.Create(MapSystem.register)
     c.Run {
         worldSeed = 1
         size = { w = 20; h = 20 }
@@ -200,4 +200,5 @@ let run() =
     // destroy cell
     cell.Destroy()
     c.Commit()
+    c.Run <| CommitMap()
     printfn "%s" <| cell.ToString()

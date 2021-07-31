@@ -4,7 +4,6 @@ open System
 open System.Collections
 open System.Collections.Generic
 open System.Runtime.InteropServices
-open System.Threading
 open Garnet.Comparisons
 
 /// Mutable min-heap
@@ -240,31 +239,3 @@ and Enumerator<'TKey, 'TValue
     interface IEnumerator<KeyValuePair<'TKey, 'TValue>> with
         member c.Current = c._current
         member c.Dispose() = ()
-
-/// Provides lookup by both key and index and allows adding
-/// items while iterating.
-type IndexedLookup<'k, 'v when 'k : equality>() =
-    let items = List<'v>()
-    let idToIndex = Dictionary<'k, int>()
-    member c.Entries = idToIndex
-    member c.Items = items
-    member c.Count = items.Count
-    member inline c.Item 
-        with get i = items.[i]
-        and set i x = items.[i] <- x
-    member inline c.TryGetIndex(id, [<Out>] i : byref<_>) = 
-        idToIndex.TryGetValue(id, &i)
-    member c.TryGet(id, [<Out>] x : byref<_>) = 
-        let mutable index = 0
-        let result = c.TryGetIndex(id, &index)
-        if result then x <- items.[index]
-        result
-    /// Returns index of new item
-    member c.Add(id, x) =
-        let index = items.Count
-        items.Add(x)
-        idToIndex.Add(id, index)
-        index
-    member c.Clear() =
-        items.Clear()
-        idToIndex.Clear()

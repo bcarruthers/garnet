@@ -77,8 +77,7 @@ type StringBlockWriter() =
         toString w
         w.ToString()
 
-[<AutoOpen>]
-module internal Internal =
+module internal Format =
     let private getNonGenericTypeName (name : string) =
         let last = name.LastIndexOf('`')
         if last < 0 then name else name.Substring(0, last)

@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Events.fs" />
     <Compile Include="Numerics.fs" />
     <Compile Include="Collections.fs" />
     <Compile Include="Input.fs" />

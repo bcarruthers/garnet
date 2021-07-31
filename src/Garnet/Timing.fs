@@ -6,47 +6,29 @@ open System.Diagnostics
 /// Single recorded timing consisting of N operations in a window of time.
 [<Struct>]
 type Timing = {
-    name : string
-    start : int64
-    stop : int64
-    count : int
+    Name : string
+    Start : int64
+    Stop : int64
+    Count : int
     } with
-    member t.Duration = t.stop - t.start
-    override t.ToString() = sprintf "%A, %A to %A (%A), %A ops" t.name t.start t.stop t.Duration t.count
-
-module Timing =
-    let inline getTimestamp() = Stopwatch.GetTimestamp()
-    let ticksPerMs = Stopwatch.Frequency / 1000L
-    let msPerTick = 1.0f / (float32 ticksPerMs)
-
-    let init name start stop count = {
-        name = name
-        start = start
-        stop = stop
-        count = count
-        }
-        
-    let one name start stop  =
-        init name start stop 1
-
-    let oneEndingNow name start =
-        init name start (getTimestamp()) 1
+    member t.Duration = t.Stop - t.Start
+    override t.ToString() = sprintf "%A, %A to %A (%A), %A ops" t.Name t.Start t.Stop t.Duration t.Count
 
 [<Struct>]
 type TimingPoint = {
-    name : string
-    start : int64
-    report : Timing -> unit
+    Name : string
+    Start : int64
+    Report : Timing -> unit
     } with
     member p.GetTiming count = {
-        name = p.name
-        start = p.start
-        stop = Timing.getTimestamp()
-        count = count
+        Name = p.Name
+        Start = p.Start
+        Stop = Stopwatch.GetTimestamp()
+        Count = count
         }
     /// Ends timing point, reporting elapsed time.
     member p.Stop count = 
-        p.report (p.GetTiming(count))
+        p.Report (p.GetTiming(count))
     member p.Dispose() = 
         p.Stop(1)
     interface IDisposable with
@@ -54,5 +36,5 @@ type TimingPoint = {
         member p.Dispose() = 
             p.Stop(1)
     override t.ToString() = 
-        let stop = Timing.getTimestamp()
-        sprintf "%A, %A to %A (%A)" t.name t.start stop (stop - t.start)
+        let stop = Stopwatch.GetTimestamp()
+        sprintf "%A, %A to %A (%A)" t.Name t.Start stop (stop - t.Start)

@@ -150,7 +150,7 @@ module internal Sending =
         override c.ToString() =
             let strMessages = buffer |> Seq.map (sprintf "%A")
             sprintf "Message (%s):\n  Source: %d\n  Recipients (%d): %s\n  Buffer (%d): %s" 
-                (typeToString typeof<'a>) sourceId.value
+                (Format.typeToString typeof<'a>) sourceId.value
                 recipientCount (String.Join(", ", recipients |> Seq.take recipientCount))
                 bufferLength (String.Join(", ", strMessages |> Seq.take bufferLength))
 
@@ -195,7 +195,7 @@ module internal Pooling =
                 else
                     let mean = if count > 0 then total / count else 0
                     sprintf "%s (%d): %d total, %d mean" 
-                        (typeToString typeof<'a>)
+                        (Format.typeToString typeof<'a>)
                         count total mean
 
     // Thread-safe
@@ -261,7 +261,7 @@ module internal Pooling =
             else
                 let mean = if count > 0 then total / count else 0
                 sprintf "%s (%d): %d total, %d mean" 
-                    (typeToString typeof<'a>)
+                    (Format.typeToString typeof<'a>)
                     count total mean
 
     // Not thread-safe
@@ -699,7 +699,7 @@ module internal Dispatchers =
     type WorkerDispatcher(actorMap, pool, workerCount, throughput, onException) as c =
         let workers = 
             // round up to pow2 size so we can avoid modulus
-            let size = getNextPow2 workerCount
+            let size = Bits.getNextPow2 workerCount
             let arr = Array.zeroCreate size
             // create workers
             for i = 0 to workerCount - 1 do
@@ -948,9 +948,9 @@ type ActorSystem(config) =
         dispatchers.ToString(writer)
     override c.ToString() =
         sprintf "Actor system\n  %s%s%s"
-            (addIndent (actors.ToString()))
-            (addIndent (pool.ToString()))
-            (addIndent (dispatchers.ToString()))
+            (Format.addIndent (actors.ToString()))
+            (Format.addIndent (pool.ToString()))
+            (Format.addIndent (dispatchers.ToString()))
     static member CreateSingleThread() =
         new ActorSystem(ActorSystemConfiguration.singleThread)
 

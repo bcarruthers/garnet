@@ -3,41 +3,44 @@
 open Expecto
 open Garnet.Composition
 
+[<AllowNullLiteral>]
+type TestClass() = class end
+
 [<Tests>]
 let tests =
     testList "registry" [
         testCase "resolve default" <| fun () ->
             let r = Registry()
-            r.GetInstance<int>() |> shouldEqual 0
+            r.GetInstance<TestClass>() |> isNull |> shouldEqual false
 
         testCase "resolve instance" <| fun () ->
             let r = Registry()
-            r.RegisterInstance 10
-            r.GetInstance<int>() |> shouldEqual 10
+            r.RegisterInstance("a")
+            r.GetInstance<string>() |> shouldEqual "a"
 
         testCase "resolve ref" <| fun () ->
             let r = Registry()
-            r.Register(fun () -> ref 10)
-            r.GetInstance<ref<int>>().Value |> shouldEqual 10
+            r.RegisterFactory<int ref>(fun () -> ref 10)
+            r.GetInstance<int ref>().Value |> shouldEqual 10
 
         testCase "resolve circular" <| fun () ->
             let r = Registry()
-            r.Register<int>(fun () -> r.GetInstance<string>().Length)
-            r.Register<string>(fun () -> r.GetInstance<int>().ToString())
-            Expect.throws(fun () -> r.GetInstance<int>() |> ignore) ""
+            r.RegisterFactory<int ref>(fun () -> ref (r.GetInstance<string>().Length))
+            r.RegisterFactory<string>(fun () -> r.GetInstance<int ref>().ToString())
+            Expect.throws(fun () -> r.GetInstance<int ref>() |> ignore) ""
 
         testCase "instance overrides factory" <| fun () ->
             let r = Registry()
-            r.RegisterInstance 11
-            r.Register(fun () -> 10)
-            r.GetInstance<int>() |> shouldEqual 11
+            r.RegisterInstance("a")
+            r.RegisterFactory(fun () -> "b")
+            r.GetInstance<string>() |> shouldEqual "a"
 
         testCase "copy registry" <| fun () ->
             let r = Registry()
-            r.RegisterInstance 10
-            r.RegisterInstance "a"
+            r.RegisterInstance(ref 10)
+            r.RegisterInstance("a")
             let r2 = Registry()
             r.CopyTo(r2)
-            r2.GetInstance<int>() |> shouldEqual 10
+            r2.GetInstance<int ref>().Value |> shouldEqual 10
             r2.GetInstance<string>() |> shouldEqual "a"
     ]

@@ -229,7 +229,7 @@ type EidPool(partition) =
                     let u = used.[i]
                     if k ||| u <> 0UL then
                         yield sprintf "%d %s" i (formatBits k u)
-                } |> listToString "    " "")
+                } |> Format.listToString "    " "")
 
 type EidPools() =
     let pools = Array.init Eid.partitionCount EidPool
@@ -252,7 +252,7 @@ type EidPools() =
             then sprintf "%d: %s" i (p.ToString()) 
             else "")
         |> Seq.filter (fun str -> str.Length > 0)
-        |> listToString (prefix + "  ") (prefix + "Pools")
+        |> Format.listToString (prefix + "  ") (prefix + "Pools")
 
 /// Wrapper over resource lookup with default types for ECS
 type Container() =
@@ -267,10 +267,10 @@ type Container() =
     member c.Get<'a>() = components.Get<'a>()
     member c.GetSegments<'a>() = segments.GetSegments<'a>()
     member c.GetChannel<'a>() = channels.GetChannel<'a>()
-    member c.Register x = reg.Register x
-    member c.RegisterInstance x = reg.RegisterInstance x
-    member c.TryGetInstance<'a>([<Out>] r : byref<_>) = 
-        reg.TryGetInstance<'a>(&r)
+    member c.RegisterFactory(x) = reg.RegisterFactory(x)
+    member c.RegisterInstance(x) = reg.RegisterInstance(x)
+    member c.TryGetInstance([<Out>] r : byref<_>) = reg.TryGetInstance(&r)
+    member c.GetInstance() = reg.GetInstance()
     member c.IterInstances(param, handler) =
         reg.IterInstances(param, handler)
     member c.GetAddresses() =
@@ -290,8 +290,6 @@ type Container() =
         segments.ApplyRemovalsFrom(eids)   
         eidPools.Apply(eids)
         components.Commit()
-        // Publish event to allow for custom commit implementations.
-        channels.Publish <| Commit()
     /// Returns true if events were handled
     member private c.DispatchOnce() = 
         c.Commit()
@@ -323,6 +321,8 @@ type Container() =
         eid
     member c.Handle(param, handler : ISegmentListHandler<_, int>) =
         segments.Handle(param, handler)
+    member c.Handle(param, sid, mask, handler) =        
+        segments.Handle(param, sid, mask, handler)
     member c.Handle(param, id, handler) =
         components.Handle(param, id, handler)
     member c.Destroy(eid : Eid) =
@@ -342,10 +342,11 @@ type Container() =
     member c.UnsubscribeAll() =
         channels.Clear()
     interface IRegistry with
-        member c.Register f = c.Register f
-        member c.RegisterInstance x = c.RegisterInstance x
-        member c.TryGetInstance<'a>([<Out>] r : byref<_>) = 
-            c.TryGetInstance<'a>(&r)
+        member c.RegisterFactory(x) = c.RegisterFactory(x)
+        member c.RegisterInstance(x) = c.RegisterInstance(x)
+        member c.TryGetInstance([<Out>] r : byref<_>) = 
+            c.TryGetInstance(&r)
+        member c.GetInstance() = c.GetInstance()
         member c.IterInstances(param, handler) =
             c.IterInstances(param, handler)
     interface IChannels with
@@ -356,6 +357,8 @@ type Container() =
     interface ISegmentStore<int> with
         member c.Handle(param, handler) =      
             c.Handle(param, handler)
+        member c.Handle(param, sid, mask, handler) =        
+            c.Handle(param, sid, mask, handler)
         member c.GetSegments<'a>() = 
             segments.GetSegments<'a>()
     member c.BeginSend() =

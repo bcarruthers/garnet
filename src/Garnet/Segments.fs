@@ -10,7 +10,6 @@ open Garnet.Comparisons
 open Garnet.Collections
 open Garnet.Formatting
 
-[<AutoOpen>]
 module internal Bits =
     let inline bitCount x =
         let x = x - ((x >>> 1) &&& 0x55555555)
@@ -58,20 +57,20 @@ module internal Utility =
             i <- i + 1
 
     let resizeArray (arr : _[]) required =
-        let newArr = Array.zeroCreate (getNextPow2 required)
+        let newArr = Array.zeroCreate (Bits.getNextPow2 required)
         arr.CopyTo(newArr, 0)
         newArr
 
     let getArrayBitCount64 (masks : uint64[]) count =
         let mutable total = 0
         for i = 0 to count - 1 do
-            total <- total + bitCount64 masks.[i]
+            total <- total + Bits.bitCount64 masks.[i]
         total
     
     let formatIndexedList prefix (segments : ReadOnlyMemory<_>) =
         segments.ToArray()
         |> Seq.mapi (fun i x -> sprintf "%d %s" i (x.ToString()))
-        |> listToString prefix "" 
+        |> Format.listToString prefix "" 
     
 /// Contiguous 64-element segment with a mask indicating which elements
 /// are defined and ID to identify the segment in a sparse collection
@@ -81,7 +80,7 @@ type Segment<'k, 'a when 'k :> IComparable<'k>> = {
     id : 'k
     mask : uint64
     } with
-    override s.ToString() = sprintf "%s %s" (s.id.ToString()) (maskToString 64 s.mask)
+    override s.ToString() = sprintf "%s %s" (s.id.ToString()) (Format.maskToString 64 s.mask)
     member c.Get(i, fallback) =
         if c.mask &&& (1UL <<< i) <> 0UL then c.data.[i]
         else fallback    
@@ -99,14 +98,17 @@ type internal BitSegment<'k when 'k :> IComparable<'k>> = {
     mask : uint64
     } with
     static member IsEmpty = Predicate<BitSegment<'k>>(fun s -> s.mask = 0UL)
-    override s.ToString() = sprintf "%s %s" (s.id.ToString()) (maskToString 64 s.mask)
+    override s.ToString() = sprintf "%s %s" (s.id.ToString()) (Format.maskToString 64 s.mask)
 
 module internal BitSegment =
     let init id mask = { id = id; mask = mask }
     
 /// Provides a method for accepting a generically-typed segment
-type ISegmentHandler<'p> =
-    abstract member Handle<'k, 'a when 'k :> IComparable<'k>> : 'p * Segment<'k, 'a> -> unit
+type ISegmentHandler<'p, 'k
+        when 'k :> IComparable<'k> 
+        and 'k :> IEquatable<'k> 
+        and 'k : equality> =
+    abstract member Handle<'a> : 'p * Segment<'k, 'a> -> unit
 
 type ISegmentListHandler<'p, 'k
         when 'k :> IComparable<'k> 
@@ -131,10 +133,10 @@ type PrintHandler<'k
         let t = typeof<'b>
         sb.AppendLine() |> ignore
         sb.Append(t.Name) |> ignore
-        if not (isEmptyType t) then 
+        if not (Format.isEmptyType t) then 
             bytes <- bytes + sizeof<'b>
             sb.Append(sprintf " %A" x) |> ignore
-    interface ISegmentHandler<unit> with               
+    interface ISegmentHandler<unit, 'k> with               
         member c.Handle((), segment) =
             iter c.Print () (segment.mask &&& mask) segment.data            
     interface ISegmentListHandler<unit, 'k> with               
@@ -156,12 +158,12 @@ module internal Internal =
         abstract member Remove : 'k * uint64 -> unit
         abstract member Commit : unit -> unit
         abstract member Handle<'p> : 'p * ISegmentListHandler<'p, 'k> ->unit
-        abstract member Handle<'p> : 'p * ISegmentHandler<'p> * 'k * uint64 ->unit
+        abstract member Handle<'p> : 'p * ISegmentHandler<'p, 'k> * 'k * uint64 ->unit
 
     let failComponentOperation op mask conflict (s : Segment<_, 'a>) =
         failwithf "Could not %s %s, sid: %A\n  Requested: %s\n  Existing:  %s\n  Error:     %s"
-            op (typeof<'a> |> typeToString) s.id (maskToString 64 mask) 
-            (maskToString 64 s.mask) (maskToString 64 conflict)
+            op (typeof<'a> |> Format.typeToString) s.id (Format.maskToString 64 mask) 
+            (Format.maskToString 64 s.mask) (Format.maskToString 64 conflict)
             
     [<Struct>]
     type PendingSegment<'k, 'a when 'k :> IComparable<'k>> = {
@@ -183,7 +185,7 @@ module internal Internal =
             let mutable total = 0
             for i = 0 to count - 1 do
                 let seg = segments.[i]
-                total <- total + bitCount64 seg.mask
+                total <- total + Bits.bitCount64 seg.mask
             total
         member c.Components = seq {
             for i = 0 to count - 1 do
@@ -288,7 +290,7 @@ module internal Internal =
             // if no members, assume type has a single state and use single array
             // in this case, only bits will be stored
             let t = typeof<'a>
-            if isEmptyType t then
+            if Format.isEmptyType t then
                 let data = Array.zeroCreate(Segment.segmentSize)
                 fun () -> data
             else
@@ -407,8 +409,8 @@ module internal Internal =
                 |> Seq.map (fun s -> BitSegment.init s.id s.removalMask)
                 |> Seq.toArray
             sprintf "%d/%dA %d/%dR%s%s"
-                (additions |> Seq.sumBy (fun s -> bitCount64 s.mask)) additions.Length
-                (removals |> Seq.sumBy (fun s -> bitCount64 s.mask)) removals.Length
+                (additions |> Seq.sumBy (fun s -> Bits.bitCount64 s.mask)) additions.Length
+                (removals |> Seq.sumBy (fun s -> Bits.bitCount64 s.mask)) removals.Length
                 (formatSegments ("  A") (ReadOnlyMemory(additions)))
                 (formatBitSegments ("  R") (ReadOnlyMemory(removals)))
         override c.ToString() =
@@ -438,7 +440,7 @@ type Segments<'k, 'a
     member c.GetComponentCount() = 
         let mutable total = 0
         for i = 0 to c.Count - 1 do
-            total <- total + bitCount64 c.[i].mask
+            total <- total + Bits.bitCount64 c.[i].mask
         total
     /// Given a segment ID, returns true if the segment is present and assigns its index
     member c.TryFind(sid, [<Out>] i : byref<_>) = 
@@ -487,7 +489,7 @@ type Segments<'k, 'a
         let prefix = ""
         let pendingStr = pending.ToString(formatSegments, formatBitSegments)
         sprintf "%s: %d/%dC %s%s"
-            (typeof<'a> |> typeToString)
+            (typeof<'a> |> Format.typeToString)
             current.ComponentCount current.Count
             (formatSegments (prefix + "  C") current.Segments)
             (if pendingStr.Length > 0 then "\n" + pendingStr else "")
@@ -509,7 +511,7 @@ type Segments<'k, 'a
     member c.Get(sid) =
         match c.TryFind(sid) with
         | true, si -> c.[si]
-        | false, _ -> failwithf "Cannot get %s segment %A" (typeToString typeof<'a>) sid
+        | false, _ -> failwithf "Cannot get %s segment %A" (Format.typeToString typeof<'a>) sid
     /// Removes entire segment
     member c.Remove(sid) =
         match c.TryFind(sid) with
@@ -538,11 +540,19 @@ type ISegmentStore<'k
     and 'k : equality> =
     abstract member GetSegments<'b> : unit -> Segments<'k, 'b>
     abstract member Handle<'p> : 'p * ISegmentListHandler<'p, 'k> -> unit
+    abstract member Handle<'p> : 'p * 'k * uint64 * ISegmentHandler<'p, 'k> -> unit
 
 type CopyHandler<'k
         when 'k :> IComparable<'k> 
         and 'k :> IEquatable<'k> 
         and 'k : equality>() =
+    static let mutable instance = CopyHandler<'k>()
+    static member Instance = instance
+    interface ISegmentHandler<ISegmentStore<'k>, 'k> with               
+        member c.Handle<'a>(store, segment : Segment<'k, 'a>) =
+            let dest = store.GetSegments<'a>()
+            let data = dest.Add(segment.id, segment.mask)
+            segment.data.CopyTo(data, 0)
     interface ISegmentListHandler<ISegmentStore<'k>, 'k> with               
         member c.Handle<'a>(store, src : ReadOnlyMemory<Segment<'k, 'a>>) =
             let dest = store.GetSegments<'a>()
@@ -581,28 +591,31 @@ type SegmentStore<'k
     member c.Remove(sid, mask) =
         for segs in segmentLists do
             segs.Remove(sid, mask)
-    member c.Handle(param, handler) =      
+    member c.Handle(param, handler : ISegmentListHandler<_,_>) =      
         for s in segmentLists do
             s.Handle(param, handler)
-    member c.Handle(param, sid, mask, handler) =      
+    member c.Handle(param, sid, mask, handler : ISegmentHandler<_,_>) =      
         for s in segmentLists do
             s.Handle(param, handler, sid, mask)
     member c.Commit() =
         for segs in segmentLists do
             segs.Commit()
     member c.ApplyRemovalsFrom (segments : Segments<_,_>) =
-        for segs in segmentLists do
-            segments.ApplyRemovalsTo segs
+        if segments.PendingCount > 0 then
+            for segs in segmentLists do
+                segments.ApplyRemovalsTo(segs)
     interface ISegmentStore<'k> with
-        member c.Handle(param, handler) =      
+        member c.Handle(param, handler : ISegmentListHandler<_,_>) =      
             c.Handle(param, handler)
+        member c.Handle(param, sid, mask, handler : ISegmentHandler<_,_>) =      
+            c.Handle(param, sid, mask, handler)
         member c.GetSegments<'a>() = 
             c.GetSegments<'a>()
     override c.ToString() =
         let prefix = ""
         segmentLists
         |> Seq.map (fun item -> item.ToString().Replace("\n", "\n  "))
-        |> listToString (prefix + "  ") (c.GetType() |> typeToString)
+        |> Format.listToString (prefix + "  ") (c.GetType() |> Format.typeToString)
 
 [<AutoOpen>]
 module SegmentStore =
@@ -610,6 +623,11 @@ module SegmentStore =
            when 'k :> IComparable<'k> 
            and 'k :> IEquatable<'k> 
            and 'k : equality> with
+           
         member c.CopyTo(dest : ISegmentStore<'k>) =
-            let handler = CopyHandler() :> ISegmentListHandler<_,_>
+            let handler = CopyHandler.Instance :> ISegmentListHandler<_,_>
             c.Handle(dest, handler)
+            
+        member c.CopyTo(dest : ISegmentStore<'k>, sid, mask) =
+            let handler = CopyHandler.Instance :> ISegmentHandler<_,_>
+            c.Handle(dest, sid, mask, handler)            
