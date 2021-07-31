@@ -117,11 +117,11 @@ let tests =
                                 then remove removed index 
                                 else Eid (added.Count + removed.Count)
                         added.Add(eid)
-                        s.Add(eid, eid.value)
+                        s.Add(eid, eid.Value)
                     s.Commit()
             for eid in added do
                 s.Contains(eid) |> shouldEqual true
-                s.Get(eid) |> shouldEqual eid.value
+                s.Get(eid) |> shouldEqual eid.Value
             for eid in removed do
                 s.Contains(eid) |> shouldEqual false
     ]

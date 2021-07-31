@@ -123,7 +123,7 @@ let tests =
                     c.Publish 'b'
             c.SetPublisher(Publisher.Print {
                 PrintPublisherOptions.enabled with
-                    sendLog = r.Add
+                    SendLog = r.Add
                     })
             c.Run 1
             try c.Run 2 with ex -> r.Add(sprintf "%s" <| ex.ToString())

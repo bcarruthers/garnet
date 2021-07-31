@@ -10,9 +10,9 @@ open Garnet.Formatting
 /// 32-bit entity ID
 [<Struct>]
 type Eid =
-    val value : int
-    new(value) = { value = value }
-    override e.ToString() = "0x" + e.value.ToString("x")
+    val Value : int
+    new(value) = { Value = value }
+    override e.ToString() = "0x" + e.Value.ToString("x")
     
 module Eid =
     // ID bits:
@@ -44,16 +44,16 @@ module Eid =
     let inline init id = Eid id
 
     let inline getIndex (eid : Eid) =
-        eid.value &&& indexMask
+        eid.Value &&& indexMask
 
     let inline getPartition (eid : Eid) =
-        (eid.value >>> indexBits) &&& partitionMask
+        (eid.Value >>> indexBits) &&& partitionMask
 
     let inline getSlot (eid : Eid) =
-        eid.value &&& slotMask
+        eid.Value &&& slotMask
 
     let inline getGen (eid : Eid) = 
-        uint32 eid.value >>> slotBits |> int
+        uint32 eid.Value >>> slotBits |> int
 
     let inline setGen (eid : Eid) gen =
         (getSlot eid) ||| (gen <<< slotBits)
@@ -68,7 +68,7 @@ module Eid =
         getSlot eid >>> Segment.segmentBits
 
     let inline getComponentIndex (eid : Eid) = 
-        eid.value &&& Segment.segmentMask
+        eid.Value &&& Segment.segmentMask
 
     let inline fromParts gen partition id =
         (gen <<< slotBits) |||
@@ -92,8 +92,8 @@ type Eid with
     member i.Slot = Eid.getSlot i
     member i.Gen = Eid.getGen i
     member i.Partition = Eid.getPartition i
-    member i.IsDefined = i.value <> 0
-    member i.IsUndefined = i.value = 0
+    member i.IsDefined = i.Value <> 0
+    member i.IsUndefined = i.Value = 0
 
 [<Struct>]
 type EidSegmentKeyMapper =
@@ -165,36 +165,36 @@ type EidPool(partition) =
         eid
     member c.Recycle(eid : Eid) =
         c.Apply {
-            data = null
-            id = Eid.getSegmentIndex eid
-            mask = 0UL
-            removalMask = 1UL <<< (Eid.getComponentIndex eid)
+            Data = null
+            Id = Eid.getSegmentIndex eid
+            Mask = 0UL
+            RemovalMask = 1UL <<< (Eid.getComponentIndex eid)
         }
     member internal c.Apply(seg : PendingSegment<int, Eid>) =
-        let sid = seg.id &&& Eid.segmentInPartitionMask
+        let sid = seg.Id &&& Eid.segmentInPartitionMask
         c.EnsureSize sid
         let offset = sid * 64
-        if seg.mask &&& seg.removalMask <> 0UL then
+        if seg.Mask &&& seg.RemovalMask <> 0UL then
             failwithf "Segment contains overlapping add/remove"
         // When eid added and not previously known, write to pool with 
         // incremented gen.
-        if seg.mask <> 0UL then
-            let addMask = seg.mask &&& ~~~known.[sid]
+        if seg.Mask <> 0UL then
+            let addMask = seg.Mask &&& ~~~known.[sid]
             let mutable m = addMask
             let mutable i = 0
             while m <> 0UL do
                 if m &&& 1UL <> 0UL then 
-                    eids.[offset + i] <- Eid.incrementGen seg.data.[i]
+                    eids.[offset + i] <- Eid.incrementGen seg.Data.[i]
                 m <- m >>> 1
                 i <- i + 1
             known.[sid] <- known.[sid] ||| addMask
-            used.[sid] <- used.[sid] ||| seg.mask
+            used.[sid] <- used.[sid] ||| seg.Mask
         // When eid removed, mark as unused and increment.
-        if seg.removalMask <> 0UL then
+        if seg.RemovalMask <> 0UL then
             // Note we're not checking if used or not -- if not marked as used, 
             // eid was created/destroyed before commit, but we still need to 
             // return it to increment gen.
-            let removalMask = seg.removalMask
+            let removalMask = seg.RemovalMask
             // Since removal seg doesn't have populated eids, we must take them
             // from stored value in pool, which means they must be known. In the
             // case of restore, expect that add would always be called first to
@@ -239,7 +239,7 @@ type EidPools() =
     member c.Apply(active : Segments<int, Eid>) =
         for i = 0 to active.PendingCount - 1 do
             let seg = active.GetPending i
-            let p = Eid.segmentToPartition seg.id
+            let p = Eid.segmentToPartition seg.Id
             pools.[p].Apply seg        
     member c.Clear() =
         for pool in pools do
@@ -309,8 +309,8 @@ type Container() =
         let mask = eids.GetMask sid
         (mask &&& (1UL <<< ci)) <> 0UL
     member c.Get(eid) = { 
-        id = eid
-        container = components 
+        Id = eid
+        Components = components 
         }
     member internal c.CreateEid(partition) =
         let eid = eidPools.Next(partition)
@@ -370,7 +370,7 @@ type Container() =
         // assign outbox for duration of call
         use s = outbox.Push e
         let channel = c.GetChannel<'a>()
-        channel.PublishAll e.message
+        channel.PublishAll e.Message
         c.Run()
     interface IInbox with
         member c.Receive e =
@@ -422,10 +422,10 @@ type Container with
     member c.Register(actorId, actorOutbox, register : Container -> IDisposable) =
         let outbox = c.GetInstance<Outbox>()
         use s = outbox.Push {
-            outbox = actorOutbox
-            sourceId = ActorId.undefined
-            destinationId = actorId
-            message = ()
+            Outbox = actorOutbox
+            SourceId = ActorId.undefined
+            DestinationId = actorId
+            Message = ()
             }
         let sub = register c
         c.Commit()
@@ -443,7 +443,7 @@ type Container with
         let setState e =
             // store state as component 
             let entity = c.Create(eid)
-            components.Add(entity.id, e)
+            components.Add(entity.Id, e)
             // force commit so state is immediately accessible
             components.Commit()
             // register subscriptions specific to it, replacing prior
@@ -474,7 +474,7 @@ type LazyContainerInbox(actorId, register) =
     interface IInbox with
         member c.Receive(e) =
             if not isCreated then                
-                sub <- container.Register(actorId, e.outbox, register)
+                sub <- container.Register(actorId, e.Outbox, register)
                 isCreated <- true
             container.Receive(e)
     member c.Dispose() =

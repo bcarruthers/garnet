@@ -92,8 +92,8 @@ type WorldGrid() =
         size <- newSize
         store.Clear()
     member c.Get p = { 
-        id = p
-        container = store 
+        Id = p
+        Components = store 
         }
     member c.Commit() =
         let locs = store.GetSegments<Loc>()
@@ -153,7 +153,7 @@ module MapSystem =
                     // add (cached) reference to entity in map the entity 
                     // loc is the source of truth, so we'll need to keep 
                     // map synchronized with it.
-                    map.Get(loc).Add { unitEid = entity.id }
+                    map.Get(loc).Add { unitEid = entity.Id }
             c.On<StepSim> (
                 // Each sim step, increase the temperature of all
                 // cells with iron. Cells can be iterated over the

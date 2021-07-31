@@ -230,10 +230,10 @@ module internal Streaming =
                 if logWriter.Memory.Length > 0 then
                     for id in logWriter.Recipients do                    
                         logger.Receive { 
-                            outbox = nullOutbox
-                            sourceId = logWriter.SourceId
-                            destinationId = id.destinationId
-                            message = logWriter.Memory
+                            Outbox = nullOutbox
+                            SourceId = logWriter.SourceId
+                            DestinationId = id.DestinationId
+                            Message = logWriter.Memory
                             }
                 logWriter.CopyTo(baseWriter)
                 logWriter.Dispose()
@@ -350,11 +350,11 @@ type StreamInbox(registry : MessageRegistry, stream : Stream) =
         let info = registry.Get<'a>()
         if info.typeId <> 0 then
             let header = {
-                sourceId = e.sourceId
-                destinationId = e.destinationId
+                sourceId = e.SourceId
+                destinationId = e.DestinationId
                 messageTypeId = info.typeId
-                messageCount = e.message.Length
+                messageCount = e.Message.Length
                 }
             headerInfo.serializer.Write stream header
-            for msg in e.message.Span do
+            for msg in e.Message.Span do
                 info.serializer.Write stream msg

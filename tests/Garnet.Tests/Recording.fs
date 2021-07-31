@@ -17,10 +17,10 @@ type LogInbox(actorId : ActorId, baseHandler : IInbox, logger : IInbox) =
             // log incoming message
             logger.Receive e
             // redirect logging outbox
-            outbox.SetOutbox e.outbox
+            outbox.SetOutbox e.Outbox
             // handle message using logging outbox
             // so outgoing messages will go to log first, then to actual outbox
-            try baseHandler.Receive { e with outbox = outbox }
+            try baseHandler.Receive { e with Outbox = outbox }
             // revert logging outbox
             finally outbox.SetOutbox nullOutbox
 
@@ -121,7 +121,7 @@ type DirectoryActorStreamSource(path) =
     let extension = ".log"
     let sync = obj()
     let getFullPath (actorId : ActorId) =
-        let file = sprintf "%s%d%s" prefix actorId.value extension
+        let file = sprintf "%s%d%s" prefix actorId.Value extension
         Path.Combine(path, file)
     interface IActorStreamSource with
         member c.GetActorIds() =
@@ -204,7 +204,7 @@ type MemoryActorStreamSource() =
     override c.ToString() =
         String.Join("\n",
             logs |> Seq.map (fun kvp ->
-                sprintf "%d: %d" kvp.Key.value kvp.Value.Length))
+                sprintf "%d: %d" kvp.Key.Value kvp.Value.Length))
 
 [<Struct>]
 type ActorLogCommand = {
@@ -245,15 +245,15 @@ type PrintInbox(id : ActorId, formatter : IFormatter, counter : ref<int>, print)
             let isEnabledAfter = isEnabled
             if (isEnabledBefore || isEnabledAfter) && formatter.CanFormat<'a>() then 
                 sb.Append(sprintf "%d: %d->%d %d/%d/%d: %dx %s" 
-                    id.value e.sourceId.value e.destinationId.value 
+                    id.Value e.SourceId.Value e.DestinationId.Value 
                     counter.Value batchCount messageCount
-                    e.message.Length (typeof<'a>.Name)) |> ignore
-                formatMessagesTo sb formatter.Format e.message.Span maxMessages
+                    e.Message.Length (typeof<'a>.Name)) |> ignore
+                formatMessagesTo sb formatter.Format e.Message.Span maxMessages
                 sb.ToString() |> print//printfn "%s"
                 sb.Clear() |> ignore
             counter.Value <- counter.Value + 1
             batchCount <- batchCount + 1
-            messageCount <- messageCount + e.message.Length
+            messageCount <- messageCount + e.Message.Length
           
 [<AutoOpen>]
 module internal RecordingInternal =

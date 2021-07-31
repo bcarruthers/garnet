@@ -192,7 +192,7 @@ module Channels =
         member c.Send(msg) =
             c.GetChannel<'a>().Send(msg)
 
-        member c.OnAll<'a>(handler) =
+        member c.OnAll<'a> handler =
             c.GetChannel<'a>().OnAll(handler)
 
         member c.Publish<'a>(event : 'a) =
@@ -201,7 +201,7 @@ module Channels =
         member c.OnAll<'a>() =
             c.GetChannel<'a>().OnAll
 
-        member c.On<'a>(handle) =
+        member c.On<'a> handle =
             c.GetChannel<'a>().OnAll(
                 fun batch -> 
                     let span = batch.Span
@@ -242,19 +242,19 @@ type internal NullPublisher() =
     static let mutable instance = NullPublisher() :> IPublisher
     static member Instance = instance
     interface IPublisher with
-        member c.PublishAll(batch, handlers) = ()
+        member c.PublishAll(_, _) = ()
 
 type PrintPublisherOptions = {
-    enableLog : bool
-    logLabel : string
-    messageSizeLimit : int
-    minDurationUsec : int
-    sendLog : string -> unit
-    sendTiming : Timing -> unit
-    canSendLog : Type -> bool
-    canSendTiming : Type -> bool
-    basePublisher : IPublisher
-    formatter : IFormatter
+    EnableLog : bool
+    LogLabel : string
+    MessageSizeLimit : int
+    MinDurationMicroseconds : int
+    SendLog : string -> unit
+    SendTiming : Timing -> unit
+    CanSendLog : Type -> bool
+    CanSendTiming : Type -> bool
+    BasePublisher : IPublisher
+    Formatter : IFormatter
     }
 
 /// Prints published events
@@ -266,21 +266,21 @@ type internal PrintPublisher(options) =
             let start = Stopwatch.GetTimestamp()
             let mutable completed = false
             try
-                options.basePublisher.PublishAll(batch, handlers)
+                options.BasePublisher.PublishAll(batch, handlers)
                 completed <- true
             finally
                 let typeInfo = Format.CachedTypeInfo<'a>.Info
                 let canLog =
-                    options.enableLog &&
-                    options.canSendLog typeof<'a> && 
-                    options.formatter.CanFormat<'a>()
+                    options.EnableLog &&
+                    options.CanSendLog typeof<'a> && 
+                    options.Formatter.CanFormat<'a>()
                 let canTime =
-                    options.canSendTiming typeof<'a>
+                    options.CanSendTiming typeof<'a>
                 // stop timer
                 let stop = Stopwatch.GetTimestamp()
                 // send timing
                 if canTime then
-                    options.sendTiming {
+                    options.SendTiming {
                         Name = typeInfo.typeName
                         Start = start
                         Stop = stop
@@ -290,19 +290,19 @@ type internal PrintPublisher(options) =
                 if canLog then
                     let duration = stop - start
                     let usec = duration * 1000L * 1000L / Stopwatch.Frequency |> int
-                    if not completed || usec >= options.minDurationUsec then
+                    if not completed || usec >= options.MinDurationMicroseconds then
                         sb.Append(
                             sprintf "[%s] %d: %dx %s to %d handlers in %dus%s"
-                                options.logLabel count batch.Length 
+                                options.LogLabel count batch.Length 
                                 (typeof<'a> |> Format.typeToString)
                                 handlers.Length usec
                                 (if completed then "" else " failed")
                             ) |> ignore
                         // print messages
                         if not typeInfo.isEmpty then
-                            Format.formatMessagesTo sb options.formatter.Format batch.Span options.messageSizeLimit
+                            Format.formatMessagesTo sb options.Formatter.Format batch.Span options.MessageSizeLimit
                         sb.AppendLine() |> ignore
-                        options.sendLog (sb.ToString())
+                        options.SendLog (sb.ToString())
                         sb.Clear() |> ignore
                 count <- count + 1
     
@@ -317,14 +317,14 @@ type Publisher() =
 
 module PrintPublisherOptions =
     let enabled = {
-        enableLog = true
-        logLabel = ""
-        messageSizeLimit = 10
-        minDurationUsec = 0
-        sendLog = printfn "%s"
-        sendTiming = ignore
-        canSendLog = fun t -> true
-        canSendTiming = fun t -> true
-        basePublisher = Publisher.Default
-        formatter = Formatter()
+        EnableLog = true
+        LogLabel = ""
+        MessageSizeLimit = 10
+        MinDurationMicroseconds = 0
+        SendLog = printfn "%s"
+        SendTiming = ignore
+        CanSendLog = fun _ -> true
+        CanSendTiming = fun _ -> true
+        BasePublisher = Publisher.Default
+        Formatter = Formatter()
         }

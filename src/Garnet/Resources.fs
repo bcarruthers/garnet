@@ -203,7 +203,7 @@ type MemoryStreamLookup<'k when 'k : equality>() =
 type MemoryFolder() =
     let lookup = MemoryStreamLookup<string>()
     interface IFolder with
-        member c.GetFiles(dir, searchPattern) =
+        member c.GetFiles(_, _) =
             lookup.GetKeys()
         member c.Contains(file) =
             lookup.Contains(file)
@@ -269,7 +269,7 @@ type ResourceLoader() =
     let loaders = Dictionary<struct(string * Type), obj>()
     member private c.GetKey<'a> format =
         struct(format, typeof<'a>)
-    member private c.Unregister<'a>(format) =
+    member private c.Unregister<'a> format =
         let key = c.GetKey<'a> format
         loaders.Remove(key) |> ignore
     member c.Register<'a>(format, loader : IResourceLoader<'a>) =
@@ -282,7 +282,7 @@ type ResourceLoader() =
         | true, load -> load :?> IResourceLoader<'a>
         | false, _ -> 
             failwithf "No %s loader for '%s', available:\n%s" 
-                (typeof<'a>.Name) format
+                typeof<'a>.Name format
                 (String.Join("\n", loaders.Keys |> Seq.map (fun struct(format, t) ->
                     sprintf "%s %s" format t.Name)))
 
@@ -291,7 +291,7 @@ type ResourceLoader<'a>(load) =
         member c.Load(key, source) = 
             use stream = source.Open(key)
             load stream
-        member c.Dispose resource = ()
+        member c.Dispose _ = ()
 
 type DisposableLoader<'a when 'a :> IDisposable>(load) =
     interface IResourceLoader<'a> with
@@ -388,7 +388,7 @@ type ResourceSet() =
         | false, _ -> ()
         // replace with new
         resources.[key] <- resource
-    member c.GetResource<'a>(originalKey) =
+    member c.GetResource<'a> originalKey =
         let key = ResourcePath.getCanonical originalKey
         match resources.TryGetValue(key) with
         | true, resource -> resource :?> Resource<'a>
@@ -428,10 +428,10 @@ module private Resource =
     let subscribe (r : Resource<_>) action = r.Subscribe action
 
 type Resource =
-    static member Value<'a>(value) =
+    static member Value<'a> value =
         new Resource<'a>((fun () -> value), ignore)
 
-    static member Create<'a>(load) =
+    static member Create<'a> load =
         new Resource<'a>(load, ignore)
 
     static member Create<'a>(load, dispose) =
@@ -445,7 +445,7 @@ type Resource =
         let invalidate = ref ignore
         let r = 
             new Resource<'a>(
-                (fun r -> 
+                (fun _ -> 
                     subs.Add(subscribe r1 invalidate.Value)
                     map (load r1)),
                 (fun (x : 'a) -> 
@@ -459,7 +459,7 @@ type Resource =
         let invalidate = ref ignore
         let r = 
             new Resource<_>(
-                (fun r -> 
+                (fun _ -> 
                     subs.Add(subscribe r1 invalidate.Value)
                     subs.Add(subscribe r2 invalidate.Value)
                     map (load r1) (load r2)),
@@ -474,7 +474,7 @@ type Resource =
         let invalidate = ref ignore
         let r = 
             new Resource<_>(
-                (fun r -> 
+                (fun _ -> 
                     subs.Add(subscribe r1 invalidate.Value)
                     subs.Add(subscribe r2 invalidate.Value)
                     subs.Add(subscribe r3 invalidate.Value)

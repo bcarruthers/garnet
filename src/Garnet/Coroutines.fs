@@ -7,11 +7,11 @@ open Garnet.Collections
 
 [<Struct>]
 type Wait = {
-    duration : int64
+    Duration : int64
     }
     
 module Wait =
-    let time x = { Wait.duration = x }
+    let time x = { Wait.Duration = x }
     let defer = time -1L
         
 type internal StackScheduler() =
@@ -66,7 +66,7 @@ type internal TimeScheduler() =
     let mutable time = 0L
     let active = PriorityQueue<int64,_>()
     member c.Enqueue (e : IEnumerator<_>) =
-        let delay = e.Current.duration
+        let delay = e.Current.Duration
         let nextTime = time + delay
         active.Enqueue(nextTime, e)
     member c.RunOnce(iterate : Action<_>) =
@@ -101,7 +101,7 @@ type CoroutineScheduler() =
                 // Add to queue based on scheduling type:
                 // - Non-negative indicates we want to wait for some duration
                 // - Negative indicates we want to wait on nested coroutines
-                let isTimed = e.Current.duration >= 0L
+                let isTimed = e.Current.Duration >= 0L
                 if isTimed then timed.Enqueue e else stacked.Enqueue e)
     member c.Schedule coroutine =
         stacked.Schedule coroutine

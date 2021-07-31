@@ -16,11 +16,11 @@ let tests =
     let getComponents (c : Segments<_,_>) = seq {
         for i = 0 to c.Count - 1 do
             let seg = c.[i]
-            let mutable m = seg.mask
+            let mutable m = seg.Mask
             let mutable i = 0
             while m <> 0UL do
                 if m &&& 1UL <> 0UL then 
-                    yield seg.data.[i]
+                    yield seg.Data.[i]
                 m <- m >>> 1
                 i <- i + 1
         }            
@@ -42,7 +42,7 @@ let tests =
 
         testCase "create IDs from partition" <| fun () ->
             let p = EidPool(5)
-            p.Next().value |> shouldEqual 0x500040
+            p.Next().Value |> shouldEqual 0x500040
             p.SegmentCount |> shouldEqual 2
 
         testCase "create and destroy before commit" <| fun () ->
@@ -67,7 +67,7 @@ let tests =
             let usedIds = HashSet<Eid>()
             for j = 1 to 100 do
                 for i = 1 to segmentSize do
-                    let eid = c.Create().id
+                    let eid = c.Create().Id
                     eid.Gen |> shouldEqual (j - 1)
                     usedIds.Add(eid) |> shouldEqual true
                     c.Destroy eid
@@ -138,12 +138,12 @@ let tests =
                     let count = rand.Next(batchSize)
                     for i = 1 to count do
                         let e = c.Create(rand.Next 16)
-                        if print then printfn "Create %A" e.id
-                        if e.id.Index < 64 then
-                            failwithf "Invalid value: %A" e.id
-                        if not (eids.Add e.id) then
-                            failwithf "Duplicate: %A" e.id
-                        active.Add e.id
+                        if print then printfn "Create %A" e.Id
+                        if e.Id.Index < 64 then
+                            failwithf "Invalid value: %A" e.Id
+                        if not (eids.Add e.Id) then
+                            failwithf "Duplicate: %A" e.Id
+                        active.Add e.Id
                 | 1 ->
                     // destroy batch
                     let count = rand.Next(min batchSize active.Count)

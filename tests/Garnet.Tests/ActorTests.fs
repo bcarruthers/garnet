@@ -65,10 +65,10 @@ let runPingPong onPing onPong iterations =
     count
 
 let mapEnvelope f (mail : Envelope<_>) = {
-    outbox = mail.outbox
-    sourceId = mail.sourceId
-    destinationId = mail.destinationId
-    message = f mail.message
+    Outbox = mail.Outbox
+    SourceId = mail.SourceId
+    DestinationId = mail.DestinationId
+    Message = f mail.Message
     }
 
 let sendReceiveMessages send =
@@ -94,25 +94,25 @@ let tests =
             let results = sendReceiveMessages <| fun a ->
                 a.SendAll(ReadOnlyMemory([| 1; 2; 3 |]).Span)
             let r = List.head results
-            r.sourceId |> shouldEqual (ActorId 0)
-            r.destinationId |> shouldEqual (ActorId 1)
-            r.message |> shouldEqual [| 1; 2; 3 |]
+            r.SourceId |> shouldEqual (ActorId 0)
+            r.DestinationId |> shouldEqual (ActorId 1)
+            r.Message |> shouldEqual [| 1; 2; 3 |]
 
         testCase "send single" <| fun () ->
             let results = sendReceiveMessages <| fun a ->
                 a.Send(1)                
             let r = List.head results
-            r.sourceId |> shouldEqual (ActorId 0)
-            r.destinationId |> shouldEqual (ActorId 1)
-            r.message |> shouldEqual [| 1 |]
+            r.SourceId |> shouldEqual (ActorId 0)
+            r.DestinationId |> shouldEqual (ActorId 1)
+            r.Message |> shouldEqual [| 1 |]
 
         testCase "send single with source" <| fun () ->
             let results = sendReceiveMessages <| fun a ->
                 a.Send(1, sourceId = ActorId 2)                
             let r = List.head results
-            r.sourceId |> shouldEqual (ActorId 2)
-            r.destinationId |> shouldEqual (ActorId 1)
-            r.message |> shouldEqual [| 1 |]
+            r.SourceId |> shouldEqual (ActorId 2)
+            r.DestinationId |> shouldEqual (ActorId 1)
+            r.Message |> shouldEqual [| 1 |]
 
         testCase "send to any actor" <| fun () ->
             let msgs = List<_>()
@@ -194,12 +194,12 @@ let tests =
 
         testCase "respond to messages" <| fun () ->
             let config = { 
-                dispatchers = 
+                Dispatchers = 
                     [|
                         {
-                            dispatcherType = DispatcherType.Background
-                            threadCount = 2
-                            throughput = 100
+                            DispatcherType = DispatcherType.Background
+                            ThreadCount = 2
+                            Throughput = 100
                         }                
                     |]
                 }
@@ -215,7 +215,7 @@ let tests =
         testCase "send random messages to background actors" <| fun () ->
             use a = new ActorSystem(2)
             a.Register(fun (createId : ActorId) -> 
-                let rand = Random(createId.value)
+                let rand = Random(createId.Value)
                 let c = Mailbox()
                 c.On<int> <| fun e -> 
                     //printfn "%d: %d" id.id e
@@ -239,12 +239,12 @@ let tests =
                 r
             let start = DateTime.Now
             let config = { 
-                dispatchers = 
+                Dispatchers = 
                     [|
                         {
-                            dispatcherType = DispatcherType.Background
-                            threadCount = 4
-                            throughput = 100
+                            DispatcherType = DispatcherType.Background
+                            ThreadCount = 4
+                            Throughput = 100
                         }                
                     |]
                 }

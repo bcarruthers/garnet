@@ -20,8 +20,8 @@ module PingPong =
         let formatPair (s, r) =
             sprintf "%d from [%d] a%d (d%s) to [%d] a%d (d%s) in %d" 
                 r.payload 
-                s.sequence s.sourceId.value s.dispatcher 
-                r.sequence r.destId.value r.dispatcher 
+                s.sequence s.sourceId.Value s.dispatcher 
+                r.sequence r.destId.Value r.dispatcher 
                 (r.timestamp - s.timestamp)
         
     type SynchronizedQueue<'a>() =
@@ -46,22 +46,22 @@ module PingPong =
     module Tests =
         let runLogging log onSend onReceive poolCount actorsPerPool workerCount duration initCount maxCount batchSize =
             let actorCount = actorsPerPool * poolCount
-            let receivedcount = ref 0
+            let receivedCount = ref 0
             let sentCount = ref 0
             let config = {
-                dispatchers = [|
+                Dispatchers = [|
                     for i = 1 to poolCount do
                         yield {
                             // workers
-                            threadCount = workerCount
-                            throughput = 100
-                            dispatcherType = DispatcherType.Background
+                            ThreadCount = workerCount
+                            Throughput = 100
+                            DispatcherType = DispatcherType.Background
                         }
                     yield {
                         // main
-                        dispatcherType = DispatcherType.Foreground
-                        threadCount = 0
-                        throughput = 100
+                        DispatcherType = DispatcherType.Foreground
+                        ThreadCount = 0
+                        Throughput = 100
                     }
                     |]
                 }
@@ -70,7 +70,7 @@ module PingPong =
                 let inbox = Mailbox()
                 inbox.OnAll<int64> <| fun e ->
                     let span = e.Span
-                    let c = Interlocked.Increment receivedcount
+                    let c = Interlocked.Increment receivedCount
                     if log then
                         onReceive { 
                             sourceId = ActorId.undefined
@@ -99,7 +99,7 @@ module PingPong =
                         use batch = inbox.BeginSend(destId)
                         for i = 0 to span.Length - 1 do
                             batch.WriteValue(span.[i] + 1L)
-                let dispatcherId = (actorId.value - 1) / actorsPerPool
+                let dispatcherId = (actorId.Value - 1) / actorsPerPool
                 Actor(inbox, dispatcherId))
             for i = 0 to initCount - 1 do
                 let destId = (i % actorCount) + 1 |> ActorId
@@ -118,7 +118,7 @@ module PingPong =
                         }
             a.ProcessAll()
             let expected = maxCount + initCount
-            let actual = receivedcount.Value
+            let actual = receivedCount.Value
             if actual <> expected then
                 printfn "Expected received count: %d, actual: %d" expected actual
                 printfn "%s" <| a.ToString()
@@ -143,7 +143,7 @@ module PingPong =
         let runMain log useMain (workerCount : int) initCount maxCount =
             let maxActorCount = maxCount * 2 - initCount
             let count = ref 0
-            let createInbox id =
+            let createInbox _ =
                 let inbox = Mailbox()
                 inbox.OnAll<int64> <| fun e ->
                     if Interlocked.Increment count <= maxActorCount then

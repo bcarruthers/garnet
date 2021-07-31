@@ -76,32 +76,32 @@ module internal Utility =
 /// are defined and ID to identify the segment in a sparse collection
 [<Struct>]
 type Segment<'k, 'a when 'k :> IComparable<'k>> = {
-    data : 'a[]
-    id : 'k
-    mask : uint64
+    Data : 'a[]
+    Id : 'k
+    Mask : uint64
     } with
-    override s.ToString() = sprintf "%s %s" (s.id.ToString()) (Format.maskToString 64 s.mask)
+    override s.ToString() = sprintf "%s %s" (s.Id.ToString()) (Format.maskToString 64 s.Mask)
     member c.Get(i, fallback) =
-        if c.mask &&& (1UL <<< i) <> 0UL then c.data.[i]
+        if c.Mask &&& (1UL <<< i) <> 0UL then c.Data.[i]
         else fallback    
 
 module Segment =
     let segmentBits = 6
     let segmentSize = 1 <<< segmentBits
     let segmentMask = segmentSize - 1
-    let init id mask data = { id = id; mask = mask; data = data }
+    let init id mask data = { Id = id; Mask = mask; Data = data }
 
 /// 64-bit mask and ID to identify the segment in a sparse collection
 [<Struct>]
 type internal BitSegment<'k when 'k :> IComparable<'k>> = {
-    id : 'k
-    mask : uint64
+    Id : 'k
+    Mask : uint64
     } with
-    static member IsEmpty = Predicate<BitSegment<'k>>(fun s -> s.mask = 0UL)
-    override s.ToString() = sprintf "%s %s" (s.id.ToString()) (Format.maskToString 64 s.mask)
+    static member IsEmpty = Predicate<BitSegment<'k>>(fun s -> s.Mask = 0UL)
+    override s.ToString() = sprintf "%s %s" (s.Id.ToString()) (Format.maskToString 64 s.Mask)
 
 module internal BitSegment =
-    let init id mask = { id = id; mask = mask }
+    let init id mask = { Id = id; Mask = mask }
     
 /// Provides a method for accepting a generically-typed segment
 type ISegmentHandler<'p, 'k
@@ -129,7 +129,7 @@ type PrintHandler<'k
             if m &&& 1UL <> 0UL then action param sa.[i]
             m <- m >>> 1
             i <- i + 1
-    member private c.Print<'a, 'b> (arg : 'a) (x : 'b) = 
+    member private c.Print<'a, 'b> (_ : 'a) (x : 'b) = 
         let t = typeof<'b>
         sb.AppendLine() |> ignore
         sb.Append(t.Name) |> ignore
@@ -138,11 +138,11 @@ type PrintHandler<'k
             sb.Append(sprintf " %A" x) |> ignore
     interface ISegmentHandler<unit, 'k> with               
         member c.Handle((), segment) =
-            iter c.Print () (segment.mask &&& mask) segment.data            
+            iter c.Print () (segment.Mask &&& mask) segment.Data            
     interface ISegmentListHandler<unit, 'k> with               
         member c.Handle((), segments) =
             for segment in segments.Span do
-                iter c.Print () (segment.mask &&& mask) segment.data            
+                iter c.Print () (segment.Mask &&& mask) segment.Data            
     override c.ToString() =
         sprintf "%d bytes" bytes
         + sb.ToString()    
@@ -162,19 +162,19 @@ module internal Internal =
 
     let failComponentOperation op mask conflict (s : Segment<_, 'a>) =
         failwithf "Could not %s %s, sid: %A\n  Requested: %s\n  Existing:  %s\n  Error:     %s"
-            op (typeof<'a> |> Format.typeToString) s.id (Format.maskToString 64 mask) 
-            (Format.maskToString 64 s.mask) (Format.maskToString 64 conflict)
+            op (typeof<'a> |> Format.typeToString) s.Id (Format.maskToString 64 mask) 
+            (Format.maskToString 64 s.Mask) (Format.maskToString 64 conflict)
             
     [<Struct>]
     type PendingSegment<'k, 'a when 'k :> IComparable<'k>> = {
-        data : 'a[]
-        id : 'k
-        mutable mask : uint64
-        mutable removalMask : uint64
+        Data : 'a[]
+        Id : 'k
+        mutable Mask : uint64
+        mutable RemovalMask : uint64
         }
 
     /// Ordered list of segments and lookup    
-    type ImmediateSegments<'k, 'a 
+    type CurrentSegments<'k, 'a 
             when 'k :> IComparable<'k> 
             and 'k :> IEquatable<'k> 
             and 'k : equality>(pool : Stack<'a[]>) =    
@@ -185,16 +185,16 @@ module internal Internal =
             let mutable total = 0
             for i = 0 to count - 1 do
                 let seg = segments.[i]
-                total <- total + Bits.bitCount64 seg.mask
+                total <- total + Bits.bitCount64 seg.Mask
             total
         member c.Components = seq {
             for i = 0 to count - 1 do
                 let seg = segments.[i]
-                let mutable m = seg.mask
+                let mutable m = seg.Mask
                 let mutable i = 0
                 while m <> 0UL do
                     if m &&& 1UL <> 0UL then 
-                        yield seg.data.[i]
+                        yield seg.Data.[i]
                     m <- m >>> 1
                     i <- i + 1
             }            
@@ -206,8 +206,8 @@ module internal Internal =
         member c.Clear() =
             for i = 0 to count - 1 do
                 let seg = segments.[i]
-                clearArrayMask seg.mask seg.data
-                pool.Push(seg.data)
+                clearArrayMask seg.Mask seg.Data
+                pool.Push(seg.Data)
             Array.Clear(segments, 0, count)
             count <- 0
             idToIndex.Clear()
@@ -219,20 +219,20 @@ module internal Internal =
         /// Change value of components which are already present
         member c.Set(i, mask) =
             let s = segments.[i]
-            let newMask = s.mask ||| mask
-            let diff = s.mask ^^^ newMask
-            if diff <> 0UL then failComponentOperation "set" mask (mask &&& ~~~s.mask) s
-            s.data        
+            let newMask = s.Mask ||| mask
+            let diff = s.Mask ^^^ newMask
+            if diff <> 0UL then failComponentOperation "set" mask (mask &&& ~~~s.Mask) s
+            s.Data        
         member c.Add(i, mask) =
             let s = segments.[i]
-            let newMask = s.mask ||| mask
-            segments.[i] <- Segment.init s.id newMask s.data
-            s.data        
+            let newMask = s.Mask ||| mask
+            segments.[i] <- Segment.init s.Id newMask s.Data
+            s.Data        
         member c.Remove(i, mask) =
             let s = segments.[i]
-            let newMask = s.mask &&& ~~~mask
-            segments.[i] <- Segment.init s.id newMask s.data
-            s.data
+            let newMask = s.Mask &&& ~~~mask
+            segments.[i] <- Segment.init s.Id newMask s.Data
+            s.Data
         /// Input must be new sorted segments
         member c.MergeFrom(src : PendingSegment<'k, 'a>[], srcCount) =
             // add new segments
@@ -249,21 +249,21 @@ module internal Internal =
                 let mutable i = origCount - 1
                 while k >= 0 do
                     a.[k] <-
-                        if j < 0 || (i >= 0 && (a.[i].id.CompareTo(b.[j].id) >= 0)) then
+                        if j < 0 || (i >= 0 && (a.[i].Id.CompareTo(b.[j].Id) >= 0)) then
                             let x = a.[i]
                             i <- i - 1
                             x
                         else
                             let x = b.[j]
                             j <- j - 1
-                            Segment.init x.id x.mask x.data
+                            Segment.init x.Id x.Mask x.Data
                     k <- k - 1
             // remove any empty segments
             let mutable iDest = 0
             for iSrc = 0 to count - 1 do
                 let seg = segments.[iSrc]
-                if seg.mask = 0UL then
-                    pool.Push(seg.data)
+                if seg.Mask = 0UL then
+                    pool.Push(seg.Data)
                 else
                     segments.[iDest] <- seg
                     iDest <- iDest + 1
@@ -276,7 +276,7 @@ module internal Internal =
                 idToIndex.Clear()
                 for i = 0 to count - 1 do
                     let seg = segments.[i]
-                    let index = &idToIndex.GetOrAddValueRef(&seg.id)
+                    let index = &idToIndex.GetOrAddValueRef(&seg.Id)
                     index <- i        
 
     type PendingSegments<'k, 'a 
@@ -284,7 +284,7 @@ module internal Internal =
         and 'k :> IEquatable<'k>  
         and 'k : equality>(pool : Stack<_>) =
         let comparison = Comparison<PendingSegment<'k, 'a>>(fun a b -> 
-            a.id.CompareTo(b.id))
+            a.Id.CompareTo(b.Id))
         let comparer = Comparer.Create comparison
         let allocateData =
             // if no members, assume type has a single state and use single array
@@ -303,8 +303,8 @@ module internal Internal =
         member c.Clear() =
             for i = 0 to count - 1 do
                 let seg = segments.[i]
-                clearArray seg.data
-                pool.Push(seg.data)
+                clearArray seg.Data
+                pool.Push(seg.Data)
             count <- 0
             idToIndex.Clear()
         member c.Item with get i = segments.[i]
@@ -315,25 +315,25 @@ module internal Internal =
             }
         member c.GetMask(id) =
             match idToIndex.TryGetValue(id) with
-            | true, i -> segments.[i].mask
+            | true, i -> segments.[i].Mask
             | false, _ -> 0UL
         member c.Add(id, mask) =
             match idToIndex.TryGetValue(id) with
             | true, i ->
                 let s = &segments.[i]
-                s.mask <- s.mask ||| mask
-                s.removalMask <- s.removalMask &&& ~~~mask
-                s.data        
+                s.Mask <- s.Mask ||| mask
+                s.RemovalMask <- s.RemovalMask &&& ~~~mask
+                s.Data        
             | false, _ ->
                 let i = count
                 if count = segments.Length then
                     segments <- resizeArray segments (count + 1)
                 let data = allocateData()
                 segments.[i] <- { 
-                    id = id
-                    mask = mask
-                    data = data
-                    removalMask = 0UL
+                    Id = id
+                    Mask = mask
+                    Data = data
+                    RemovalMask = 0UL
                     }
                 count <- count + 1
                 idToIndex.Add(id, i)
@@ -343,18 +343,18 @@ module internal Internal =
             match idToIndex.TryGetValue(id) with
             | true, i ->
                 let s = &segments.[i]
-                s.mask <- s.mask &&& ~~~mask
-                s.removalMask <- s.removalMask ||| mask 
+                s.Mask <- s.Mask &&& ~~~mask
+                s.RemovalMask <- s.RemovalMask ||| mask 
             | false, _ ->
                 let i = count
                 if count = segments.Length then
                     segments <- resizeArray segments (count + 1)
                 let data = allocateData()
                 segments.[i] <- { 
-                    id = id
-                    mask = 0UL
-                    data = data
-                    removalMask = mask
+                    Id = id
+                    Mask = 0UL
+                    Data = data
+                    RemovalMask = mask
                     }
                 count <- count + 1
                 idToIndex.Add(id, i)
@@ -363,30 +363,30 @@ module internal Internal =
             let count = count
             for i = 0 to count - 1 do
                 let delta = segments.[i]
-                if delta.removalMask <> 0UL then
-                    target.Remove(delta.id, delta.removalMask)           
-        member c.FlushTo(target : ImmediateSegments<'k, 'a>) =
+                if delta.RemovalMask <> 0UL then
+                    target.Remove(delta.Id, delta.RemovalMask)           
+        member c.FlushTo(target : CurrentSegments<'k, 'a>) =
             // first copy into existing, removing deltas
             let mutable di = 0
             while di < count do
                 let delta = segments.[di]
                 // if not found, skip past for now
-                match target.TryFind(delta.id) with
+                match target.TryFind(delta.Id) with
                 | false, _ -> di <- di + 1
                 | true, i -> 
                     // apply removal
-                    if delta.removalMask <> 0UL then
-                        let data = target.Remove(i, delta.removalMask)
-                        clearArrayMask delta.removalMask data
+                    if delta.RemovalMask <> 0UL then
+                        let data = target.Remove(i, delta.RemovalMask)
+                        clearArrayMask delta.RemovalMask data
                     // apply addition
-                    if delta.mask <> 0UL then
+                    if delta.Mask <> 0UL then
                         // copy into existing
-                        let data = target.Add(i, delta.mask)
-                        copyArrayMask delta.mask delta.data data
-                        clearArrayMask delta.mask delta.data
+                        let data = target.Add(i, delta.Mask)
+                        copyArrayMask delta.Mask delta.Data data
+                        clearArrayMask delta.Mask delta.Data
                     // remove from deltas
-                    Array.Clear(delta.data, 0, delta.data.Length)
-                    pool.Push(delta.data)
+                    Array.Clear(delta.Data, 0, delta.Data.Length)
+                    pool.Push(delta.Data)
                     count <- count - 1
                     segments.[di] <- segments.[count]
                     segments.[count] <- Unchecked.defaultof<_>
@@ -400,19 +400,19 @@ module internal Internal =
         member c.ToString(formatSegments, formatBitSegments) =
             let additions = 
                 segments 
-                |> Seq.filter (fun s -> s.mask <> 0UL)
-                |> Seq.map (fun s -> Segment.init s.id s.mask s.data)
+                |> Seq.filter (fun s -> s.Mask <> 0UL)
+                |> Seq.map (fun s -> Segment.init s.Id s.Mask s.Data)
                 |> Seq.toArray
             let removals = 
                 segments 
-                |> Seq.filter (fun s -> s.removalMask <> 0UL)
-                |> Seq.map (fun s -> BitSegment.init s.id s.removalMask)
+                |> Seq.filter (fun s -> s.RemovalMask <> 0UL)
+                |> Seq.map (fun s -> BitSegment.init s.Id s.RemovalMask)
                 |> Seq.toArray
             sprintf "%d/%dA %d/%dR%s%s"
-                (additions |> Seq.sumBy (fun s -> Bits.bitCount64 s.mask)) additions.Length
-                (removals |> Seq.sumBy (fun s -> Bits.bitCount64 s.mask)) removals.Length
-                (formatSegments ("  A") (ReadOnlyMemory(additions)))
-                (formatBitSegments ("  R") (ReadOnlyMemory(removals)))
+                (additions |> Seq.sumBy (fun s -> Bits.bitCount64 s.Mask)) additions.Length
+                (removals |> Seq.sumBy (fun s -> Bits.bitCount64 s.Mask)) removals.Length
+                (formatSegments "  A" (ReadOnlyMemory(additions)))
+                (formatBitSegments "  R" (ReadOnlyMemory(removals)))
         override c.ToString() =
             c.ToString(formatIndexedList, formatIndexedList)
 
@@ -423,7 +423,7 @@ type Segments<'k, 'a
     and 'k : equality>() =    
     let pool = Stack<_>()
     let pending = PendingSegments<'k, 'a>(pool)
-    let current = ImmediateSegments<'k, 'a>(pool)
+    let current = CurrentSegments<'k, 'a>(pool)
     member internal c.PendingCount = pending.Count
     member internal c.GetPending i = pending.[i]
     /// Returns a sequence of the components present
@@ -440,7 +440,7 @@ type Segments<'k, 'a
     member c.GetComponentCount() = 
         let mutable total = 0
         for i = 0 to c.Count - 1 do
-            total <- total + Bits.bitCount64 c.[i].mask
+            total <- total + Bits.bitCount64 c.[i].Mask
         total
     /// Given a segment ID, returns true if the segment is present and assigns its index
     member c.TryFind(sid, [<Out>] i : byref<_>) = 
@@ -483,7 +483,7 @@ type Segments<'k, 'a
             | false, _ -> ()
             | true, si ->
                 let seg = current.[si]
-                let masked = Segment.init seg.id (seg.mask &&& mask) seg.data
+                let masked = Segment.init seg.Id (seg.Mask &&& mask) seg.Data
                 handler.Handle(param, masked)
     member internal c.ToString(formatSegments, formatBitSegments) =
         let prefix = ""
@@ -503,7 +503,7 @@ type Segments<'k, 'a
     /// Returns mask if present, zero otherwise
     member c.GetMask sid =
         match c.TryFind(sid) with
-        | true, i -> c.[i].mask
+        | true, i -> c.[i].Mask
         | false, _ -> 0UL
     member c.Contains(sid) =
         let mutable i = 0
@@ -517,13 +517,13 @@ type Segments<'k, 'a
         match c.TryFind(sid) with
         | false, _ -> ()
         | true, si ->
-            let mask = c.[si].mask
+            let mask = c.[si].Mask
             c.Remove(sid, mask)
-    /// Marks all segemnts for removal, which is different than immediate Clear()
+    /// Marks all segments for removal, which is different than immediate Clear()
     member c.RemoveAll() =
         for i = 0 to c.Count - 1 do
             let seg = c.[i]
-            c.Remove(seg.id, seg.mask)
+            c.Remove(seg.Id, seg.Mask)
     member c.GetSegmentOrEmpty(sid) =
         match c.TryFind(sid) with
         | true, i -> c.[i]
@@ -551,14 +551,14 @@ type CopyHandler<'k
     interface ISegmentHandler<ISegmentStore<'k>, 'k> with               
         member c.Handle<'a>(store, segment : Segment<'k, 'a>) =
             let dest = store.GetSegments<'a>()
-            let data = dest.Add(segment.id, segment.mask)
-            segment.data.CopyTo(data, 0)
+            let data = dest.Add(segment.Id, segment.Mask)
+            segment.Data.CopyTo(data, 0)
     interface ISegmentListHandler<ISegmentStore<'k>, 'k> with               
         member c.Handle<'a>(store, src : ReadOnlyMemory<Segment<'k, 'a>>) =
             let dest = store.GetSegments<'a>()
             for seg in src.Span do
-                let data = dest.Add(seg.id, seg.mask)
-                seg.data.CopyTo(data, 0)
+                let data = dest.Add(seg.Id, seg.Mask)
+                seg.Data.CopyTo(data, 0)
 
 type internal ComponentTypeId() =
     static let mutable id  = 0

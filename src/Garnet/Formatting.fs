@@ -26,7 +26,7 @@ type Formatter() =
     member c.Format<'a> e =
         match dict.TryGetValue(typeof<'a>) with
         | true, x -> 
-            let handle = x :?> ('a -> string)
+            let handle = x :?> 'a -> string
             handle e
         | false, _ -> sprintf "%A" e
     interface IFormatter with
@@ -60,7 +60,7 @@ type StringBlockWriter() =
             sb.Append("  ") |> ignore
         sb.AppendLine(str) |> ignore
     interface IStringBlockWriter with
-        member c.Begin(name, id) =
+        member c.Begin(name, _) =
             c.AppendLine(name)
             indent <- indent + 1
             true
@@ -137,8 +137,8 @@ module internal Format =
         typeof<'a>.GetInterfaces() 
         |> Seq.exists (fun i -> 
             let isEnumerable = 
-                obj.ReferenceEquals(i, typeof<System.Collections.IEnumerable>) || 
-                obj.ReferenceEquals(i, typeof<System.Collections.IEnumerator>)
+                obj.ReferenceEquals(i, typeof<IEnumerable>) || 
+                obj.ReferenceEquals(i, typeof<IEnumerator>)
             let isGenericEnumerable = 
                 i.IsGenericType && 
                 (obj.ReferenceEquals(i.GetGenericTypeDefinition(), typeof<IEnumerable<_>>) || 

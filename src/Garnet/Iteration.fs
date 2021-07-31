@@ -218,7 +218,7 @@ module Join =
             let c1 = count a
             for i1 = 0 to c1 - 1 do
                 let s1 = get a i1
-                action param s1.mask s1.data
+                action param s1.Mask s1.Data
     
         let iter2 action struct(a, b) param =
             let c1 = count a
@@ -228,13 +228,13 @@ module Join =
             while i1 < c1 && i2 < c2 do
                 let s1 = get a i1
                 let s2 = get b i2
-                let n1 = s1.id
-                let n2 = s2.id
+                let n1 = s1.Id
+                let n2 = s2.Id
                 if n1 < n2 then i1 <- i1 + 1
                 elif n2 < n1 then i2 <- i2 + 1
                 else
-                    let mask = s1.mask &&& s2.mask
-                    if mask <> 0UL then action param mask struct(s1.data, s2.data)
+                    let mask = s1.Mask &&& s2.Mask
+                    if mask <> 0UL then action param mask struct(s1.Data, s2.Data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
     
@@ -249,15 +249,15 @@ module Join =
                 let s1 = get a i1
                 let s2 = get b i2
                 let s3 = get c i3
-                let n1 = s1.id
-                let n2 = s2.id
-                let n3 = s3.id
+                let n1 = s1.Id
+                let n2 = s2.Id
+                let n3 = s3.Id
                 if n1 < n2 || n1 < n3 then i1 <- i1 + 1
                 elif n2 < n1 || n2 < n3 then i2 <- i2 + 1
                 elif n3 < n1 || n3 < n2 then i3 <- i3 + 1
                 else
-                    let mask = s1.mask &&& s2.mask &&& s3.mask
-                    if mask <> 0UL then action param mask struct(s1.data, s2.data, s3.data)
+                    let mask = s1.Mask &&& s2.Mask &&& s3.Mask
+                    if mask <> 0UL then action param mask struct(s1.Data, s2.Data, s3.Data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
                     i3 <- i3 + 1
@@ -276,17 +276,17 @@ module Join =
                 let s2 = get b i2
                 let s3 = get c i3
                 let s4 = get d i4
-                let n1 = s1.id
-                let n2 = s2.id
-                let n3 = s3.id
-                let n4 = s4.id
+                let n1 = s1.Id
+                let n2 = s2.Id
+                let n3 = s3.Id
+                let n4 = s4.Id
                 if n1 < n2 || n1 < n3 || n1 < n4 then i1 <- i1 + 1
                 elif n2 < n1 || n2 < n3 || n2 < n4 then i2 <- i2 + 1
                 elif n3 < n1 || n3 < n2 || n3 < n4 then i3 <- i3 + 1
                 elif n4 < n1 || n4 < n2 || n4 < n3 then i4 <- i4 + 1
                 else
-                    let mask = s1.mask &&& s2.mask &&& s3.mask &&& s4.mask
-                    if mask <> 0UL then action param mask struct(s1.data, s2.data, s3.data, s4.data)
+                    let mask = s1.Mask &&& s2.Mask &&& s3.Mask &&& s4.Mask
+                    if mask <> 0UL then action param mask struct(s1.Data, s2.Data, s3.Data, s4.Data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
                     i3 <- i3 + 1
@@ -309,19 +309,19 @@ module Join =
                 let s3 = get c i3
                 let s4 = get d i4
                 let s5 = get e i5
-                let n1 = s1.id
-                let n2 = s2.id
-                let n3 = s3.id
-                let n4 = s4.id
-                let n5 = s5.id
+                let n1 = s1.Id
+                let n2 = s2.Id
+                let n3 = s3.Id
+                let n4 = s4.Id
+                let n5 = s5.Id
                 if n1 < n2 || n1 < n3 || n1 < n4 || n1 < n5 then i1 <- i1 + 1
                 elif n2 < n1 || n2 < n3 || n2 < n4 || n2 < n5 then i2 <- i2 + 1
                 elif n3 < n1 || n3 < n2 || n3 < n4 || n3 < n5 then i3 <- i3 + 1
                 elif n4 < n1 || n4 < n2 || n4 < n3 || n4 < n5 then i4 <- i4 + 1
                 elif n5 < n1 || n5 < n2 || n5 < n3 || n5 < n4 then i5 <- i5 + 1
                 else
-                    let mask = s1.mask &&& s2.mask &&& s3.mask &&& s4.mask &&& s5.mask
-                    if mask <> 0UL then action param mask struct(s1.data, s2.data, s3.data, s4.data, s5.data)
+                    let mask = s1.Mask &&& s2.Mask &&& s3.Mask &&& s4.Mask &&& s5.Mask
+                    if mask <> 0UL then action param mask struct(s1.Data, s2.Data, s3.Data, s4.Data, s5.Data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
                     i3 <- i3 + 1
@@ -348,12 +348,12 @@ module Join =
                 let s4 = get d i4
                 let s5 = get e i5
                 let s6 = get f i6
-                let n1 = s1.id
-                let n2 = s2.id
-                let n3 = s3.id
-                let n4 = s4.id
-                let n5 = s5.id
-                let n6 = s6.id
+                let n1 = s1.Id
+                let n2 = s2.Id
+                let n3 = s3.Id
+                let n4 = s4.Id
+                let n5 = s5.Id
+                let n6 = s6.Id
                 if   n1 < n2 || n1 < n3 || n1 < n4 || n1 < n5 || n1 < n6 then i1 <- i1 + 1
                 elif n2 < n1 || n2 < n3 || n2 < n4 || n2 < n5 || n2 < n6 then i2 <- i2 + 1
                 elif n3 < n1 || n3 < n2 || n3 < n4 || n3 < n5 || n3 < n6 then i3 <- i3 + 1
@@ -361,8 +361,8 @@ module Join =
                 elif n5 < n1 || n5 < n2 || n5 < n3 || n5 < n4 || n5 < n6 then i5 <- i5 + 1
                 elif n6 < n1 || n6 < n2 || n6 < n3 || n6 < n4 || n6 < n5 then i6 <- i6 + 1
                 else
-                    let mask = s1.mask &&& s2.mask &&& s3.mask &&& s4.mask &&& s5.mask &&& s6.mask
-                    if mask <> 0UL then action param mask struct(s1.data, s2.data, s3.data, s4.data, s5.data, s6.data)
+                    let mask = s1.Mask &&& s2.Mask &&& s3.Mask &&& s4.Mask &&& s5.Mask &&& s6.Mask
+                    if mask <> 0UL then action param mask struct(s1.Data, s2.Data, s3.Data, s4.Data, s5.Data, s6.Data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
                     i3 <- i3 + 1
@@ -393,13 +393,13 @@ module Join =
                 let s5 = get e i5
                 let s6 = get f i6
                 let s7 = get g i7
-                let n1 = s1.id
-                let n2 = s2.id
-                let n3 = s3.id
-                let n4 = s4.id
-                let n5 = s5.id
-                let n6 = s6.id
-                let n7 = s7.id
+                let n1 = s1.Id
+                let n2 = s2.Id
+                let n3 = s3.Id
+                let n4 = s4.Id
+                let n5 = s5.Id
+                let n6 = s6.Id
+                let n7 = s7.Id
                 if   n1 < n2 || n1 < n3 || n1 < n4 || n1 < n5 || n1 < n6 || n1 < n7 then i1 <- i1 + 1
                 elif n2 < n1 || n2 < n3 || n2 < n4 || n2 < n5 || n2 < n6 || n2 < n7 then i2 <- i2 + 1
                 elif n3 < n1 || n3 < n2 || n3 < n4 || n3 < n5 || n3 < n6 || n3 < n7 then i3 <- i3 + 1
@@ -408,8 +408,8 @@ module Join =
                 elif n6 < n1 || n6 < n2 || n6 < n3 || n6 < n4 || n6 < n5 || n6 < n7 then i6 <- i6 + 1
                 elif n7 < n1 || n7 < n2 || n7 < n3 || n7 < n4 || n7 < n5 || n7 < n6 then i7 <- i7 + 1
                 else
-                    let mask = s1.mask &&& s2.mask &&& s3.mask &&& s4.mask &&& s5.mask &&& s6.mask &&& s7.mask
-                    if mask <> 0UL then action param mask struct(s1.data, s2.data, s3.data, s4.data, s5.data, s6.data, s7.data)
+                    let mask = s1.Mask &&& s2.Mask &&& s3.Mask &&& s4.Mask &&& s5.Mask &&& s6.Mask &&& s7.Mask
+                    if mask <> 0UL then action param mask struct(s1.Data, s2.Data, s3.Data, s4.Data, s5.Data, s6.Data, s7.Data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
                     i3 <- i3 + 1
@@ -422,7 +422,7 @@ module Join =
             let ca = count a
             for ia = 0 to ca - 1 do
                 let sa = a.[ia]
-                action param sa.mask sa.id sa.data
+                action param sa.Mask sa.Id sa.Data
     
         let iterKey2 action struct(a, b) param =
             let ca = count a
@@ -432,13 +432,13 @@ module Join =
             while ia < ca && ib < cb do
                 let sa = a.[ia]
                 let sb = b.[ib]
-                let na = sa.id
-                let nb = sb.id
+                let na = sa.Id
+                let nb = sb.Id
                 if na < nb then ia <- ia + 1
                 elif nb < na then ib <- ib + 1
                 else
-                    let mask = sa.mask &&& sb.mask
-                    if mask <> 0UL then action param mask na struct(sa.data, sb.data)
+                    let mask = sa.Mask &&& sb.Mask
+                    if mask <> 0UL then action param mask na struct(sa.Data, sb.Data)
                     ia <- ia + 1
                     ib <- ib + 1
     
@@ -453,15 +453,15 @@ module Join =
                 let sa = a.[ia]
                 let sb = b.[ib]
                 let sc = c.[ic]
-                let na = sa.id
-                let nb = sb.id
-                let nc = sc.id
+                let na = sa.Id
+                let nb = sb.Id
+                let nc = sc.Id
                 if na < nb || na < nc then ia <- ia + 1
                 elif nb < na || nb < nc then ib <- ib + 1
                 elif nc < na || nc < nb then ic <- ic + 1
                 else
-                    let mask = sa.mask &&& sb.mask &&& sc.mask
-                    if mask <> 0UL then action param mask na struct(sa.data, sb.data, sc.data)
+                    let mask = sa.Mask &&& sb.Mask &&& sc.Mask
+                    if mask <> 0UL then action param mask na struct(sa.Data, sb.Data, sc.Data)
                     ia <- ia + 1
                     ib <- ib + 1
                     ic <- ic + 1
@@ -480,17 +480,17 @@ module Join =
                 let sb = b.[ib]
                 let sc = c.[ic]
                 let sd = d.[id]
-                let na = sa.id
-                let nb = sb.id
-                let nc = sc.id
-                let nd = sd.id
+                let na = sa.Id
+                let nb = sb.Id
+                let nc = sc.Id
+                let nd = sd.Id
                 if   na < nb || na < nc || na < nd then ia <- ia + 1
                 elif nb < na || nb < nc || nb < nd then ib <- ib + 1
                 elif nc < na || nc < nb || nc < nd then ic <- ic + 1
                 elif nd < na || nd < nb || nd < nc then id <- id + 1
                 else
-                    let mask = sa.mask &&& sb.mask &&& sc.mask &&& sd.mask
-                    if mask <> 0UL then action param mask na struct(sa.data, sb.data, sc.data, sd.data)
+                    let mask = sa.Mask &&& sb.Mask &&& sc.Mask &&& sd.Mask
+                    if mask <> 0UL then action param mask na struct(sa.Data, sb.Data, sc.Data, sd.Data)
                     ia <- ia + 1
                     ib <- ib + 1
                     ic <- ic + 1
@@ -501,18 +501,18 @@ module Join =
             let c1 = count a
             for i1 = 0 to c1 - 1 do
                 let s1 = get a i1
-                let ir = find r s1.id
-                let mask = s1.mask
-                let sid = s1.id
+                let ir = find r s1.Id
+                let mask = s1.Mask
+                let sid = s1.Id
                 if ir < 0 then
                     let data = r.Add(sid, mask)
-                    action param mask struct(data, s1.data)
+                    action param mask struct(data, s1.Data)
                 else
                     let sr = r.[ir]
-                    let addMask = mask &&& ~~~sr.mask
+                    let addMask = mask &&& ~~~sr.Mask
                     if addMask <> 0UL then
                         let data = r.Add(sid, addMask)
-                        action param addMask struct(data, s1.data)
+                        action param addMask struct(data, s1.Data)
 
         /// Creates components when present in A and B and missing from R
         let add2 action struct(r, a, b) param =
@@ -523,24 +523,24 @@ module Join =
             while i1 < c1 && i2 < c2 do
                 let s1 = get a i1
                 let s2 = get b i2
-                let n1 = s1.id
-                let n2 = s2.id
+                let n1 = s1.Id
+                let n2 = s2.Id
                 if n1 < n2 then i1 <- i1 + 1
                 elif n2 < n1 then i2 <- i2 + 1
                 else
-                    let mask = s1.mask &&& s2.mask
+                    let mask = s1.Mask &&& s2.Mask
                     if mask <> 0UL then 
-                        let sid = s1.id
+                        let sid = s1.Id
                         let ir = find r sid
                         if ir < 0 then
                             let data = r.Add(sid, mask)
-                            action param mask struct(data, s1.data, s2.data)
+                            action param mask struct(data, s1.Data, s2.Data)
                         else
                             let sr = r.[ir]
-                            let addMask = mask &&& ~~~sr.mask
+                            let addMask = mask &&& ~~~sr.Mask
                             if addMask <> 0UL then
                                 let data = r.Add(sid, addMask)
-                                action param addMask struct(data, s1.data, s2.data)
+                                action param addMask struct(data, s1.Data, s2.Data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1            
     
@@ -556,26 +556,26 @@ module Join =
                 let s1 = get a i1
                 let s2 = get b i2
                 let s3 = get c i3
-                let n1 = s1.id
-                let n2 = s2.id
-                let n3 = s3.id
+                let n1 = s1.Id
+                let n2 = s2.Id
+                let n3 = s3.Id
                 if n1 < n2 || n1 < n3 then i1 <- i1 + 1
                 elif n2 < n1 || n2 < n3 then i2 <- i2 + 1
                 elif n3 < n1 || n3 < n2 then i3 <- i3 + 1
                 else
-                    let mask = s1.mask &&& s2.mask &&& s3.mask
+                    let mask = s1.Mask &&& s2.Mask &&& s3.Mask
                     if mask <> 0UL then 
-                        let sid = s1.id
+                        let sid = s1.Id
                         let ir = find r sid
                         if ir < 0 then
                             let data = r.Add(sid, mask)
-                            action param mask struct(data, s1.data, s2.data, s3.data)
+                            action param mask struct(data, s1.Data, s2.Data, s3.Data)
                         else
                             let sr = r.[ir]
-                            let addMask = mask &&& ~~~sr.mask
+                            let addMask = mask &&& ~~~sr.Mask
                             if addMask <> 0UL then
                                 let data = r.Add(sid, addMask)
-                                action param addMask struct(data, s1.data, s2.data, s3.data)
+                                action param addMask struct(data, s1.Data, s2.Data, s3.Data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
                     i3 <- i3 + 1
@@ -595,28 +595,28 @@ module Join =
                 let s2 = get b i2
                 let s3 = get c i3
                 let s4 = get d i4
-                let n1 = s1.id
-                let n2 = s2.id
-                let n3 = s3.id
-                let n4 = s4.id
+                let n1 = s1.Id
+                let n2 = s2.Id
+                let n3 = s3.Id
+                let n4 = s4.Id
                 if n1 < n2 || n1 < n3 || n1 < n4 then i1 <- i1 + 1
                 elif n2 < n1 || n2 < n3 || n2 < n4 then i2 <- i2 + 1
                 elif n3 < n1 || n3 < n2 || n3 < n4 then i3 <- i3 + 1
                 elif n4 < n1 || n4 < n2 || n4 < n3 then i4 <- i4 + 1
                 else
-                    let mask = s1.mask &&& s2.mask &&& s3.mask &&& s4.mask
+                    let mask = s1.Mask &&& s2.Mask &&& s3.Mask &&& s4.Mask
                     if mask <> 0UL then 
-                        let sid = s1.id
+                        let sid = s1.Id
                         let ir = find r sid
                         if ir < 0 then
                             let data = r.Add(sid, mask)
-                            action param mask struct(data, s1.data, s2.data, s3.data, s4.data)
+                            action param mask struct(data, s1.Data, s2.Data, s3.Data, s4.Data)
                         else
                             let sr = r.[ir]
-                            let addMask = mask &&& ~~~sr.mask
+                            let addMask = mask &&& ~~~sr.Mask
                             if addMask <> 0UL then
                                 let data = r.Add(sid, addMask)
-                                action param addMask struct(data, s1.data, s2.data, s3.data, s4.data)
+                                action param addMask struct(data, s1.Data, s2.Data, s3.Data, s4.Data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
                     i3 <- i3 + 1
@@ -639,30 +639,30 @@ module Join =
                 let s3 = get c i3
                 let s4 = get d i4
                 let s5 = get e i5
-                let n1 = s1.id
-                let n2 = s2.id
-                let n3 = s3.id
-                let n4 = s4.id
-                let n5 = s5.id
+                let n1 = s1.Id
+                let n2 = s2.Id
+                let n3 = s3.Id
+                let n4 = s4.Id
+                let n5 = s5.Id
                 if n1 < n2 || n1 < n3 || n1 < n4 || n1 < n5 then i1 <- i1 + 1
                 elif n2 < n1 || n2 < n3 || n2 < n4 || n2 < n5 then i2 <- i2 + 1
                 elif n3 < n1 || n3 < n2 || n3 < n4 || n3 < n5 then i3 <- i3 + 1
                 elif n4 < n1 || n4 < n2 || n4 < n3 || n4 < n5 then i4 <- i4 + 1
                 elif n5 < n1 || n5 < n2 || n5 < n3 || n5 < n4 then i5 <- i5 + 1
                 else
-                    let mask = s1.mask &&& s2.mask &&& s3.mask &&& s4.mask &&& s5.mask
+                    let mask = s1.Mask &&& s2.Mask &&& s3.Mask &&& s4.Mask &&& s5.Mask
                     if mask <> 0UL then 
-                        let sid = s1.id
+                        let sid = s1.Id
                         let ir = find r sid
                         if ir < 0 then
                             let data = r.Add(sid, mask)
-                            action param mask struct(data, s1.data, s2.data, s3.data, s4.data, s5.data)
+                            action param mask struct(data, s1.Data, s2.Data, s3.Data, s4.Data, s5.Data)
                         else
                             let sr = r.[ir]
-                            let addMask = mask &&& ~~~sr.mask
+                            let addMask = mask &&& ~~~sr.Mask
                             if addMask <> 0UL then
                                 let data = r.Add(sid, addMask)
-                                action param addMask struct(data, s1.data, s2.data, s3.data, s4.data, s5.data)
+                                action param addMask struct(data, s1.Data, s2.Data, s3.Data, s4.Data, s5.Data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
                     i3 <- i3 + 1
@@ -674,7 +674,7 @@ module Join =
             let c1 = count a
             for i1 = 0 to c1 - 1 do
                 let s1 = a.[i1]
-                state <- action state param s1.mask s1.data
+                state <- action state param s1.Mask s1.Data
             state
             
         let fold2 action struct(a, b) initState param =
@@ -686,13 +686,13 @@ module Join =
             while i1 < c1 && i2 < c2 do
                 let s1 = a.[i1]
                 let s2 = b.[i2]
-                let n1 = s1.id
-                let n2 = s2.id
+                let n1 = s1.Id
+                let n2 = s2.Id
                 if n1 < n2 then i1 <- i1 + 1
                 elif n2 < n1 then i2 <- i2 + 1
                 else
-                    let mask = s1.mask &&& s2.mask
-                    if mask <> 0UL then state <- action state param mask struct(s1.data, s2.data)
+                    let mask = s1.Mask &&& s2.Mask
+                    if mask <> 0UL then state <- action state param mask struct(s1.Data, s2.Data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
             state    
@@ -709,15 +709,15 @@ module Join =
                 let s1 = a.[i1]
                 let s2 = b.[i2]
                 let s3 = c.[i3]
-                let n1 = s1.id
-                let n2 = s2.id
-                let n3 = s3.id
+                let n1 = s1.Id
+                let n2 = s2.Id
+                let n3 = s3.Id
                 if n1 < n2 || n1 < n3 then i1 <- i1 + 1
                 elif n2 < n1 || n2 < n3 then i2 <- i2 + 1
                 elif n3 < n1 || n3 < n2 then i3 <- i3 + 1
                 else
-                    let mask = s1.mask &&& s2.mask &&& s3.mask
-                    if mask <> 0UL then state <- action state param mask struct(s1.data, s2.data, s3.data)
+                    let mask = s1.Mask &&& s2.Mask &&& s3.Mask
+                    if mask <> 0UL then state <- action state param mask struct(s1.Data, s2.Data, s3.Data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
                     i3 <- i3 + 1
@@ -738,17 +738,17 @@ module Join =
                 let s2 = get b i2
                 let s3 = get c i3
                 let s4 = get d id
-                let n1 = s1.id
-                let n2 = s2.id
-                let n3 = s3.id
-                let n4 = s4.id
+                let n1 = s1.Id
+                let n2 = s2.Id
+                let n3 = s3.Id
+                let n4 = s4.Id
                 if n1 < n2 || n1 < n3 || n1 < n4 then i1 <- i1 + 1
                 elif n2 < n1 || n2 < n3 || n2 < n4 then i2 <- i2 + 1
                 elif n3 < n1 || n3 < n2 || n3 < n4 then i3 <- i3 + 1
                 elif n4 < n1 || n4 < n2 || n4 < n3 then id <- id + 1
                 else
-                    let mask = s1.mask &&& s2.mask &&& s3.mask &&& s4.mask
-                    if mask <> 0UL then state <- action state param mask struct(s1.data, s2.data, s3.data, s4.data)
+                    let mask = s1.Mask &&& s2.Mask &&& s3.Mask &&& s4.Mask
+                    if mask <> 0UL then state <- action state param mask struct(s1.Data, s2.Data, s3.Data, s4.Data)
                     i1 <- i1 + 1
                     i2 <- i2 + 1
                     i3 <- i3 + 1

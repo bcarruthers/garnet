@@ -11,18 +11,18 @@ open Garnet.Formatting
 /// Identifies an actor
 [<Struct>]
 type ActorId =
-    val value : int
-    new(value) = { value = value }
-    override e.ToString() = "0x" + e.value.ToString("x")
+    val Value : int
+    new(value) = { Value = value }
+    override e.ToString() = "0x" + e.Value.ToString("x")
     
 module ActorId =
     let undefined = ActorId 0
-    let isAny (id : ActorId) = true
+    let isAny (_ : ActorId) = true
 
 [<Struct>]
 type Destination = {
-    destinationId : ActorId
-    recipientId : ActorId
+    DestinationId : ActorId
+    RecipientId : ActorId
     }
 
 type IMessageWriter =
@@ -58,10 +58,10 @@ type MessageWriter<'a>(dispose : Action<_>) =
             arr.CopyTo(newMem, 0)
             ArrayPool.Shared.Return(arr, true)
             arr <- newMem        
-    member c.SetSource id =
-        sourceId <-sourceId
-    member c.AddDestination id =
-        recipients.Add id
+    member c.SetSource(id) =
+        sourceId <- id
+    member c.AddDestination(id) =
+        recipients.Add(id)
     member c.Advance count =
         pos <- pos + count
     member c.GetMemory minSize =
@@ -94,13 +94,13 @@ type MessageWriter<'a>(dispose : Action<_>) =
         
 [<Struct>]
 type Envelope<'a> = {
-    outbox : IOutbox
-    sourceId : ActorId
-    destinationId : ActorId
-    message : 'a
+    Outbox : IOutbox
+    SourceId : ActorId
+    DestinationId : ActorId
+    Message : 'a
     } with
     override c.ToString() =
-        sprintf "%d->%d: %A" c.sourceId.value c.destinationId.value c.message
+        sprintf "%d->%d: %A" c.SourceId.Value c.DestinationId.Value c.Message
 
 [<AutoOpen>]
 module Mailbox =
@@ -112,14 +112,14 @@ module Mailbox =
     type IMessageWriter with
         member c.AddDestination(destId) =
             c.AddDestination {
-                destinationId = destId
-                recipientId = destId
+                DestinationId = destId
+                RecipientId = destId
                 }
 
         member c.AddDestination(destId, recipientId) =
             c.AddDestination {
-                destinationId = destId
-                recipientId = recipientId
+                DestinationId = destId
+                RecipientId = recipientId
                 }
 
         member c.AddDestinations(recipients : ActorId[]) =
@@ -180,12 +180,12 @@ module Mailbox =
 
         member c.SendAll<'a>(e : Envelope<ReadOnlyMemory<'a>>) =
             use msg = c.BeginSend()
-            msg.SetSource(e.sourceId)
-            msg.AddDestination(e.destinationId)
-            let src = e.message.Span
-            let span = msg.GetSpan(e.message.Length)
+            msg.SetSource(e.SourceId)
+            msg.AddDestination(e.DestinationId)
+            let src = e.Message.Span
+            let span = msg.GetSpan(e.Message.Length)
             src.CopyTo(span)
-            msg.Advance(e.message.Length)
+            msg.Advance(e.Message.Length)
 
 type NullOutbox() =
     static let mutable instance = NullOutbox() :> IOutbox
@@ -218,7 +218,7 @@ type Mailbox() =
         let combined =
             let h = lookup.[id]
             if isNotNull h then
-                let existing = h :?> (ReadOnlyMemory<'a> -> unit)
+                let existing = h :?> ReadOnlyMemory<'a> -> unit
                 fun e ->
                     existing e
                     action e
@@ -234,12 +234,12 @@ type Mailbox() =
         if id < lookup.Length then
             let h = lookup.[id]
             if isNotNull h then
-                outbox <- e.outbox
-                sourceId <- e.sourceId
-                destId <- e.destinationId
+                outbox <- e.Outbox
+                sourceId <- e.SourceId
+                destId <- e.DestinationId
                 try
-                    let handle = h :?> (ReadOnlyMemory<'a> -> unit)
-                    handle e.message
+                    let handle = h :?> ReadOnlyMemory<'a> -> unit
+                    handle e.Message
                     true
                 finally
                     outbox <- NullOutbox.Instance
@@ -273,7 +273,7 @@ type NullInbox() =
     static let mutable instance = NullInbox() :> IInbox
     static member Instance = instance
     interface IInbox with
-        member c.Receive e = ()
+        member c.Receive _ = ()
     
 type private InboxCollection(handlers : IInbox[]) =
     interface IInbox with
@@ -285,7 +285,7 @@ type private InboxCollection(handlers : IInbox[]) =
 
 [<Struct>]
 type Actor(inbox : IInbox, dispatcherId : int, dispose : unit -> unit) =
-    static let mutable instance = new Actor(NullInbox.Instance)
+    static let mutable instance = Actor(NullInbox.Instance)
     static member Null = instance
     new(inbox, dispose) = Actor(inbox, 0, dispose)
     new(inbox, dispatcherId) = Actor(inbox, dispatcherId, ignore)
@@ -316,7 +316,7 @@ type internal ActorFactoryCollection() =
 
 type ActorFactory(tryCreate) =
     static let mutable instance = 
-        new ActorFactory(fun _ -> ValueSome Actor.Null) 
+        ActorFactory(fun _ -> ValueSome Actor.Null) 
         :> IActorFactory
     static member Null = instance
     member c.TryCreate(createId : ActorId) =
@@ -367,7 +367,7 @@ module ActorFactory =
             ActorFactory.Create(tryCreate)
 
         member c.WithDispatcher(dispatcherId) =
-            c.Wrap(fun createId actor -> actor.WithDispatcher(dispatcherId))
+            c.Wrap(fun _ actor -> actor.WithDispatcher(dispatcherId))
 
         member c.Create(actorId) =
             match c.TryCreate(actorId) with
@@ -417,10 +417,10 @@ module internal MessageContext =
         }
     
     let fromEnvelope (c : Envelope<_>) = {
-        outbox = c.outbox
+        outbox = c.Outbox
         addresses = {
-            sourceId = c.sourceId
-            destinationId = c.destinationId
+            sourceId = c.SourceId
+            destinationId = c.DestinationId
             }
         }
 

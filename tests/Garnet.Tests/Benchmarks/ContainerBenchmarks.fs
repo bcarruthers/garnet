@@ -9,7 +9,7 @@ let runCreateDestroyEntities count iterations =
     for i = 1 to iterations do
         for i = 1 to count do
             let e = c.Create()
-            eids.Add e.id
+            eids.Add(e.Id)
         c.Commit()
         for eid in eids do
             c.Destroy eid
@@ -22,7 +22,7 @@ let runCreateDestroyMultipleComponents count iterations =
     for i = 1 to iterations do
         for i = 1 to count do
             let e = c.Create().With(1).With("a").With(1.2).With('b')
-            eids.Add e.id
+            eids.Add(e.Id)
         c.Commit()
         for eid in eids do
             c.Destroy eid
@@ -34,7 +34,7 @@ let runAddRemoveComponent count iterations =
     let eids = List<Eid>()
     for i = 1 to count do
         let e = c.Create()
-        eids.Add e.id
+        eids.Add(e.Id)
     for i = 1 to iterations do
         for eid in eids do
             c.Get(eid).Add(1)
@@ -48,7 +48,7 @@ let runAddRemoveComponentDirect count iterations =
     let eids = List<Eid>()
     for i = 1 to count do
         let e = c.Create()
-        eids.Add e.id
+        eids.Add(e.Id)
     let cmp = c.Get<int>()
     for i = 1 to iterations do
         for eid in eids do
@@ -63,7 +63,7 @@ let runAddRemoveMultipleComponents count iterations =
     let eids = List<Eid>()
     for i = 1 to count do
         let e = c.Create()
-        eids.Add e.id
+        eids.Add(e.Id)
     for i = 1 to iterations do
         for eid in eids do
             c.Get(eid).With(1).With("a").With(1.2).Add('b')
@@ -77,7 +77,7 @@ let runIterateEntities count iterations =
     let eids = List<Eid>()
     for i = 1 to count do
         let e = c.Create()
-        eids.Add e.id
+        eids.Add(e.Id)
     c.Commit()
     let iter =
         fun param (_ : Eid) ->
@@ -92,7 +92,7 @@ let runIterateMultipleComponents count iterations =
     let eids = List<Eid>()
     for i = 1 to count do
         let e = c.Create().With(1).With("a").With(1.2).With('b')
-        eids.Add e.id
+        eids.Add(e.Id)
     c.Commit()
     let iter =
         fun _ struct(_ : int, _ : string, _ : double, _ : char) ->
