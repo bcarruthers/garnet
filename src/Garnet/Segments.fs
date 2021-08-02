@@ -299,7 +299,7 @@ module internal Internal =
                     else Array.zeroCreate(Segment.segmentSize)
         let mutable segments = Array.zeroCreate<PendingSegment<'k, 'a>> 8
         let mutable count = 0
-        let idToIndex = Dictionary<'k, int>()
+        let idToIndex = DictionarySlim<'k, int>()
         member c.Clear() =
             for i = 0 to count - 1 do
                 let seg = segments.[i]
@@ -336,7 +336,8 @@ module internal Internal =
                     RemovalMask = 0UL
                     }
                 count <- count + 1
-                idToIndex.Add(id, i)
+                let index = &idToIndex.GetOrAddValueRef(&id)
+                index <- i
                 data
         /// Removes bits given ID, but does not remove segment if empty
         member c.Remove(id, mask) =
@@ -357,7 +358,8 @@ module internal Internal =
                     RemovalMask = mask
                     }
                 count <- count + 1
-                idToIndex.Add(id, i)
+                let index = &idToIndex.GetOrAddValueRef(&id)
+                index <- i
         member c.ApplyRemovalsTo(target : ISegments<_>) =
             // copy in case this is called on self
             let count = count

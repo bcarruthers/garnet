@@ -7,51 +7,46 @@ open Veldrid
 open Garnet.Samples.Engine
 open Garnet.Composition
 open Garnet.Samples.Flocking.Types
-        
+
 module CoreSystems =
     let registerSteering (c : Container) =
-        let collectNeighbors =
-            // for simplicity, brute-force iteration over all vehicles
-            fun struct(current, neighbors : List<Neighbor>) struct(eid : Eid, h : Heading, t : Faction, p : Position) ->
-                if eid <> current.eid then
-                    let offset = p.pos - current.pos
-                    let distance = offset.Length()
-                    neighbors.Add { 
-                        direction = h.direction
-                        teamWeight = if current.faction = t then 1.0f else 0.0f
-                        directionToNeighbor = offset.DivideOrZero(distance)
-                        distance = distance
-                        }
-            |> Join.iter4
-            |> Join.over c
-        let update = 
-            let neighbors = List<Neighbor>()
-            fun settings struct(h : Heading, eid : Eid, p : Position, faction : Faction, veh : Vehicle) ->
-                let current = {
-                    eid = eid
-                    pos = p.pos
-                    dir = h.direction
-                    faction = faction
-                    }
-                collectNeighbors struct(current, neighbors)
-                let steerer = { 
-                    steerPos = current.pos
-                    steerDir = current.dir
-                    }                    
-                let dir = Steering.getSteeringDirection settings neighbors steerer
-                let velocity = dir * veh.maxSpeed
-                neighbors.Clear()
-                Heading.fromVelocity velocity
-            |> Join.update5
-            |> Join.over c
+        let neighbors = List<Neighbor>()
         Disposable.Create [
-            c.On<Update> <| fun e ->
+            c.On<Update> <| fun _ ->
                 let settings = c.GetInstance<WorldSettings>().steering
-                update settings
+                for seg, eids, hs, ps, fs, vs in c.Query<Eid, Heading, Position, Faction, Vehicle>() do
+                    for i in seg do
+                        let current = {
+                            eid = eids.[i]
+                            pos = ps.[i].pos
+                            dir = hs.[i].direction
+                            faction = fs.[i]
+                            }
+                        // For simplicity and testing performance, we're iterating over all vehicles
+                        // rather than using any spatial partitioning.
+                        for seg, eids, hs, fs, ps in c.Query<Eid, Heading, Faction, Position>() do
+                            for i in seg do
+                                if eids.[i] <> current.eid then
+                                    let offset = ps.[i].pos - current.pos
+                                    let distance = offset.Length()
+                                    neighbors.Add { 
+                                        direction = hs.[i].direction
+                                        teamWeight = if current.faction = fs.[i] then 1.0f else 0.0f
+                                        directionToNeighbor = offset.DivideOrZero(distance)
+                                        distance = distance
+                                        }
+                        let current = { 
+                            steerPos = current.pos
+                            steerDir = current.dir
+                            }                    
+                        let dir = Steering.getSteeringDirection settings neighbors current
+                        let velocity = dir * vs.[i].maxSpeed
+                        neighbors.Clear()
+                        hs.[i] <- Heading.fromVelocity velocity
             ]
 
     let registerReset (c : Container) =
-        c.On<Start> <| fun e ->
+        c.On<Start> <| fun _ ->
             c.DestroyAll()
             let settings = c.GetInstance<WorldSettings>()
             let rand = Random(settings.seed)
@@ -65,50 +60,42 @@ module CoreSystems =
                     .Add(TrailEmitter())
                         
     let registerLifespan (c : Container) =
-        let update = 
-            fun dt struct(ls : Lifespan, eid : Eid) ->
-                let r = { lifespan = ls.lifespan - dt }
-                if ls.lifespan <= 0.0f then c.Destroy eid
-                r
-            |> Join.update2
-            |> Join.over c
         c.On<Update> <| fun e ->
             let dt = float32 e.deltaTime / 1000.0f
-            update dt
+            for seg, lifespans, eids in c.Query<Lifespan, Eid>() do
+                for i in seg do
+                    let ls = lifespans.[i]
+                    let r = { lifespan = ls.lifespan - dt }
+                    if ls.lifespan <= 0.0f then
+                        c.Destroy(eids.[i])
+                    lifespans.[i] <- r
 
     let registerUpdatePosition (c : Container) =
-        let update =
-            fun dt struct(p : Position, h : Heading) -> { 
-                pos = Heading.getNextPosition dt h p.pos 
-                }
-            |> Join.update2
-            |> Join.over c
         c.On<Update> <| fun e ->
             let dt = float32 e.deltaTime / 1000.0f
-            update dt
+            for seg, positions, headings in c.Query<Position, Heading>() do
+                for i in seg do positions.[i] <- {
+                    pos = Heading.getNextPosition dt headings.[i] positions.[i].pos
+                }
 
     let registerUpdateRotation (c : Container) =
-        let update =
-            fun dt struct(r : Rotation, v : AngularVelocity) -> { 
-                radians = r.radians + dt * v.rotationSpeed 
-                }
-            |> Join.update2
-            |> Join.over c
         c.On<Update> <| fun e ->
             let dt = float32 e.deltaTime / 1000.0f
-            update dt
+            for seg, rs, vs in c.Query<Rotation, AngularVelocity>() do
+                for i in seg do rs.[i] <- {
+                    radians = rs.[i].radians + dt * vs.[i].rotationSpeed
+                }
         
     let registerTrailEmission (c : Container) =
-        c.On<Update> (
-            fun e struct(_ : TrailEmitter, p : Position, faction : Faction, h : Heading) ->
-                c.Create()
-                    .With(faction)
-                    .With(p)
-                    .With({ radians = h.direction.GetRadians() })
-                    .With({ lifespan = 0.6f })
-                    .Add(Trail())
-            |> Join.iter4
-            |> Join.over c)
+        c.On<Update> <| fun _ ->
+            for seg, _, ps, fs, hs in c.Query<TrailEmitter, Position, Faction, Heading>() do
+                for i in seg do
+                    c.Create()
+                        .With(fs.[i])
+                        .With(ps.[i])
+                        .With({ radians = hs.[i].direction.GetRadians() })
+                        .With({ lifespan = 0.6f })
+                        .Add(Trail())
 
     let register (c : Container) =
         Disposable.Create [
@@ -122,45 +109,38 @@ module CoreSystems =
 
 module ViewSystems =
     let registerVehicleSprites (c : Container) =
-        let update =
-            fun struct(texBounds, mesh : BufferedQuadMesh<PositionTextureDualColorVertex>) 
-                struct(_ : Vehicle, p : Position, faction : Faction, h : Heading) -> 
-                mesh.DrawSprite(
-                    center = p.pos, 
-                    rotation = h.direction,
-                    size = 0.1f * Vector2(1.0f, 1.0f) * 140.0f,
-                    texBounds = texBounds,
-                    fg = Faction.toColor faction,
-                    bg = RgbaFloat.Clear)
-            |> Join.iter4
-            |> Join.over c
-        c.On<Draw> <| fun e ->
+        c.On<Draw> <| fun _ ->
             let atlas = c.GetInstance<TextureAtlas>()
             let layers = c.GetInstance<ColorTextureQuadLayers>()
             let texBounds = atlas.GetBounds("triangle.png")
             let mesh = layers.GetLayer(2)
-            update struct(texBounds, mesh)
+            for seg, _, positions, factions, headings in c.Query<Vehicle, Position, Faction, Heading>() do
+                for i in seg do
+                    mesh.DrawSprite(
+                        center = positions.[i].pos, 
+                        rotation = headings.[i].direction,
+                        size = 0.1f * Vector2(1.0f, 1.0f) * 140.0f,
+                        texBounds = texBounds,
+                        fg = Faction.toColor factions.[i],
+                        bg = RgbaFloat.Clear)
             mesh.Flush()
 
     let registerTrailSprites (c : Container) =
-        let update =
-            fun struct(texBounds, mesh : BufferedQuadMesh<PositionTextureDualColorVertex>) 
-                struct(_ : Trail, p : Position, faction : Faction, ls : Lifespan, r : Rotation) ->
-                mesh.DrawSprite(
-                    center = p.pos, 
-                    rotation = Vector2.fromRadians r.radians,
-                    size = ls.lifespan * 0.3f * Vector2.One * 60.0f,
-                    texBounds = texBounds,
-                    fg = (Faction.toColor faction).MultiplyAlpha(ls.lifespan * 0.3f),
-                    bg = RgbaFloat.Clear)
-            |> Join.iter5
-            |> Join.over c
-        c.On<Draw> <| fun e ->
+        c.On<Draw> <| fun _ ->
             let atlas = c.GetInstance<TextureAtlas>()
             let layers = c.GetInstance<ColorTextureQuadLayers>()
             let texBounds = atlas.GetBounds("hex.png")
             let mesh = layers.GetLayer(1)
-            update struct(texBounds, mesh)
+            let query = c.Query<Trail, Position, Faction, Lifespan, Rotation>() 
+            for seg, _, positions, factions, lifespans, rotations in query do
+                for i in seg do
+                    mesh.DrawSprite(
+                        center = positions.[i].pos, 
+                        rotation = Vector2.fromRadians rotations.[i].radians,
+                        size = lifespans.[i].lifespan * 0.3f * Vector2.One * 60.0f,
+                        texBounds = texBounds,
+                        fg = (Faction.toColor factions.[i]).MultiplyAlpha(lifespans.[i].lifespan * 0.3f),
+                        bg = RgbaFloat.Clear)
             mesh.Flush()
 
     let register (c : Container) =

@@ -50,7 +50,7 @@ module PingPong =
             let sentCount = ref 0
             let config = {
                 Dispatchers = [|
-                    for i = 1 to poolCount do
+                    for _ = 1 to poolCount do
                         yield {
                             // workers
                             ThreadCount = workerCount
@@ -81,7 +81,7 @@ module PingPong =
                             dispatcher = inbox.ToString()
                             }
                     if c <= maxCount then
-                        let sc = Interlocked.Increment sentCount
+                        let _ = Interlocked.Increment sentCount
                         let rand = uint64 c * 2862933555777941757UL + 3037000493UL
                         let destId = (abs (int rand) % actorCount) + 1 |> ActorId
                         if duration > 0 then

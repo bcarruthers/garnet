@@ -21,6 +21,7 @@
     <Compile Include="Loaders.fs" />
     <Compile Include="Tiling.fs" />
     <Compile Include="Sprites.fs" />
+    <Compile Include="Timing.fs" />
     <Content Condition="'$(IsWindows)' == 'true' And '$(Is64Bit)' == 'false'" Include="..\..\dependencies\win-x86\openal32.dll" Link="openal32.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

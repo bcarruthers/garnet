@@ -1,5 +1,4 @@
-﻿#r "netstandard"
-#r "../bin/Release/net5.0/Garnet.dll"
+﻿#r "../bin/Release/net5.0/Garnet.dll"
 #load "ActorBenchmarks.fs"
 
 open Garnet.Benchmarks.Actors.PingPong

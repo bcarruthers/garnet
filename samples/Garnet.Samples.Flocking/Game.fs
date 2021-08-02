@@ -51,10 +51,12 @@ type Game(fs : IStreamSource) =
         container.RegisterInstance<WorldSettings>(WorldSettings.defaults)
         // Start loop
         container.Run(Start())
+        let hud = FpsHud()
         let timer = UpdateTimer(16L)
         while ren.Update(0.0f) do
             // Call systems to update
             let e = timer.Update()
+            hud.OnUpdate()
             container.Run<Update>(e)
             // Update transforms so origin is in the center of the screen and we use pixel coords
             // with +Y as up.
@@ -63,11 +65,12 @@ type Game(fs : IStreamSource) =
             layers.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, size.Y, -100.0f, 100.0f)
             // Call systems to draw
             container.Run(Draw())
+            hud.Draw()
             // Draw to window
             ren.Invalidate()
             ren.Draw()
-            // Sleep to avoid spinning CPU (note sleep(1) typically takes ~15 ms)
-            Thread.Sleep(1)
+            // Sleep to avoid spinning CPU
+            //Thread.Sleep(1)
     interface IDisposable with
         member c.Dispose() =
             atlas.Dispose()

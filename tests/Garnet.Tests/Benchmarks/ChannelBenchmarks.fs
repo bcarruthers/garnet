@@ -6,7 +6,7 @@ let run iterations sendFreq =
     let mutable sum = 0L
     let c = Channels()
     let channel = c.GetChannel<int>()
-    let sub =
+    let _ =
         c.On<int> <| fun e ->
             sum <- sum + int64 e
             if e < iterations then
@@ -23,7 +23,7 @@ let run iterations sendFreq =
 let runWithoutCachingChannel iterations sendFreq =
     let mutable sum = 0L
     let c = Channels()
-    let sub =
+    let _ =
         c.On<int> <| fun e ->
             sum <- sum + int64 e
             if e < iterations then
@@ -42,7 +42,7 @@ let runBatches iterations batchSize =
     let mutable count = 0
     let c = Channels()
     let channel = c.GetChannel<int>()
-    let sub =
+    let _ =
         c.OnAll<int> <| fun list ->
             for e in list.Span do
                 sum <- sum + int64 e

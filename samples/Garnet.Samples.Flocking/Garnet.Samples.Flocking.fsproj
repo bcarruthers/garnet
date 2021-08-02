@@ -29,6 +29,7 @@
     </None>
     <Compile Include="Types.fs" />
     <Compile Include="Functions.fs" />
+    <Compile Include="Debug.fs" />
     <Compile Include="Systems.fs" />
     <Compile Include="Game.fs" />
     <Compile Include="Program.fs" />
