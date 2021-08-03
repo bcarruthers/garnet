@@ -46,9 +46,9 @@ type Game(fs : IStreamSource) =
     member c.Run() =
         // Create ECS container to hold game state and handle messages
         let container = Container.Create(Systems.register)
-        container.RegisterInstance<TextureAtlas>(atlas)
-        container.RegisterInstance<ColorTextureQuadLayers>(layers)
-        container.RegisterInstance<WorldSettings>(WorldSettings.defaults)
+        container.SetValue<TextureAtlas>(atlas)
+        container.SetValue<ColorTextureQuadLayers>(layers)
+        container.SetValue<WorldSettings>(WorldSettings.defaults)
         // Start loop
         container.Run(Start())
         let hud = FpsHud()

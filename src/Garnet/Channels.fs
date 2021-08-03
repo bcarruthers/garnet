@@ -111,9 +111,10 @@ type Channel<'a>() =
             unsubscribed.Clear()
         // clear prior events and swap in pending to current
         events.Clear()
-        let temp = pending
-        pending <- events
-        events <- temp
+        if pending.WrittenCount > 0 then
+            let temp = pending
+            pending <- events
+            events <- temp
     interface IChannel with
         member c.Clear() = c.Clear()
         member c.Publish() = c.Publish()

@@ -368,37 +368,38 @@ module internal Internal =
                 if delta.RemovalMask <> 0UL then
                     target.Remove(delta.Id, delta.RemovalMask)           
         member c.FlushTo(target : CurrentSegments<'k, 'a>) =
-            // first copy into existing, removing deltas
-            let mutable di = 0
-            while di < count do
-                let delta = segments.[di]
-                // if not found, skip past for now
-                match target.TryFind(delta.Id) with
-                | false, _ -> di <- di + 1
-                | true, i -> 
-                    // apply removal
-                    if delta.RemovalMask <> 0UL then
-                        let data = target.Remove(i, delta.RemovalMask)
-                        clearArrayMask delta.RemovalMask data
-                    // apply addition
-                    if delta.Mask <> 0UL then
-                        // copy into existing
-                        let data = target.Add(i, delta.Mask)
-                        copyArrayMask delta.Mask delta.Data data
-                        clearArrayMask delta.Mask delta.Data
-                    // remove from deltas
-                    Array.Clear(delta.Data, 0, delta.Data.Length)
-                    pool.Push(delta.Data)
-                    count <- count - 1
-                    segments.[di] <- segments.[count]
-                    segments.[count] <- Unchecked.defaultof<_>
-            // remaining are all new segments
-            Array.Sort(segments, 0, count, comparer)
-            target.MergeFrom(segments, count)
-            // clear without recycling to pool since we passed ownership
-            Array.Clear(segments, 0, count)
-            count <- 0
-            c.Clear()
+            if count > 0 then
+                // first copy into existing, removing deltas
+                let mutable di = 0
+                while di < count do
+                    let delta = segments.[di]
+                    // if not found, skip past for now
+                    match target.TryFind(delta.Id) with
+                    | false, _ -> di <- di + 1
+                    | true, i -> 
+                        // apply removal
+                        if delta.RemovalMask <> 0UL then
+                            let data = target.Remove(i, delta.RemovalMask)
+                            clearArrayMask delta.RemovalMask data
+                        // apply addition
+                        if delta.Mask <> 0UL then
+                            // copy into existing
+                            let data = target.Add(i, delta.Mask)
+                            copyArrayMask delta.Mask delta.Data data
+                            clearArrayMask delta.Mask delta.Data
+                        // remove from deltas
+                        Array.Clear(delta.Data, 0, delta.Data.Length)
+                        pool.Push(delta.Data)
+                        count <- count - 1
+                        segments.[di] <- segments.[count]
+                        segments.[count] <- Unchecked.defaultof<_>
+                // remaining are all new segments
+                Array.Sort(segments, 0, count, comparer)
+                target.MergeFrom(segments, count)
+                // clear without recycling to pool since we passed ownership
+                Array.Clear(segments, 0, count)
+                count <- 0
+                idToIndex.Clear()
         member c.ToString(formatSegments, formatBitSegments) =
             let additions = 
                 segments 

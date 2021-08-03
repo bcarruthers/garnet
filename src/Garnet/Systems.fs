@@ -50,7 +50,7 @@ module RegistrantCollection =
     type Container with
         /// Register or replace a named system
         member c.Register(name : string, register : Container -> IDisposable) =
-            let reg = c.GetInstance<RegistrantCollection>()
+            let reg = c.GetValue<RegistrantCollection>()
             reg.Add(name, fun () -> register c)
 
         member c.Register(t : Type, register : Container -> IDisposable) =

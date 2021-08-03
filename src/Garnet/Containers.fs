@@ -257,22 +257,21 @@ type EidPools() =
 /// Wrapper over resource lookup with default types for ECS
 type Container() =
     let reg = Registry()
-    let channels = reg.GetInstance<Channels>()
-    let scheduler = reg.GetInstance<CoroutineScheduler>()
-    let segments = reg.GetInstance<SegmentStore<int>>()
-    let outbox = reg.GetInstance<Outbox>()
-    let eidPools = reg.GetInstance<EidPools>()
+    let channels = reg.GetValue<Channels>()
+    let scheduler = reg.GetValue<CoroutineScheduler>()
+    let segments = reg.GetValue<SegmentStore<int>>()
+    let outbox = reg.GetValue<Outbox>()
+    let eidPools = reg.GetValue<EidPools>()
     let components = ComponentStore(segments)
     let eids = segments.GetSegments<Eid>()
     member c.Get<'a>() = components.Get<'a>()
     member c.GetSegments<'a>() = segments.GetSegments<'a>()
     member c.GetChannel<'a>() = channels.GetChannel<'a>()
-    member c.RegisterFactory(x) = reg.RegisterFactory(x)
-    member c.RegisterInstance(x) = reg.RegisterInstance(x)
-    member c.TryGetInstance([<Out>] r : byref<_>) = reg.TryGetInstance(&r)
-    member c.GetInstance() = reg.GetInstance()
-    member c.IterInstances(param, handler) =
-        reg.IterInstances(param, handler)
+    member c.SetFactory(x) = reg.SetFactory(x)
+    member c.SetValue(x) = reg.SetValue(x)
+    member c.GetValue() = &reg.GetValue()
+    member c.IterValues(param, handler) =
+        reg.IterValues(param, handler)
     member c.GetAddresses() =
         outbox.Current.addresses
     member internal c.Clear() =
@@ -342,13 +341,11 @@ type Container() =
     member c.UnsubscribeAll() =
         channels.Clear()
     interface IRegistry with
-        member c.RegisterFactory(x) = c.RegisterFactory(x)
-        member c.RegisterInstance(x) = c.RegisterInstance(x)
-        member c.TryGetInstance([<Out>] r : byref<_>) = 
-            c.TryGetInstance(&r)
-        member c.GetInstance() = c.GetInstance()
-        member c.IterInstances(param, handler) =
-            c.IterInstances(param, handler)
+        member c.SetFactory(x) = c.SetFactory(x)
+        member c.SetValue(x) = c.SetValue(x)
+        member c.GetValue() = &c.GetValue()
+        member c.IterValues(param, handler) =
+            c.IterValues(param, handler)
     interface IChannels with
         member c.GetChannel<'a>() = channels.GetChannel<'a>()
     interface IComponentStore<int, Eid, EidSegmentKeyMapper> with
@@ -420,7 +417,7 @@ type Container with
         c.Send(c.GetAddresses().sourceId, msg)
 
     member c.Register(actorId, actorOutbox, register : Container -> IDisposable) =
-        let outbox = c.GetInstance<Outbox>()
+        let outbox = c.GetValue<Outbox>()
         use s = outbox.Push {
             Outbox = actorOutbox
             SourceId = ActorId.undefined

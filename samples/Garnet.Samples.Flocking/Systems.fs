@@ -13,7 +13,7 @@ module CoreSystems =
         let neighbors = List<Neighbor>()
         Disposable.Create [
             c.On<Update> <| fun _ ->
-                let settings = c.GetInstance<WorldSettings>().steering
+                let settings = c.GetValue<WorldSettings>().steering
                 for r in c.Query<Eid, Position, Heading, Faction, Vehicle>() do
                     let h = &r.Value3
                     let current = {
@@ -47,7 +47,7 @@ module CoreSystems =
     let registerReset (c : Container) =
         c.On<Start> <| fun _ ->
             c.DestroyAll()
-            let settings = c.GetInstance<WorldSettings>()
+            let settings = c.GetValue<WorldSettings>()
             let rand = Random(settings.seed)
             let nextCoord() = float32 (rand.NextDouble() - 0.5) * settings.spawnRange
             for i = 1 to settings.vehicleCount do
@@ -104,8 +104,8 @@ module CoreSystems =
 module ViewSystems =
     let registerVehicleSprites (c : Container) =
         c.On<Draw> <| fun _ ->
-            let atlas = c.GetInstance<TextureAtlas>()
-            let layers = c.GetInstance<ColorTextureQuadLayers>()
+            let atlas = c.GetValue<TextureAtlas>()
+            let layers = c.GetValue<ColorTextureQuadLayers>()
             let texBounds = atlas.GetBounds("triangle.png")
             let mesh = layers.GetLayer(2)
             for r in c.Query<Vehicle, Position, Faction, Heading>() do
@@ -120,8 +120,8 @@ module ViewSystems =
 
     let registerTrailSprites (c : Container) =
         c.On<Draw> <| fun _ ->
-            let atlas = c.GetInstance<TextureAtlas>()
-            let layers = c.GetInstance<ColorTextureQuadLayers>()
+            let atlas = c.GetValue<TextureAtlas>()
+            let layers = c.GetValue<ColorTextureQuadLayers>()
             let texBounds = atlas.GetBounds("hex.png")
             let mesh = layers.GetLayer(1)
             for r in c.Query<Trail, Position, Faction, Lifespan, Rotation>() do

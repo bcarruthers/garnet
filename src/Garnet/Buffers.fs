@@ -66,7 +66,7 @@ type internal ResizableBuffer<'a>(capacity) =
     member c.RemoveLast() =
         pos <- pos - 1
     member c.Clear() =
-        Array.Clear(buffer, 0, buffer.Length)
+        Array.Clear(buffer, 0, pos)
         pos <- 0
     interface IBufferWriter<'a> with
         member c.GetSpan(count) =
