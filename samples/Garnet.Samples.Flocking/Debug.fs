@@ -1,5 +1,6 @@
 ﻿namespace Garnet.Samples.Flocking
 
+open System
 open System.Numerics
 open System.Diagnostics
 open ImGuiNET
@@ -26,6 +27,8 @@ type FpsHud() =
         ImGui.SetNextWindowSize(Vector2(500.0f, 500.0f))
         ImGui.SetNextWindowPos(Vector2(0.0f, 0.0f))
         if ImGui.Begin("Hud", flags) then
+            let info = GC.GetGCMemoryInfo()
             ImGui.SetWindowFontScale(1.0f)
             ImGui.Text $"FPS: %d{int fps.FramesPerSec}, mean: %d{int fps.MeanFrameMs} ms, max: %d{int fps.MaxFrameMs} ms, fixed FPS: %d{int fixedFps.FramesPerSec}"
+            ImGui.Text $"GC pause: {info.PauseTimePercentage}%%%%, heap size: {info.HeapSizeBytes / 1024L} Kb"
             ImGui.End()
