@@ -3,9 +3,11 @@
 open System
 open System.Collections.Generic
 open System.Numerics
+open System.IO
 open System.Runtime.InteropServices
 open OpenTK.Audio.OpenAL
 open OpenTK.Audio.OpenAL.Extensions
+open Garnet.Resources
 
 [<Struct>]
 type SoundDescriptor = {
@@ -25,20 +27,6 @@ module SoundDescriptor =
 
     let getDuration desc =
         desc.sampleCount * 1000 / desc.channels / desc.sampleRate
-
-[<Struct>]
-type UpdateSoundListener = {
-    listenerPos : Vector3
-    masterGain : float32
-    }
-
-[<Struct>]
-type PlaySound = {
-    soundName : string
-    soundPos : Vector3
-    soundGain : float32
-    loopCount : int
-    }
 
 [<Struct>]
 type SoundId = SoundId of int
@@ -166,3 +154,63 @@ type AudioDevice with
             }
         c.CreateSound(desc, ReadOnlyMemory(data))
     
+type AudioCache(entries : (string * SoundId) seq) =
+    let nameToId =
+        let dict = Dictionary<string, SoundId>()
+        for key, id in entries do
+            dict.[key] <- id
+        dict
+    member c.Item with get name = nameToId.[name]
+
+[<AutoOpen>]
+module AudioLoaderExtensions =
+    type IStreamSource with
+        member c.LoadWave(device : AudioDevice, key) =
+            use stream = c.Open(key)
+            // https://stackoverflow.com/questions/8754111/how-to-read-the-data-in-a-wav-file-to-an-array
+            use reader = new BinaryReader(stream)
+            // chunk 0
+            let chunkId       = reader.ReadInt32()
+            let fileSize      = reader.ReadInt32()
+            let riffType      = reader.ReadInt32()
+            // chunk 1
+            let fmtID         = reader.ReadInt32()
+            let fmtSize       = reader.ReadInt32() // bytes for this chunk (expect 16 or 18)
+            // 16 bytes coming
+            let fmtCode       = int (reader.ReadInt16())
+            let channels      = int (reader.ReadInt16())
+            let sampleRate    = reader.ReadInt32()
+            let byteRate      = reader.ReadInt32()
+            let fmtBlockAlign = int (reader.ReadInt16())
+            let bitDepth      = int (reader.ReadInt16())
+            if fmtSize = 18 then
+                // Read any extra values
+                let fmtExtraSize = int (reader.ReadInt16())
+                stream.Seek(int64 fmtExtraSize, SeekOrigin.Current) |> ignore
+            // chunk 2
+            let dataId = reader.ReadInt32()
+            let length = reader.ReadInt32()
+            // Read data
+            // https://stackoverflow.com/questions/10996917/openal-albufferdata-returns-al-invalid-value-even-though-input-variables-look
+            let multipleOf4Length = (length + 3) / 4 * 4
+            let data = Array.zeroCreate multipleOf4Length
+            stream.Read(data, 0, length) |> ignore
+            // Create descriptor
+            let bytesForSample = bitDepth / 8
+            let sampleCount = multipleOf4Length / bytesForSample
+            let desc = {
+                channels = channels
+                bitsPerSample = bitDepth
+                sampleRate = sampleRate
+                sampleCount = sampleCount
+                }
+            device.CreateSound(desc, ReadOnlyMemory(data))
+            
+    type IReadOnlyFolder with
+        member c.LoadWavesFromFolder(device : AudioDevice, folderName) =
+            let entries =
+                c.GetFiles(folderName)
+                |> Seq.map (fun path ->
+                    let key = path.Replace(folderName, "").TrimStart('/')
+                    key, c.LoadWave(device, path))
+            AudioCache(entries)

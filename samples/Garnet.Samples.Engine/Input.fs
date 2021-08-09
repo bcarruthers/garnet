@@ -164,6 +164,23 @@ type InputCollection with
     member c.IsKeyPressed(code) =
         c.IsKeyPressed(code, ModifierKeys.None)
 
+    member c.IsAnyKeyDown(codes : IReadOnlyList<Key>) =
+        let mutable down = false
+        for i = 0 to codes.Count - 1 do
+            let code = codes.[i]
+            down <- down || c.IsKeyDown(code)
+        down
+        
+    member c.IsAnyKeyPressed(codes : IReadOnlyList<Key>, modifiers) =
+        let mutable down = false
+        for i = 0 to codes.Count - 1 do
+            let code = codes.[i]
+            down <- down || c.IsKeyPressed(code, modifiers)
+        down
+
+    member c.IsAnyKeyPressed(codes) =
+        c.IsAnyKeyPressed(codes, ModifierKeys.None)
+
     member c.UpdateKeysFromSnapshot(snapshot : InputSnapshot) =        
         for i = 0 to snapshot.KeyEvents.Count - 1 do
             let e = snapshot.KeyEvents.[i]

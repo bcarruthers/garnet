@@ -31,7 +31,7 @@ let tests =
             Eid.incrementGen (Eid 100) |> shouldEqual (Eid.fromParts 1 0 100)
 
         testCase "incrementing ID version wraps" <| fun () ->
-            Eid.fromParts Eid.maxGen 0 100 
+            Eid.fromParts Eid.MaxGen 0 100 
             |> Eid.incrementGen 
             |> shouldEqual (Eid.fromParts 0 0 100)
 

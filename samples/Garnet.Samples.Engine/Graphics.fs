@@ -4,8 +4,10 @@ open System
 open System.Buffers
 open System.Collections.Generic
 open System.Numerics
+open System.IO
 open System.Text
 open Veldrid
+open Garnet.Resources
 
 type Conversions() =
     static member ToRgbaByte(x : uint32) =
@@ -16,7 +18,7 @@ type Conversions() =
             byte ((x >>> 0) &&& (uint32 0xff)))
 
     static member ToRgbaFloat(c : RgbaByte) =
-        Veldrid.RgbaFloat(
+        RgbaFloat(
             float32 c.R / 255.0f,
             float32 c.G / 255.0f,
             float32 c.B / 255.0f,
@@ -29,10 +31,10 @@ type ProjectionViewSet(device : GraphicsDevice, slot) =
     let factory = device.ResourceFactory
     let projBuffer =
         device.ResourceFactory.CreateBuffer(
-            BufferDescription(uint32 (sizeof<Matrix4x4>), BufferUsage.UniformBuffer))
+            BufferDescription(uint32 sizeof<Matrix4x4>, BufferUsage.UniformBuffer))
     let viewBuffer =
         device.ResourceFactory.CreateBuffer(
-            BufferDescription(uint32 (sizeof<Matrix4x4>), BufferUsage.UniformBuffer))
+            BufferDescription(uint32 sizeof<Matrix4x4>, BufferUsage.UniformBuffer))
     let projViewLayout = 
         factory.CreateResourceLayout(
             ResourceLayoutDescription(
@@ -108,18 +110,6 @@ type WorldTextureSet(device : GraphicsDevice, surfaceTexture : Texture, slot, sa
 
 type ResizableDeviceBuffer(device : GraphicsDevice, elementSize, usage) =
     let mutable buffer = device.ResourceFactory.CreateBuffer(BufferDescription(uint32 (elementSize * 8), usage))
-    let log2 x =
-        let mutable log = 0
-        let mutable y = x
-        while y > 1 do
-            y <- y >>> 1
-            log <- log + 1;
-        log
-    let nextLog2 x =
-        let log = log2 x
-        if x - (1 <<< log) > 0 then 1 + log else log
-    let getRequiredCount count =
-        1 <<< nextLog2 count
     member c.Buffer = buffer
     member c.Write<'v
             when 'v : struct 
@@ -131,8 +121,8 @@ type ResizableDeviceBuffer(device : GraphicsDevice, elementSize, usage) =
             // destroy old buffer
             buffer.Dispose()
             // round up to pow2 number of elements (not bytes)
-            let requiredSize = getRequiredCount src.Length * elementSize
-            let desc = new BufferDescription(uint32 requiredSize, usage)    
+            let requiredSize = Buffer.getRequiredCount src.Length * elementSize
+            let desc = BufferDescription(uint32 requiredSize, usage)    
             buffer <- device.ResourceFactory.CreateBuffer(desc)
         // write data
         use handle = src.Pin()
@@ -145,13 +135,9 @@ type ResizableDeviceBuffer(device : GraphicsDevice, elementSize, usage) =
 type DeviceMesh(device, vertexSize) =
     let vb = new ResizableDeviceBuffer(device, vertexSize, BufferUsage.Dynamic ||| BufferUsage.VertexBuffer)
     let ib = new ResizableDeviceBuffer(device, sizeof<uint32>, BufferUsage.Dynamic ||| BufferUsage.IndexBuffer)
-    let mutable indexCount = 0
-    member c.WriteVertices(src) =
-        vb.Write(src)
-    member c.WriteIndexes(src) =
-        ib.Write(src)
-        indexCount <- src.Length
-    member c.Draw(cmds : CommandList) =
+    member c.WriteVertices(src) = vb.Write(src)
+    member c.WriteIndexes(src) = ib.Write(src)
+    member c.Draw(cmds : CommandList, indexCount) =
         if indexCount > 0 then
             cmds.SetVertexBuffer(0u, vb.Buffer)
             cmds.SetIndexBuffer(ib.Buffer, IndexFormat.UInt32)
@@ -193,7 +179,7 @@ type ShaderSet(device : GraphicsDevice,
         member c.Dispose() =
             c.Dispose()
 
-type ColorTextureTrianglePipeline(device, shaders : ShaderSet, texture : Texture, sampler) =
+type ColorTextureTrianglePipeline(device, shaders : ShaderSet, texture : Texture, sampler, blendState, outputDesc) =
     let projView = new ProjectionViewSet(device, 0)
     let worldTexture = new WorldTextureSet(device, texture, 1, sampler)
     let layouts = [| 
@@ -203,7 +189,7 @@ type ColorTextureTrianglePipeline(device, shaders : ShaderSet, texture : Texture
     let pipeline =
         let desc =
             GraphicsPipelineDescription(
-                BlendState = BlendStateDescription.SingleAlphaBlend,
+                BlendState = blendState,
                 DepthStencilState = DepthStencilStateDescription.Disabled,
                 RasterizerState =
                     RasterizerStateDescription(
@@ -215,7 +201,7 @@ type ColorTextureTrianglePipeline(device, shaders : ShaderSet, texture : Texture
                 PrimitiveTopology = PrimitiveTopology.TriangleList,
                 ResourceLayouts = layouts,
                 ShaderSet = shaders.Description,
-                Outputs = device.SwapchainFramebuffer.OutputDescription)
+                Outputs = outputDesc)
         device.ResourceFactory.CreateGraphicsPipeline(desc)
     member c.Dispose() =
         pipeline.Dispose()
@@ -277,14 +263,66 @@ type DrawableCollection() =
     interface IDrawable with
         member c.Draw(cmds) = c.Draw(cmds)
         member c.Dispose() = c.Dispose()
-    
-type BufferedQuadMesh<'v
+        
+type QuadIndexBuffer(device : GraphicsDevice) =
+    let indexesPer = 6
+    let verticesPer = 4
+    let elementSize = sizeof<uint32>
+    let usage = BufferUsage.Dynamic ||| BufferUsage.IndexBuffer
+    let mutable buffer = device.ResourceFactory.CreateBuffer(BufferDescription(uint32 (elementSize * 8), usage))
+    member private c.Update(requestedCount) =
+        let bytesPer = elementSize * indexesPer
+        let bufferedCount = int buffer.SizeInBytes / bytesPer
+        if bufferedCount < requestedCount then
+            // Round up to pow2 number of elements (not bytes)
+            let requiredCount = Buffer.getRequiredCount requestedCount
+            let requiredIndexes = requiredCount * indexesPer
+            let requiredBytes = requiredCount * bytesPer
+            // Generate indexes for primitive
+            let arr = ArrayPool<int>.Shared.Rent(requiredIndexes)
+            for i = 0 to requiredCount - 1 do
+                let vi = i * verticesPer
+                let ii = i * indexesPer
+                arr.[ii + 0] <- vi + 0
+                arr.[ii + 1] <- vi + 1
+                arr.[ii + 2] <- vi + 2
+                arr.[ii + 3] <- vi + 0
+                arr.[ii + 4] <- vi + 2
+                arr.[ii + 5] <- vi + 3
+            // Destroy old device buffer and create new one
+            buffer.Dispose()
+            let desc = BufferDescription(uint32 requiredBytes, usage)    
+            buffer <- device.ResourceFactory.CreateBuffer(desc)
+            // Write data to device buffer
+            let src = ReadOnlyMemory(arr)
+            use handle = src.Pin()            
+            device.UpdateBuffer(buffer, 0u, IntPtr handle.Pointer, uint32 requiredBytes)
+            ArrayPool<int>.Shared.Return(arr)
+    member c.Draw(cmds : CommandList, primitiveCount) =
+        if primitiveCount > 0 then
+            c.Update(primitiveCount)
+            cmds.SetIndexBuffer(buffer, IndexFormat.UInt32)
+            cmds.DrawIndexed(
+                indexCount = uint32 (primitiveCount * indexesPer),
+                instanceCount = 1u,
+                indexStart = 0u,
+                vertexOffset = 0,
+                instanceStart = 0u)
+    member c.Dispose() = buffer.Dispose()
+    interface IDisposable with 
+        member c.Dispose() = c.Dispose()
+
+type IVertexBuffer =
+    inherit IDisposable
+    abstract SetVertexBuffer : CommandList -> int
+
+type VertexBuffer<'v
                 when 'v : struct 
                 and 'v : (new : unit -> 'v) 
                 and 'v :> ValueType>(device) =
     let vertices = ArrayBufferWriter<'v>()
-    let indexes = ArrayBufferWriter<int>()
-    let mesh = DeviceMesh(device, sizeof<'v>)
+    let vb = new ResizableDeviceBuffer(device, sizeof<'v>, BufferUsage.Dynamic ||| BufferUsage.VertexBuffer)
+    let mutable vertexCount = 0
     member c.GetMemory(count) =
         vertices.GetMemory(count)
     member c.GetSpan(count) =
@@ -299,81 +337,19 @@ type BufferedQuadMesh<'v
         member c.Advance(count) = 
             c.Advance(count)        
     member c.Flush() =
-        let quadCount = vertices.WrittenCount / 4
-        let indexCount = quadCount * 6
-        let indexSpan = indexes.GetSpan(indexCount).Slice(0, indexCount)
-        for i = 0 to quadCount - 1 do
-            let vi = i * 4
-            let ii = i * 6
-            indexSpan.[ii + 0] <- vi + 0
-            indexSpan.[ii + 1] <- vi + 1
-            indexSpan.[ii + 2] <- vi + 2
-            indexSpan.[ii + 3] <- vi + 0
-            indexSpan.[ii + 4] <- vi + 2
-            indexSpan.[ii + 5] <- vi + 3
-        indexes.Advance(indexCount)
-        mesh.WriteIndexes(indexes.WrittenMemory)
-        indexes.Clear()
-        mesh.WriteVertices(vertices.WrittenMemory)
+        vertexCount <- vertices.WrittenCount
+        vb.Write(vertices.WrittenMemory)
         vertices.Clear()
-    member c.FlushTriangles() =
-        let triCount = vertices.WrittenCount / 3
-        let indexCount = triCount * 3
-        let indexSpan = indexes.GetSpan(indexCount).Slice(0, indexCount)
-        for i = 0 to triCount - 1 do
-            let vi = i * 3
-            let ii = i * 3
-            indexSpan.[ii + 0] <- vi + 0
-            indexSpan.[ii + 1] <- vi + 1
-            indexSpan.[ii + 2] <- vi + 2
-        indexes.Advance(indexCount)
-        mesh.WriteIndexes(indexes.WrittenMemory)
-        indexes.Clear()
-        mesh.WriteVertices(vertices.WrittenMemory)
-        vertices.Clear()
-    member c.Draw(cmds) =
-        mesh.Draw(cmds)
+    member c.SetVertexBuffer(cmds : CommandList) =
+        if vertexCount > 0 then
+            cmds.SetVertexBuffer(0u, vb.Buffer)
+        vertexCount
     member c.Dispose() =
-        mesh.Dispose()
-    interface IDrawable with
-        member c.Draw(cmds) =
-            c.Draw(cmds)
+        vb.Dispose()
+    interface IVertexBuffer with
+        member c.SetVertexBuffer(cmds) = c.SetVertexBuffer(cmds)
     interface IDisposable with
-        member c.Dispose() =
-            c.Dispose()        
-
-type ColorTextureQuadLayers(device, shaders, texture, sampler) =
-    let meshes = List<IDrawable>()
-    let pipeline = new ColorTextureTrianglePipeline(device, shaders, texture, sampler)
-    member c.GetLayer<'v
-            when 'v : struct 
-            and 'v : (new : unit -> 'v) 
-            and 'v :> ValueType>(z) =
-        while meshes.Count <= z do
-            meshes.Add(new BufferedQuadMesh<'v>(device))
-        meshes.[z] :?> BufferedQuadMesh<'v>
-    member val WorldTransform = Matrix4x4.Identity with get, set
-    member val ViewTransform = Matrix4x4.Identity with get, set
-    member val ProjectionTransform = Matrix4x4.Identity with get, set
-    member val TextureTransform = Matrix4x4.Identity with get, set
-    member c.Draw(cmds) =
-        // Set shader params
-        pipeline.SetPipeline(cmds)
-        pipeline.SetProjectionView(c.ProjectionTransform, c.ViewTransform, cmds)
-        pipeline.SetWorldTexture(c.WorldTransform, c.TextureTransform, cmds)
-        // Draw primitives
-        for mesh in meshes do
-            mesh.Draw(cmds)
-    member c.Dispose() =
-        for mesh in meshes do
-            mesh.Dispose()
-        pipeline.Dispose()
-    interface IDrawable with
-        member c.Draw(cmds) =
-            c.Draw(cmds)
-    interface IDisposable with
-        member c.Dispose() =
-            c.Dispose()
+        member c.Dispose() = c.Dispose()        
 
 type Renderer(device : GraphicsDevice) =
     let drawables = new DrawableCollection()
@@ -411,3 +387,53 @@ type Renderer(device : GraphicsDevice) =
     interface IDisposable with
         member c.Dispose() =
             c.Dispose()
+
+module internal Shaders =
+    let getBytecodeExtension backend =
+        match backend with
+        | GraphicsBackend.Direct3D11 -> ".hlsl.bytes"
+        | GraphicsBackend.Vulkan -> ".spv"
+        | GraphicsBackend.OpenGL
+        | GraphicsBackend.OpenGLES -> raise (InvalidOperationException("OpenGL and OpenGLES do not support shader bytecode."))
+        | _ -> raise (Exception($"Invalid GraphicsBackend: {backend}"))    
+
+    let getShaderBytes backend (code : string) =
+        match backend with
+        | GraphicsBackend.Direct3D11
+        | GraphicsBackend.OpenGL
+        | GraphicsBackend.OpenGLES -> Encoding.ASCII.GetBytes(code)
+        | GraphicsBackend.Metal -> Encoding.UTF8.GetBytes(code)
+        | _ -> raise (Exception($"Invalid GraphicsBackend: {backend}"))
+
+    let getStage extension =
+        match extension with
+        | ".vert" -> ShaderStages.Vertex
+        | ".tesc" -> ShaderStages.TessellationControl
+        | ".tese" -> ShaderStages.TessellationEvaluation
+        | ".geom" -> ShaderStages.Geometry
+        | ".frag" -> ShaderStages.Fragment
+        | ".comp" -> ShaderStages.Compute
+        | _ -> raise (Exception($"Invalid extension: {extension}"))
+
+[<AutoOpen>]
+module ShaderLoaderExtensions =
+    type IStreamSource with
+        member c.LoadShader(key : string, backend : GraphicsBackend) =
+            let stage = 
+                let extension = Path.GetExtension(key)
+                Shaders.getStage extension
+            let bytecodePath = 
+                let extension = Shaders.getBytecodeExtension backend
+                key + extension
+            use stream =
+                match c.TryOpen(bytecodePath) with
+                | ValueNone -> c.Open(key)
+                | ValueSome x -> x
+            let ms = new MemoryStream()
+            stream.CopyTo(ms)
+            ShaderDescription(stage, ms.ToArray(), "main")
+
+        member c.LoadShaderSet(device : GraphicsDevice, vertexShader, fragmentShader, layout) =
+            let vert = c.LoadShader(vertexShader, device.BackendType)
+            let frag = c.LoadShader(fragmentShader, device.BackendType)
+            new ShaderSet(device, vert, frag, layout)

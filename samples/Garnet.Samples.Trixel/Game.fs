@@ -6,6 +6,7 @@ open System.Threading
 open System.IO
 open Veldrid
 open SixLabors.ImageSharp
+open Garnet.Resources
 open Garnet.Samples.Engine
 open Garnet.Samples.Trixel.Types
 
@@ -22,26 +23,40 @@ type Game(fs : IStreamSource) =
             "texture-dual-color.frag", 
             PositionTextureDualColorVertex.Description)
     let texture = fs.LoadTexture(ren.Device, "square.png")
-    let layers = new ColorTextureQuadLayers(ren.Device, shaders, texture, ren.Device.LinearSampler)
+    let layers = new SpriteRenderer(ren.Device, shaders, texture, ren.Device.SwapchainFramebuffer.OutputDescription)
     let gui = new Gui(ren.Device, ren.ImGui)
+    let cellLayer = {
+        Depth = 4
+        Blend = Blend.Alpha
+        Filtering = Filtering.Linear
+        Primitive = Triangle
+        ViewportId = 0
+        }
+    let gridLineLayer = {
+        Depth = 3
+        Blend = Blend.Alpha
+        Filtering = Filtering.Linear
+        Primitive = Quad
+        ViewportId = 0
+        }
     do 
         ren.Background <- RgbaFloat(0.0f, 0.1f, 0.2f, 1.0f)
         ren.Add(layers)
     member private c.UpdateGrid(state) =
-        let mesh = layers.GetLayer(4)
+        let mesh = layers.GetLayer(cellLayer)
         mesh.DrawGridCells(state.current)
-        mesh.FlushTriangles()        
+        mesh.Flush()        
     member c.Run() =
         let mutable state = UndoState.init GridState.empty
         c.UpdateGrid(state)
         // grid lines
-        let mesh = layers.GetLayer(3)
+        let mesh = layers.GetLayer(gridLineLayer)
         mesh.DrawGridLines()
         mesh.Flush()
         // cells
-        let mesh = layers.GetLayer(4)
+        let mesh = layers.GetLayer(cellLayer)
         mesh.DrawGridCells(state.current)
-        mesh.FlushTriangles()
+        mesh.Flush()
         // Start loop
         ren.Invalidate()
         while ren.Update(0.0f) do
@@ -51,8 +66,9 @@ type Game(fs : IStreamSource) =
             let sizeInTiles = Viewport.getViewSize 0 ren.WindowSize.X ren.WindowSize.Y
             let proj = Matrix4x4.CreateOrthographic(sizeInTiles.X, sizeInTiles.Y, -100.0f, 100.0f)
             let view = Matrix4x4.Identity
-            layers.ProjectionTransform <- proj
-            layers.ViewTransform <-view
+            let viewport = layers.GetViewport(0)
+            viewport.ProjectionTransform <- proj
+            viewport.ViewTransform <-view
             // Draw GUI and collect any user command
             let projView = proj * view
             let invProjView = Viewport.getInverseOrIdentity projView

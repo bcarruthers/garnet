@@ -5,6 +5,7 @@ open System.Numerics
 open System.Diagnostics
 open System.Threading
 open Veldrid
+open Garnet.Resources
 open Garnet.Samples.Engine
 open Garnet.Composition
 open Garnet.Samples.Flocking.Types
@@ -39,32 +40,37 @@ type Game(fs : IStreamSource) =
             "texture-dual-color.frag", 
             PositionTextureDualColorVertex.Description)
     let atlas = fs.LoadTextureAtlas(ren.Device, 512, 512, [ "hex.png"; "triangle.png" ])
-    let layers = new ColorTextureQuadLayers(ren.Device, shaders, atlas.Texture, ren.Device.LinearSampler)
+    let layers = new SpriteRenderer(ren.Device, shaders, atlas.Texture, ren.Device.SwapchainFramebuffer.OutputDescription)
     do
         ren.Background <- RgbaFloat(0.0f, 0.1f, 0.2f, 1.0f) 
         ren.Add(layers)
-    member c.Run() =
+    member _.Run() =
         // Create ECS container to hold game state and handle messages
-        let container = Container.Create(Systems.register)
-        container.SetValue<TextureAtlas>(atlas)
-        container.SetValue<ColorTextureQuadLayers>(layers)
-        container.SetValue<WorldSettings>(WorldSettings.defaults)
+        let c = Container.Create <| fun c ->
+            Disposable.Create [
+                c.AddCoreSystems()
+                c.AddDrawingSystems()
+                ]
+        c.SetValue<TextureAtlas>(atlas)
+        c.SetValue<SpriteRenderer>(layers)
+        c.SetValue<WorldSettings>(WorldSettings.defaults)
         // Start loop
-        container.Run(Start())
+        c.Run(Start())
         let hud = FpsHud()
         let timer = UpdateTimer(16L)
         while ren.Update(0.0f) do
             // Call systems to update
             let e = timer.Update()
             hud.OnUpdate()
-            container.Run<Update>(e)
+            c.Run<Update>(e)
             // Update transforms so origin is in the center of the screen and we use pixel coords
             // with +Y as up.
             let displayScale = 1.0f
             let size = ren.WindowSize.ToVector2() / displayScale
-            layers.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, size.Y, -100.0f, 100.0f)
+            let viewport = layers.GetViewport(0)
+            viewport.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, size.Y, -100.0f, 100.0f)
             // Call systems to draw
-            container.Run(Draw())
+            c.Run(Draw())
             hud.Draw()
             // Draw to window
             ren.Invalidate()

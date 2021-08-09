@@ -1,6 +1,7 @@
 ﻿namespace Garnet.Samples.Engine
 
 open System.Diagnostics
+open Garnet.Composition
 
 type FpsGauge(updateInterval) =
     let mutable count = 0
@@ -67,14 +68,16 @@ type FixedUpdateTimer(fixedDeltaTime, maxDeltaTime) =
     let mutable frameCount = 0L
     new(fixedDeltaTime) =
         FixedUpdateTimer(fixedDeltaTime, 250L)
+    member val IsRunning = false with get, set
     member c.HasFixedUpdate =
-        accumulatedTime >= fixedDeltaTime 
+        accumulatedTime >= fixedDeltaTime && c.IsRunning 
     member c.SetTime(time) =
         let frameTime = min (time - lastTime) maxDeltaTime
         lastTime <- time
-        accumulatedTime <- accumulatedTime + frameTime
-        variableTime <- variableTime + frameTime
-        variableDeltaTime <- frameTime
+        if c.IsRunning then
+            accumulatedTime <- accumulatedTime + frameTime
+            variableTime <- variableTime + frameTime
+            variableDeltaTime <- frameTime
     member c.TakeFixedUpdate() =
         let e = {
             fixedFrameNumber = fixedTime / fixedDeltaTime
@@ -96,3 +99,17 @@ type FixedUpdateTimer(fixedDeltaTime, maxDeltaTime) =
             }
         frameCount <- frameCount + 1L
         e
+
+type FixedUpdateTimer with
+    member timer.Update(c : Container, time) =
+        timer.SetTime(time)
+        c.Start <| seq {
+            while timer.HasFixedUpdate do
+                let e = timer.TakeFixedUpdate()
+                yield c.Wait<FixedUpdate>(e)
+            let e = timer.TakeUpdate()
+            yield c.Wait<PreUpdate> { update = e }
+            c.Step(e.deltaTime)
+            yield c.Wait<Update>(e)
+            yield c.Wait<PostUpdate> { update = e }
+            }

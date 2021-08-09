@@ -39,6 +39,15 @@ type MaskEnumerator =
         member c.Dispose() = ()
 
 [<Struct>]
+type MaskEnumerable =
+    val Mask : uint64
+    new(mask) = { Mask = mask }
+    member inline c.GetEnumerator() = new MaskEnumerator(c.Mask)
+    interface IEnumerable<int> with
+        member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<int> 
+        member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
+
+[<Struct>]
 type SegmentDescriptor<'k> =
     val Id : 'k
     val Mask : uint64
@@ -233,6 +242,109 @@ type ComponentBatchEnumerator<'k, 's1, 's2, 's3, 's4, 's5, 's6, 's7 when 'k :> I
         member c.MoveNext() = c.MoveNext()
         member c.Reset() = c.Reset()
         member c.Dispose() = ()
+
+// SegmentQueryResult
+
+[<Struct>]
+type SegmentQueryResult<'k, 's1 when 'k :> IComparable<'k> and 'k :> IEquatable<'k> and 'k : equality> =
+    val Id : 'k
+    val Mask : uint64
+    val Segment : SD<'s1>
+    new(id, mask, s1) = { Id = id; Mask = mask; Segment = s1 }
+    member c.Indices = MaskEnumerable(c.Mask)
+
+[<Struct>]
+type SegmentQueryResult<'k, 's1, 's2 when 'k :> IComparable<'k> and 'k :> IEquatable<'k> and 'k : equality> =
+    val Id : 'k
+    val Mask : uint64
+    val Segment1 : SD<'s1> 
+    val Segment2 : SD<'s2> 
+    new(id, mask, s1, s2) = {
+        Id = id; Mask = mask
+        Segment1 = s1; Segment2 = s2
+    }
+    member c.Indices = MaskEnumerable(c.Mask)
+    member c.Segments = struct(c.Segment1, c.Segment2)
+
+[<Struct>]
+type SegmentQueryResult<'k, 's1, 's2, 's3 when 'k :> IComparable<'k> and 'k :> IEquatable<'k> and 'k : equality> =
+    val Id : 'k
+    val Mask : uint64
+    val Segment1 : SD<'s1> 
+    val Segment2 : SD<'s2> 
+    val Segment3 : SD<'s3> 
+    new(id, mask, s1, s2, s3) = {
+        Id = id; Mask = mask
+        Segment1 = s1; Segment2 = s2; Segment3 = s3
+    }
+    member c.Indices = MaskEnumerable(c.Mask)
+    member c.Segments = struct(c.Segment1, c.Segment2, c.Segment3)
+
+[<Struct>]
+type SegmentQueryResult<'k, 's1, 's2, 's3, 's4 when 'k :> IComparable<'k> and 'k :> IEquatable<'k> and 'k : equality> =
+    val Id : 'k
+    val Mask : uint64
+    val Segment1 : SD<'s1> 
+    val Segment2 : SD<'s2> 
+    val Segment3 : SD<'s3> 
+    val Segment4 : SD<'s4> 
+    new(id, mask, s1, s2, s3, s4) = {
+        Id = id; Mask = mask
+        Segment1 = s1; Segment2 = s2; Segment3 = s3; Segment4 = s4
+    }
+    member c.Indices = MaskEnumerable(c.Mask)
+    member c.Segments = struct(c.Segment1, c.Segment2, c.Segment3, c.Segment4)
+
+[<Struct>]
+type SegmentQueryResult<'k, 's1, 's2, 's3, 's4, 's5 when 'k :> IComparable<'k> and 'k :> IEquatable<'k> and 'k : equality> =
+    val Id : 'k
+    val Mask : uint64
+    val Segment1 : SD<'s1> 
+    val Segment2 : SD<'s2> 
+    val Segment3 : SD<'s3> 
+    val Segment4 : SD<'s4> 
+    val Segment5 : SD<'s5> 
+    new(id, mask, s1, s2, s3, s4, s5) = {
+        Id = id; Mask = mask
+        Segment1 = s1; Segment2 = s2; Segment3 = s3; Segment4 = s4; Segment5 = s5
+    }
+    member c.Indices = MaskEnumerable(c.Mask)
+    member c.Segments = struct(c.Segment1, c.Segment2, c.Segment3, c.Segment4, c.Segment5)
+
+[<Struct>]
+type SegmentQueryResult<'k, 's1, 's2, 's3, 's4, 's5, 's6 when 'k :> IComparable<'k> and 'k :> IEquatable<'k> and 'k : equality> =
+    val Id : 'k
+    val Mask : uint64
+    val Segment1 : SD<'s1> 
+    val Segment2 : SD<'s2> 
+    val Segment3 : SD<'s3> 
+    val Segment4 : SD<'s4> 
+    val Segment5 : SD<'s5> 
+    val Segment6 : SD<'s6> 
+    new(id, mask, s1, s2, s3, s4, s5, s6) = {
+        Id = id; Mask = mask
+        Segment1 = s1; Segment2 = s2; Segment3 = s3; Segment4 = s4; Segment5 = s5; Segment6 = s6
+    }
+    member c.Indices = MaskEnumerable(c.Mask)
+    member c.Segments = struct(c.Segment1, c.Segment2, c.Segment3, c.Segment4, c.Segment5, c.Segment6)
+
+[<Struct>]
+type SegmentQueryResult<'k, 's1, 's2, 's3, 's4, 's5, 's6, 's7 when 'k :> IComparable<'k> and 'k :> IEquatable<'k> and 'k : equality> =
+    val Id : 'k
+    val Mask : uint64
+    val Segment1 : SD<'s1> 
+    val Segment2 : SD<'s2> 
+    val Segment3 : SD<'s3> 
+    val Segment4 : SD<'s4> 
+    val Segment5 : SD<'s5> 
+    val Segment6 : SD<'s6> 
+    val Segment7 : SD<'s7> 
+    new(id, mask, s1, s2, s3, s4, s5, s6, s7) = {
+        Id = id; Mask = mask
+        Segment1 = s1; Segment2 = s2; Segment3 = s3; Segment4 = s4; Segment5 = s5; Segment6 = s6; Segment7 = s7
+    }
+    member c.Indices = MaskEnumerable(c.Mask)
+    member c.Segments = struct(c.Segment1, c.Segment2, c.Segment3, c.Segment4, c.Segment5, c.Segment6, c.Segment7)
 
 // SegmentQueryEnumerator
 
@@ -796,10 +908,12 @@ type SegmentQueryEnumerator<'k, 's1, 's2, 's3, 's4, 's5, 's6, 's7
 // Note they are reference types and actually return themself during
 // enumeration. This is so we can access byref members directly and
 // avoid overhead from returning a large struct type on each iteration.
+// Although GC impact appears low, we can consider pooling these objects
+// to avoid GC overhead if needed.
 
-// However, this approach also means we have to access components by
-// Item1, Value2, etc, and we may want to pool these objects to avoid
-// GC overhead.
+// Unfortunately, this approach requires access components by numbered
+// fields like Value1, Value2, etc. There's an option to read values as
+// tuples using 'Values', but this is significantly slower. 
 
 type ComponentQueryEnumerator<'k, 's1 when 'k :> IComparable<'k> and 'k :> IEquatable<'k> and 'k : equality> =
     val mutable private si : SegmentQueryEnumerator<'k, 's1>
@@ -1033,13 +1147,20 @@ type ComponentQueryEnumerator<'k, 's1, 's2, 's3, 's4, 's5, 's6, 's7 when 'k :> I
 
 // SegmentQuery
 
-// These each store a set of segment lists for iterating/joining over.
+// These each store a set of segment lists for iterating/joining over. Note they
+// yield tuples of segments instead of component enumerator which yields a result
+// object. This way appears to be faster for segment-level iteration.
 
 [<Struct>]
 type SegmentQuery<'k, 's1 when 'k :> IComparable<'k> and 'k :> IEquatable<'k> and 'k : equality> =
     val private s1 : Segments<'k, 's1> 
     new(s1) = { s1 = s1 }
     member c.GetEnumerator() = new SegmentQueryEnumerator<'k, 's1>(c.s1)
+    member c.GetComponentCount() =
+        let mutable count = 0
+        let mutable e = c.GetEnumerator()
+        while e.MoveNext() do count <- count + Bits.bitCount64 e.Mask
+        count
     interface IEnumerable<struct(SegmentDescriptor<'k> * SD<'s1>)> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
@@ -1050,6 +1171,11 @@ type SegmentQuery<'k, 's1, 's2 when 'k :> IComparable<'k> and 'k :> IEquatable<'
     val private s2 : Segments<'k, 's2> 
     new(s1, s2) = { s1 = s1; s2 = s2 }
     member c.GetEnumerator() = new SegmentQueryEnumerator<'k, 's1, 's2>(c.s1, c.s2)
+    member c.GetComponentCount() =
+        let mutable count = 0
+        let mutable e = c.GetEnumerator()
+        while e.MoveNext() do count <- count + Bits.bitCount64 e.Mask
+        count
     interface IEnumerable<struct(SegmentDescriptor<'k> * SD<'s1> * SD<'s2>)> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
@@ -1061,6 +1187,11 @@ type SegmentQuery<'k, 's1, 's2, 's3 when 'k :> IComparable<'k> and 'k :> IEquata
     val private s3 : Segments<'k, 's3> 
     new(s1, s2, s3) = { s1 = s1; s2 = s2; s3 = s3 }
     member c.GetEnumerator() = new SegmentQueryEnumerator<'k, 's1, 's2, 's3>(c.s1, c.s2, c.s3)
+    member c.GetComponentCount() =
+        let mutable count = 0
+        let mutable e = c.GetEnumerator()
+        while e.MoveNext() do count <- count + Bits.bitCount64 e.Mask
+        count
     interface IEnumerable<struct(SegmentDescriptor<'k> * SD<'s1> * SD<'s2> * SD<'s3>)> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
@@ -1073,6 +1204,11 @@ type SegmentQuery<'k, 's1, 's2, 's3, 's4 when 'k :> IComparable<'k> and 'k :> IE
     val private s4 : Segments<'k, 's4> 
     new(s1, s2, s3, s4) = { s1 = s1; s2 = s2; s3 = s3; s4 = s4 }
     member c.GetEnumerator() = new SegmentQueryEnumerator<'k, 's1, 's2, 's3, 's4>(c.s1, c.s2, c.s3, c.s4)
+    member c.GetComponentCount() =
+        let mutable count = 0
+        let mutable e = c.GetEnumerator()
+        while e.MoveNext() do count <- count + Bits.bitCount64 e.Mask
+        count
     interface IEnumerable<struct(SegmentDescriptor<'k> * SD<'s1> * SD<'s2> * SD<'s3> * SD<'s4>)> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
@@ -1086,6 +1222,11 @@ type SegmentQuery<'k, 's1, 's2, 's3, 's4, 's5 when 'k :> IComparable<'k> and 'k 
     val private s5 : Segments<'k, 's5> 
     new(s1, s2, s3, s4, s5) = { s1 = s1; s2 = s2; s3 = s3; s4 = s4; s5 = s5 }
     member c.GetEnumerator() = new SegmentQueryEnumerator<'k, 's1, 's2, 's3, 's4, 's5>(c.s1, c.s2, c.s3, c.s4, c.s5)
+    member c.GetComponentCount() =
+        let mutable count = 0
+        let mutable e = c.GetEnumerator()
+        while e.MoveNext() do count <- count + Bits.bitCount64 e.Mask
+        count
     interface IEnumerable<struct(SegmentDescriptor<'k> * SD<'s1> * SD<'s2> * SD<'s3> * SD<'s4> * SD<'s5>)> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
@@ -1100,6 +1241,11 @@ type SegmentQuery<'k, 's1, 's2, 's3, 's4, 's5, 's6 when 'k :> IComparable<'k> an
     val private s6 : Segments<'k, 's6> 
     new(s1, s2, s3, s4, s5, s6) = { s1 = s1; s2 = s2; s3 = s3; s4 = s4; s5 = s5; s6 = s6 }
     member c.GetEnumerator() = new SegmentQueryEnumerator<'k, 's1, 's2, 's3, 's4, 's5, 's6>(c.s1, c.s2, c.s3, c.s4, c.s5, c.s6)
+    member c.GetComponentCount() =
+        let mutable count = 0
+        let mutable e = c.GetEnumerator()
+        while e.MoveNext() do count <- count + Bits.bitCount64 e.Mask
+        count
     interface IEnumerable<struct(SegmentDescriptor<'k> * SD<'s1> * SD<'s2> * SD<'s3> * SD<'s4> * SD<'s5> * SD<'s6>)> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
@@ -1115,6 +1261,11 @@ type SegmentQuery<'k, 's1, 's2, 's3, 's4, 's5, 's6, 's7 when 'k :> IComparable<'
     val private s7 : Segments<'k, 's7> 
     new(s1, s2, s3, s4, s5, s6, s7) = { s1 = s1; s2 = s2; s3 = s3; s4 = s4; s5 = s5; s6 = s6; s7 = s7 }
     member c.GetEnumerator() = new SegmentQueryEnumerator<'k, 's1, 's2, 's3, 's4, 's5, 's6, 's7>(c.s1, c.s2, c.s3, c.s4, c.s5, c.s6, c.s7)
+    member c.GetComponentCount() =
+        let mutable count = 0
+        let mutable e = c.GetEnumerator()
+        while e.MoveNext() do count <- count + Bits.bitCount64 e.Mask
+        count
     interface IEnumerable<struct(SegmentDescriptor<'k> * SD<'s1> * SD<'s2> * SD<'s3> * SD<'s4> * SD<'s5> * SD<'s6> * SD<'s7>)> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
@@ -1130,6 +1281,7 @@ type ComponentQuery<'k, 's1 when 'k :> IComparable<'k> and 'k :> IEquatable<'k> 
     new(s1) = { s1 = s1 }
     member c.Segments = SegmentQuery<_,_>(c.s1)
     member c.GetEnumerator() = new ComponentQueryEnumerator<'k, 's1>(c.s1)
+    member c.GetCount() = c.Segments.GetComponentCount()
     interface IEnumerable<ComponentQueryEnumerator<'k, 's1>> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
@@ -1141,6 +1293,7 @@ type ComponentQuery<'k, 's1, 's2 when 'k :> IComparable<'k> and 'k :> IEquatable
     new(s1, s2) = { s1 = s1; s2 = s2 }
     member c.Segments = SegmentQuery<_,_,_>(c.s1, c.s2)
     member c.GetEnumerator() = new ComponentQueryEnumerator<'k, 's1, 's2>(c.s1, c.s2)
+    member c.GetCount() = c.Segments.GetComponentCount()
     interface IEnumerable<ComponentQueryEnumerator<'k, 's1, 's2>> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
@@ -1153,6 +1306,7 @@ type ComponentQuery<'k, 's1, 's2, 's3 when 'k :> IComparable<'k> and 'k :> IEqua
     new(s1, s2, s3) = { s1 = s1; s2 = s2; s3 = s3 }
     member c.Segments = SegmentQuery<_,_,_,_>(c.s1, c.s2, c.s3)
     member c.GetEnumerator() = new ComponentQueryEnumerator<'k, 's1, 's2, 's3>(c.s1, c.s2, c.s3)
+    member c.GetCount() = c.Segments.GetComponentCount()
     interface IEnumerable<ComponentQueryEnumerator<'k, 's1, 's2, 's3>> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
@@ -1166,6 +1320,7 @@ type ComponentQuery<'k, 's1, 's2, 's3, 's4 when 'k :> IComparable<'k> and 'k :> 
     new(s1, s2, s3, s4) = { s1 = s1; s2 = s2; s3 = s3; s4 = s4 }
     member c.Segments = SegmentQuery<_,_,_,_,_>(c.s1, c.s2, c.s3, c.s4)
     member c.GetEnumerator() = new ComponentQueryEnumerator<'k, 's1, 's2, 's3, 's4>(c.s1, c.s2, c.s3, c.s4)
+    member c.GetCount() = c.Segments.GetComponentCount()
     interface IEnumerable<ComponentQueryEnumerator<'k, 's1, 's2, 's3, 's4>> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
@@ -1180,6 +1335,7 @@ type ComponentQuery<'k, 's1, 's2, 's3, 's4, 's5 when 'k :> IComparable<'k> and '
     new(s1, s2, s3, s4, s5) = { s1 = s1; s2 = s2; s3 = s3; s4 = s4; s5 = s5 }
     member c.Segments = SegmentQuery<_,_,_,_,_,_>(c.s1, c.s2, c.s3, c.s4, c.s5)
     member c.GetEnumerator() = new ComponentQueryEnumerator<'k, 's1, 's2, 's3, 's4, 's5>(c.s1, c.s2, c.s3, c.s4, c.s5)
+    member c.GetCount() = c.Segments.GetComponentCount()
     interface IEnumerable<ComponentQueryEnumerator<'k, 's1, 's2, 's3, 's4, 's5>> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
@@ -1195,6 +1351,7 @@ type ComponentQuery<'k, 's1, 's2, 's3, 's4, 's5, 's6 when 'k :> IComparable<'k> 
     new(s1, s2, s3, s4, s5, s6) = { s1 = s1; s2 = s2; s3 = s3; s4 = s4; s5 = s5; s6 = s6 }
     member c.Segments = SegmentQuery<_,_,_,_,_,_,_>(c.s1, c.s2, c.s3, c.s4, c.s5, c.s6)
     member c.GetEnumerator() = new ComponentQueryEnumerator<'k, 's1, 's2, 's3, 's4, 's5, 's6>(c.s1, c.s2, c.s3, c.s4, c.s5, c.s6)
+    member c.GetCount() = c.Segments.GetComponentCount()
     interface IEnumerable<ComponentQueryEnumerator<'k, 's1, 's2, 's3, 's4, 's5, 's6>> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator
@@ -1211,6 +1368,7 @@ type ComponentQuery<'k, 's1, 's2, 's3, 's4, 's5, 's6, 's7 when 'k :> IComparable
     new(s1, s2, s3, s4, s5, s6, s7) = { s1 = s1; s2 = s2; s3 = s3; s4 = s4; s5 = s5; s6 = s6; s7 = s7 }
     member c.Segments = SegmentQuery<_,_,_,_,_,_,_,_>(c.s1, c.s2, c.s3, c.s4, c.s5, c.s6, c.s7)
     member c.GetEnumerator() = new ComponentQueryEnumerator<'k, 's1, 's2, 's3, 's4, 's5, 's6, 's7>(c.s1, c.s2, c.s3, c.s4, c.s5, c.s6, c.s7)
+    member c.GetCount() = c.Segments.GetComponentCount()
     interface IEnumerable<ComponentQueryEnumerator<'k, 's1, 's2, 's3, 's4, 's5, 's6, 's7>> with
         member c.GetEnumerator() = c.GetEnumerator() :> IEnumerator<_> 
         member c.GetEnumerator() = c.GetEnumerator() :> Collections.IEnumerator

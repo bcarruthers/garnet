@@ -53,7 +53,7 @@ module WorldSystems =
             registerCommon c
             // register so that state is stored in a globals entity
             // and we start in inactive state
-            c.RegisterStateMachine(Eid.globals, WorldInactive, getState)
+            c.RegisterStateMachine(WorldInactive, getState)
             ]
 
 [<Tests>]

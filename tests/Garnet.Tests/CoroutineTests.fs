@@ -13,24 +13,24 @@ let tests =
             let append = r.Add
             s.Schedule <| seq {
                 append 1
-                yield Wait.defer
+                yield Wait.All
                 append 2
                 // these happen in parallel
                 s.Schedule <| seq {
                     append 21
-                    yield Wait.defer
+                    yield Wait.All
                     append 22
                     }
                 s.Schedule <| seq {
                     append 31
-                    yield Wait.defer
+                    yield Wait.All
                     append 32
-                    yield Wait.defer
+                    yield Wait.All
                     append 33
                     }
                 append 3
                 // here we block until two children complete
-                yield Wait.defer
+                yield Wait.All
                 append 4
                 }
             s.Run()
@@ -53,7 +53,7 @@ let tests =
             c.Start <| seq {
                 append 1
                 c.Send "1"
-                yield Wait.defer
+                yield Wait.All
                 append 2
                 }
             c.Run()
@@ -67,18 +67,18 @@ let tests =
             c.On<string> <| fun e ->
                 c.Start <| seq {
                     append 21
-                    yield Wait.defer
+                    yield Wait.All
                     append 22
                     }
             |> ignore
             c.Start <| seq {
                 append 1
-                yield Wait.defer
+                yield Wait.All
                 append 2
                 c.Send ""
-                yield Wait.defer
+                yield Wait.All
                 append 3
-                yield Wait.defer
+                yield Wait.All
                 append 4
                 }
             c.Run()
@@ -91,17 +91,17 @@ let tests =
             let append = r.Add
             s.Schedule <| seq {
                 append 1
-                yield Wait.time 2L
+                yield Wait 2L
                 append 2
                 append 3
                 s.Schedule <| seq {
                     append 21
-                    yield Wait.time 1L
+                    yield Wait 1L
                     append 22
-                    yield Wait.time 5L
+                    yield Wait 5L
                     append 23
                     }
-                yield Wait.time 3L
+                yield Wait 3L
                 append 4
                 append 5
                 }
@@ -120,16 +120,16 @@ let tests =
             c.On<string> <| fun e ->
                 c.Start <| seq {
                     append 21
-                    yield Wait.defer
+                    yield Wait.All
                     append 22
-                    yield Wait.defer
+                    yield Wait.All
                     append 23
                     }
             |> ignore
             c.Start <| seq {
                 append 1
                 c.Send ""
-                yield Wait.time 0L
+                yield Wait 0L
                 append 2
                 }
             c.Run()
@@ -144,27 +144,27 @@ let tests =
                 if e = "update" then
                     c.Start <| seq {
                         append 21
-                        yield Wait.defer
+                        yield Wait.All
                         append 22
-                        yield Wait.defer
+                        yield Wait.All
                         append 23
                         }
                 elif e = "anim" then
                     c.Start <| seq {
                         append 31
-                        yield Wait.time 1L
+                        yield Wait 1L
                         append 32
-                        yield Wait.time 2L
+                        yield Wait 2L
                         append 33
                         }
             |> ignore
             c.Start <| seq {
                 append 1
                 c.Send "update"
-                yield Wait.defer
+                yield Wait.All
                 append 2
                 c.Send "anim"
-                yield Wait.time 5L
+                yield Wait 5L
                 append 3
                 }
             for i = 1 to 8 do

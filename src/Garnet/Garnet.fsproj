@@ -17,8 +17,8 @@
     <Compile Include="Components.fs" />
     <Compile Include="Coroutines.fs" />
     <Compile Include="Channels.fs" />
+    <Compile Include="Entities.fs" />
     <Compile Include="Containers.fs" />
-    <Compile Include="Systems.fs" />
     <Compile Include="Actors.fs" />
     <Compile Include="Resources.fs" />
   </ItemGroup>

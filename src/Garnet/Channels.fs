@@ -233,7 +233,7 @@ module Channels =
     type Channel<'a> with    
         member c.Wait(msg) =
             c.Send(msg)
-            Wait.defer
+            Wait.All
 
     type IChannels with    
         member c.Wait(msg) =

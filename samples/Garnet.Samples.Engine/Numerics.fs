@@ -4,6 +4,10 @@ open System
 open System.Numerics
 open Veldrid
 
+module MathF =
+    let inline lerp min max (t : float32) = 
+        min * (1.0f - t) + max * t
+
 [<Struct>]
 type Vector2i = 
     val X : int
@@ -57,6 +61,61 @@ type Rangei =
         Rangei(min a.Min b.Min, max a.Max b.Max)
 
 [<Struct>]
+type Range =
+    val Min : float32
+    val Max : float32
+    new(min, max) = { Min = min; Max = max }
+    member c.Contains x = x >= c.Min && x < c.Max
+    member c.Expand(margin) = Range(c.Min - margin, c.Max + margin)
+    static member Lerp(r : Range, t) = r.Min * (1.0f - t) + r.Max * t
+    static member inline Sized(min, size) = 
+        Range(min, min + size)
+    static member inline Centered(center, size) = 
+        Range.Sized(center - size * 0.5f, size)
+    static member inline Intersection(a : Range, b : Range) = 
+        Range(max a.Min b.Min, min a.Max b.Max)
+    static member inline Union(a : Range, b : Range) = 
+        Range(min a.Min b.Min, max a.Max b.Max)
+
+[<Struct>]
+type Range2 =
+    val Min : Vector2
+    val Max : Vector2
+    new(min, max) = { Min = min; Max = max }
+    new(x : Range, y : Range) = { 
+        Min = Vector2(x.Min, y.Min)
+        Max = Vector2(x.Max, y.Max) 
+        }
+    member c.X = Range(c.Min.X, c.Max.X)
+    member c.Y = Range(c.Min.Y, c.Max.Y)
+    member c.Center = (c.Min + c.Max) * 0.5f
+    member c.Size = c.Max - c.Min
+    member c.Contains(p : Vector2) = 
+        c.X.Contains p.X && c.Y.Contains p.Y
+    member c.Expand(margin : Vector2) = 
+        Range2(
+            c.X.Expand(margin.X),
+            c.Y.Expand(margin.Y))
+    override i.ToString() = 
+        sprintf "%A to %A" i.Min i.Max
+    static member Zero = Range2(Vector2.Zero, Vector2.Zero)
+    static member ZeroToOne = Range2(Vector2.Zero, Vector2.One)
+    static member Lerp(r : Range2, v : Vector2) = 
+        Vector2(Range.Lerp(r.X, v.X), Range.Lerp(r.Y, v.Y))
+    static member inline Sized(min : Vector2, size : Vector2) = 
+        Range2(min, min + size)
+    static member inline Centered(center : Vector2, size : Vector2) = 
+        Range2.Sized(center - size * 0.5f, size)
+    static member inline Intersection(a : Range2, b : Range2) = 
+        Range2(
+            Range.Intersection(a.X, b.X), 
+            Range.Intersection(a.Y, b.Y))
+    static member inline Union(a : Range2, b : Range2) =         
+        Range2(
+            Range.Union(a.X, b.X), 
+            Range.Union(a.Y, b.Y))
+
+[<Struct>]
 type Range2i =
     val Min : Vector2i
     val Max : Vector2i
@@ -69,6 +128,7 @@ type Range2i =
     member c.Y = Rangei(c.Min.Y, c.Max.Y)
     member c.Size = c.Max - c.Min
     member c.IsEmpty = c.X.IsEmpty || c.Y.IsEmpty
+    member c.ToRange2() = Range2(c.Min.ToVector2(), c.Max.ToVector2())
     member c.GetCount() =
         let s = c.Size
         s.X * s.Y
@@ -105,54 +165,6 @@ type Range2i =
         Range2i(
             Rangei.Union(a.X, b.X), 
             Rangei.Union(a.Y, b.Y))
-
-[<Struct>]
-type Range =
-    val Min : float32
-    val Max : float32
-    new(min, max) = { Min = min; Max = max }
-    member c.Contains x = x >= c.Min && x < c.Max
-    static member Lerp(r : Range, t) = r.Min * (1.0f - t) + r.Max * t
-    static member inline Sized(min, size) = 
-        Range(min, min + size)
-    static member inline Centered(center, size) = 
-        Range.Sized(center - size * 0.5f, size)
-    static member inline Intersection(a : Range, b : Range) = 
-        Range(max a.Min b.Min, min a.Max b.Max)
-    static member inline Union(a : Range, b : Range) = 
-        Range(min a.Min b.Min, max a.Max b.Max)
-
-[<Struct>]
-type Range2 =
-    val Min : Vector2
-    val Max : Vector2
-    new(min, max) = { Min = min; Max = max }
-    new(x : Range, y : Range) = { 
-        Min = Vector2(x.Min, y.Min)
-        Max = Vector2(x.Max, y.Max) 
-        }
-    member c.X = Range(c.Min.X, c.Max.X)
-    member c.Y = Range(c.Min.Y, c.Max.Y)
-    member c.Contains (p : Vector2) = 
-        c.X.Contains p.X && c.Y.Contains p.Y
-    override i.ToString() = 
-        sprintf "%A to %A" i.Min i.Max
-    static member Zero = Range2(Vector2.Zero, Vector2.Zero)
-    static member ZeroToOne = Range2(Vector2.Zero, Vector2.One)
-    static member Lerp(r : Range2, v : Vector2) = 
-        Vector2(Range.Lerp(r.X, v.X), Range.Lerp(r.Y, v.Y))
-    static member inline Sized(min : Vector2, size : Vector2) = 
-        Range2(min, min + size)
-    static member inline Centered(center : Vector2, size : Vector2) = 
-        Range2.Sized(center - size * 0.5f, size)
-    static member inline Intersection(a : Range2, b : Range2) = 
-        Range2(
-            Range.Intersection(a.X, b.X), 
-            Range.Intersection(a.Y, b.Y))
-    static member inline Union(a : Range2, b : Range2) =         
-        Range2(
-            Range.Union(a.X, b.X), 
-            Range.Union(a.Y, b.Y))
 
 [<Struct>]
 type HsvaFloat =
@@ -228,8 +240,36 @@ module Vector2Extensions =
         member v.GetPerpendicular() = 
             Vector2(-v.Y, v.X)    
 
-        member v.Rotate(a : Vector2) = 
-            Vector2(a.X * v.X - a.Y * v.Y, a.X * v.Y + a.Y * v.X)
+        member v.Rotate(r : Vector2) = 
+            Vector2(v.X * r.X - v.Y * r.Y, v.X * r.Y + v.Y * r.X)
+
+        member v.InverseRotate(r : Vector2) = 
+            Vector2(v.X * r.X + v.Y * r.Y, v.Y * r.X - v.X * r.Y)
+
+        /// Rotates towards a target vector
+        /// maxRotation is a unit-length direction vector relative to X axis
+        member v.RotateTowards(target : Vector2, maxRotation : Vector2) =
+            let dot = Vector2.Dot(v, target)
+            let rotDot = Vector2.Dot(maxRotation, Vector2.UnitX)
+            if dot >= rotDot then target
+            else
+                let cross = Vector3.Cross(Vector3(v, 0.0f), Vector3(target, 0.0f))
+                if cross.Z > 0.0f then v.Rotate(maxRotation)
+                else v.InverseRotate(maxRotation)
+
+        member v.Round() =
+            Vector2(floor (v.X + 0.5f), floor (v.Y + 0.5f))
+
+        member v.RoundToInt() =
+            let v = v.Round()
+            Vector2i(int v.X, int v.Y)
+
+[<AutoOpen>]
+module Matrix4x4Extensions =
+    type Matrix4x4 with
+        member m.GetInverseOrIdentity() =
+            let mutable mInv = Matrix4x4.Identity
+            if Matrix4x4.Invert(m, &mInv) then mInv else Matrix4x4.Identity
 
 [<AutoOpen>]
 module RgbaByteExtensions =
@@ -244,6 +284,9 @@ module RgbaByteExtensions =
 [<AutoOpen>]
 module RgbaFloatExtensions =
     type RgbaFloat with
+        member c.Multiply(b : RgbaFloat) =
+            RgbaFloat(c.R * b.R, c.G * b.G, c.B * b.B, c.A * b.A)
+
         member c.MultiplyAlpha(a) =
             RgbaFloat(c.R, c.G, c.B, c.A * a)
 
@@ -253,3 +296,11 @@ module RgbaFloatExtensions =
                 byte (c.G * 255.0f |> max 0.0f |> min 255.0f),
                 byte (c.B * 255.0f |> max 0.0f |> min 255.0f),
                 byte (c.A * 255.0f |> max 0.0f |> min 255.0f))
+
+module RgbaFloat =        
+    let lerp (min : RgbaFloat) (max : RgbaFloat) t =
+        RgbaFloat(
+            MathF.lerp min.R max.R t,
+            MathF.lerp min.G max.G t,
+            MathF.lerp min.B max.B t,
+            MathF.lerp min.A max.A t)

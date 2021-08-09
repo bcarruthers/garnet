@@ -6,14 +6,11 @@ open Garnet.Comparisons
 open Garnet.Collections
 
 [<Struct>]
-type Wait = {
-    Duration : int64
-    }
+type Wait =
+    val Duration : int64
+    new(duration) = { Duration = duration }
+    static member All = Wait(-1L)
     
-module Wait =
-    let time x = { Wait.Duration = x }
-    let defer = time -1L
-        
 type internal StackScheduler() =
     let temp = List<_>()
     let pending = List<_>()
@@ -23,12 +20,12 @@ type internal StackScheduler() =
         pending.Clear()
         active.Clear()
         frames.Clear()
-    member c.Schedule (coroutine : _ seq) =
+    member c.Schedule(coroutine : Wait seq) =
         pending.Add coroutine
     member c.Enqueue e =
         active.Add e
     // Returns true if work was done
-    member c.RunOnce (iterate : Action<_>) =
+    member c.RunOnce(iterate : Action<_>) =
         let hasPending = pending.Count > 0
         if hasPending then
             frames.Add(pending.Count)
@@ -64,8 +61,8 @@ type internal StackScheduler() =
             
 type internal TimeScheduler() =
     let mutable time = 0L
-    let active = PriorityQueue<int64,_>()
-    member c.Enqueue (e : IEnumerator<_>) =
+    let active = PriorityQueue<int64, _>()
+    member c.Enqueue(e : IEnumerator<Wait>) =
         let delay = e.Current.Duration
         let nextTime = time + delay
         active.Enqueue(nextTime, e)
@@ -76,7 +73,7 @@ type internal TimeScheduler() =
             let e = active.Dequeue()
             iterate.Invoke e
         iterCount > 0
-    member c.Step deltaTime =
+    member c.Step(deltaTime) =
         time <- time + deltaTime
     member c.Clear() =
         active.Clear()
@@ -89,7 +86,7 @@ type CoroutineScheduler() =
     let timed = TimeScheduler()
     let stacked = StackScheduler()
     let iterate = 
-        Action<_>(fun (e : IEnumerator<_>) ->
+        Action<_>(fun (e : IEnumerator<Wait>) ->
             let isContinued = 
                 try 
                     e.MoveNext()
@@ -103,16 +100,16 @@ type CoroutineScheduler() =
                 // - Negative indicates we want to wait on nested coroutines
                 let isTimed = e.Current.Duration >= 0L
                 if isTimed then timed.Enqueue e else stacked.Enqueue e)
-    member c.Schedule coroutine =
-        stacked.Schedule coroutine
+    member c.Schedule(coroutine) =
+        stacked.Schedule(coroutine)
     member c.RunOnce() =
         let hasStacked = stacked.RunOnce(iterate)
         let hasTimed = timed.RunOnce(iterate)
         hasStacked || hasTimed
     member c.Run() =
         while c.RunOnce() do ()      
-    member c.Step deltaTime =
-        timed.Step deltaTime
+    member c.Step(deltaTime) =
+        timed.Step(deltaTime)
     member c.Clear() =
         timed.Clear()
         stacked.Clear()

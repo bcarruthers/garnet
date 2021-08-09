@@ -46,11 +46,22 @@ module MovementSystem =
 
     // combine all together
     let register (c : Container) =
-        // give a name so we can hot reload
         Disposable.Create [
             registerUpdate c
             ]
 
+[<AutoOpen>]
+module MovementSystemExtensions =
+    type Container with
+        member c.AddMovementUpdate() =
+            c.On<UpdatePositions> <| fun e ->
+                printfn "%A" e
+                
+        member c.AddMovementSystems() =  
+            Disposable.Create [
+                c.AddMovementUpdate()
+                ]
+            
 // Iterating over entities
 
 let runIter =
@@ -70,6 +81,23 @@ let runIter =
 let healthSub =
     c.On<DestroyZeroHealth> <| fun e ->
         runIter()
+
+let healthSubQuery =
+    c.On<DestroyZeroHealth> <| fun e ->
+        for r in c.Query<Eid, Position, Health>() do
+            let h = r.Value3
+            if h.hp <= 0 then
+                let eid = r.Value1
+                c.Destroy(eid)
+
+let healthSubBatchQuery =
+    c.On<DestroyZeroHealth> <| fun e ->
+        for seg, eids, _, hs in c.QuerySegments<Eid, Position, Health>() do
+            for i in seg do
+                let h = hs.[i]
+                if h.hp <= 0 then
+                    let eid = eids.[i]
+                    c.Destroy(eid)
 
 // Composing systems
 
@@ -92,7 +120,7 @@ c.Start <| seq {
     // send message and defer execution until all messages and
     // coroutines created as a result of this have completed
     c.Send <| Msg()
-    yield Wait.defer
+    yield Wait.All
     printf "3 "
     }
 
@@ -133,7 +161,7 @@ c.Start <| seq {
     for i = 1 to 5 do
         printf "[%d] " i
         // yield execution until time units pass
-        yield Wait.time 3L
+        yield Wait 3L
     }
 
 // simulate update loop

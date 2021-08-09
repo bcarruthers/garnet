@@ -94,18 +94,18 @@ Containers store single instances of types such as component lists, ID pools, se
 
 ```fsharp
 // option 1: add specific instance
-c.RegisterInstance(defaultWorldSettings)
+c.SetValue(defaultWorldSettings)
 // option 2: register a factory
-c.Register(fun () -> defaultWorldSettings)
+c.SetFactory(fun () -> defaultWorldSettings)
 // resolve type
-let settings = c.GetInstance<WorldSettings>()
+let settings = c.GetValue<WorldSettings>()
 ```
 
-To access value types you can use a reference cell:
+This works for value types as well:
 
 ```fsharp
-c.Register(fun () -> ref { zoomLevel = 0.5f })
-let zoom = c.GetInstance<ref<Zoom>>()
+c.SetValue { zoomLevel = 0.5f }
+let zoom = c.GetValue<Zoom>>()
 ```
 
 ### Object pooling
@@ -214,6 +214,33 @@ let healthSub =
         runIter()
 ```
 
+Alternately, you can use the query API to iterate with a for-loop. The advantages are that it's faster and allows arbitrary writes to component values, but it requires accessing component values by numbered fields.
+
+```fsharp
+let healthSub =
+    c.On<DestroyZeroHealth> <| fun e ->
+        for r in c.Query<Eid, Position, Health>() do
+            let h = r.Value3
+            if h.hp <= 0 then
+                let eid = r.Value1
+                c.Destroy(eid)
+```
+
+For batch operations or to improve performance further, you can iterate over segments:
+
+```fsharp
+let healthSub =
+    c.On<DestroyZeroHealth> <| fun e ->
+        for seg, eids, _, hs in c.QuerySegments<Eid, Position, Health>() do
+            for i in seg do
+                let h = hs.[i]
+                if h.hp <= 0 then
+                    let eid = eids.[i]
+                    c.Destroy(eid)
+```
+
+Note that writes to existing components during iteration occur immediately, unlike adding or removing components.
+
 ### Adding
 
 Additions are deferred until a commit occurs, so any code dependent on those operations completing needs to be implemented as a coroutine.
@@ -253,7 +280,7 @@ type PowerupMarker = struct end
 
 ## Systems
 
-Systems are essentially event subscribers with an optional name. System event handlers often iterate over entities, such as updating position based on velocity, but they can do any other kind of processing too. Giving a system a name allows hot reloading.
+Systems are essentially event subscribers with an optional name. System event handlers often iterate over entities, such as updating position based on velocity, but they can do any other kind of processing too.
 
 ```fsharp
 module MovementSystem =     
@@ -264,15 +291,30 @@ module MovementSystem =
 
     // combine all together
     let register (c : Container) =
-        // give a name so we can hot reload
         Disposable.Create [
             registerUpdate c
             ]
 ```
 
+Alternately, you can define systems as extension methods. This way is more OOP-centric and avoids some redundancy in declarations.
+
+```fsharp
+[<AutoOpen>]
+module MovementSystem =
+    type Container with
+        member c.AddMovementUpdate() =
+            c.On<UpdatePositions> <| fun e ->
+                printfn "%A" e
+                
+        member c.AddMovementSystems() =  
+            Disposable.Create [
+                c.AddMovementUpdate()
+                ]
+```
+
 ### Execution
 
-When any code creates or modifies entities, sends events, or starts coroutines, it's only staging those things. To actually set all of it into motion, you need to run the container, which would typically happen as part of the game loop. Each time you run the container, it commits all changes, publishes events, and advances coroutines, repeating this process until no work remains to do (so you should avoid introducing cycles unless they are part of a timed coroutine).
+When any code creates or modifies entities, sends events, or starts coroutines, it's only staging those things. To actually set all of it into motion, you need to run the container, which would typically happen as part of the game loop. Each time you run the container, it commits all changes, publishes events, and advances coroutines, repeating this process until no work remains to do. This means you should avoid introducing cycles like two systems responding to each other unless they are part of a timed coroutine.
 
 ```fsharp
 // run the container
@@ -315,7 +357,7 @@ c.Start <| seq {
     // send message and defer execution until all messages and
     // coroutines created as a result of this have completed
     c.Send <| Msg()
-    yield Wait.defer
+    yield Wait.All
     printf "3 "
     }
 
@@ -367,9 +409,9 @@ let updateSystem =
             // sending and suspending execution to 
             // achieve ordering of sub-updates
             c.Send <| UpdatePhysicsBodies()
-            yield Wait.defer
+            yield Wait.All
             c.Send <| UpdateHashSpace()
-            yield Wait.defer
+            yield Wait.All
         }
 let system1 = 
     c.On<UpdatePhysicsBodies> <| fun e ->

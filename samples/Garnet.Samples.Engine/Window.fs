@@ -3,7 +3,6 @@
 open System
 open System.IO
 open Veldrid
-open Veldrid
 open Veldrid.StartupUtilities
 
 type CreateWindow = {

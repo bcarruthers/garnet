@@ -3,13 +3,11 @@
 open System
 open System.Collections.Generic
 open System.IO
-open System.Numerics
 open System.Runtime.InteropServices
-open System.Text
-open Newtonsoft.Json
 open Veldrid
 open SixLabors.ImageSharp
 open SixLabors.ImageSharp.PixelFormats
+open Garnet.Resources
 
 module internal TextureLoading =
     let getMipSize original mipLevel =
@@ -19,7 +17,7 @@ module internal TextureLoading =
         match format with
         | PixelFormat.R8_G8_B8_A8_UNorm -> 4
         | PixelFormat.BC3_UNorm -> 1
-        | _ -> failwithf "Unsupported format %A" format
+        | _ -> failwithf $"Unsupported format %A{format}"
 
 [<AutoOpen>]
 module private Packing =
@@ -113,23 +111,30 @@ type internal MaxRectsBinPack(size : Vector2i) =
                 j <- j + 1
             i <- i + 1
 
+type TextureAtlasEntry = {
+    Bounds : Range2i
+    NormalizedBounds : Range2
+    }
+
 type TextureAtlas(texture : Texture, entries : (string * Range2i) seq) =
+    let size = Vector2i(int texture.Width, int texture.Height)
     let dict = 
-        let size = Vector2(float32 texture.Width, float32 texture.Height)
-        let dict = Dictionary<string, Range2>()
-        for (key, rect) in entries do
+        let size = size.ToVector2() 
+        let dict = Dictionary<string, TextureAtlasEntry>()
+        for key, rect in entries do
             let p0 = rect.Min.ToVector2() / size
             let p1 = rect.Max.ToVector2() / size
-            dict.Add(key, Range2(p0, p1))
+            dict.Add(key, {
+                Bounds = rect
+                NormalizedBounds = Range2(p0, p1)
+                })
         dict
+    member c.Size = size
     member c.Texture = texture
-    member c.GetBounds(key) =
-        dict.[key]
-    member c.Dispose() =
-        texture.Dispose()
+    member c.Item with get key = dict.[key]
+    member c.Dispose() = texture.Dispose()
     interface IDisposable with
-        member c.Dispose() =
-            c.Dispose()
+        member c.Dispose() = c.Dispose()
 
 [<AutoOpen>]
 module TextureExtensions =
@@ -199,10 +204,10 @@ module TextureExtensions =
         member device.CreateTextureAtlas(atlasWidth, atlasHeight, images : (string * Image<Rgba32>) seq) =
             let bytes = Array.zeroCreate<byte>(atlasWidth * atlasHeight * 4)
             let packer = MaxRectsBinPack(Vector2i(atlasWidth, atlasHeight))
-            for (key, image) in images do
+            for key, image in images do
                 let size = Vector2i(image.Width, image.Height)
                 match packer.Insert(key, size) with
-                | None -> failwithf "Could not pack texture %s" key
+                | None -> failwithf $"Could not pack texture %s{key}"
                 | Some rect ->
                     let w = image.Width
                     let h = image.Height
@@ -226,4 +231,47 @@ module TextureExtensions =
             let texture = device.CreateTexture(desc, ReadOnlyMemory(bytes))
             new TextureAtlas(texture, packer.Entries)
 
+[<AutoOpen>]
+module TextureLoaderExtensions =
+    type IStreamSource with
+        member c.LoadShader(key : string, backend : GraphicsBackend) =
+            let stage = 
+                let extension = Path.GetExtension(key)
+                Shaders.getStage extension
+            let bytecodePath = 
+                let extension = Shaders.getBytecodeExtension backend
+                key + extension
+            use stream =
+                match c.TryOpen(bytecodePath) with
+                | ValueNone -> c.Open(key)
+                | ValueSome x -> x
+            let ms = new MemoryStream()
+            stream.CopyTo(ms)
+            ShaderDescription(stage, ms.ToArray(), "main")
+
+        member c.LoadShaderSet(device : GraphicsDevice, vertexShader, fragmentShader, layout) =
+            let vert = c.LoadShader(vertexShader, device.BackendType)
+            let frag = c.LoadShader(fragmentShader, device.BackendType)
+            new ShaderSet(device, vert, frag, layout)
+
+        member c.LoadImage(key) =
+            use stream = c.Open(key)
+            Image.Load<Rgba32>(stream)
+
+        member c.LoadTexture(device : GraphicsDevice, key) =
+            let image = c.LoadImage(key)
+            device.CreateTexture(image)
+
+        member c.LoadTextureAtlas(device : GraphicsDevice, atlasWidth, atlasHeight, keys) =
+            let images = keys |> Seq.map (fun key -> key, c.LoadImage(key))
+            device.CreateTextureAtlas(atlasWidth, atlasHeight, images)
+
+    type IReadOnlyFolder with
+        member c.LoadTextureAtlasFolder(device : GraphicsDevice, atlasWidth, atlasHeight, folderName) =
+            let images =
+                c.GetFiles(folderName)
+                |> Seq.map (fun path ->
+                    let key = path.Replace(folderName, "").TrimStart('/')
+                    key, c.LoadImage(path))
+            device.CreateTextureAtlas(atlasWidth, atlasHeight, images)
 

@@ -2,6 +2,7 @@
 
 open System
 open System.Collections.Generic
+open Garnet.Comparisons
 
 /// Mutable min-heap
 type Heap<'k, 'a when 'k :> IComparable<'k>>() =
@@ -64,3 +65,26 @@ type PriorityQueue<'k, 'a when 'k :> IComparable<'k>>() =
     member _.Clear() = 
         heap.Clear()
         
+module internal Buffer =
+    let private log2 x =
+        let mutable log = 0
+        let mutable y = x
+        while y > 1 do
+            y <- y >>> 1
+            log <- log + 1;
+        log
+
+    let private nextLog2 x =
+        let log = log2 x
+        if x - (1 <<< log) > 0 then 1 + log else log
+
+    let getRequiredCount count =
+        1 <<< nextLog2 count
+
+    let resizeArray count (arr : byref<_[]>) =
+        if isNull arr || count > arr.Length then
+            let required = 1 <<< nextLog2 count
+            let newArr = Array.zeroCreate required
+            if isNotNull arr then
+                arr.CopyTo(newArr, 0)
+            arr <- newArr

@@ -1,8 +1,8 @@
-open Garnet.Samples.Engine
+open Garnet.Resources
 open Garnet.Samples.Flocking
 
 [<EntryPoint>]
 let main argv =
-    let fs = FileStreamSource("assets")
+    use fs = new FileFolder("assets")
     Game.Run(fs)
     0

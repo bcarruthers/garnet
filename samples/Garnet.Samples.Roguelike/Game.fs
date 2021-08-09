@@ -4,6 +4,7 @@ open System
 open System.Numerics
 open System.Threading
 open Veldrid
+open Garnet.Resources
 open Garnet.Samples.Engine
 open Garnet.Samples.Roguelike.Types
 
@@ -47,18 +48,26 @@ type Game(fs : IStreamSource) =
             PositionTextureDualColorVertex.Description)
     let texture = ren.Device.CreateTexture(image)
     // Use point sampling for pixelated appearance
-    let layers = new ColorTextureQuadLayers(ren.Device, shaders, texture, ren.Device.PointSampler)
+    let layerDesc = {
+        Depth = 0
+        Blend = Blend.Alpha
+        Filtering = Filtering.Point
+        Primitive = Quad
+        ViewportId = 0
+        }
+    let layers = new SpriteRenderer(ren.Device, shaders, texture, ren.Device.SwapchainFramebuffer.OutputDescription)
     let audio = new AudioDevice()
+    let viewport = layers.GetViewport(0)
     do 
         // Set transforms so drawing code can use tile coords for source (16x16 tileset) 
         // and destination (80x25 display tiles)
         let texTileSize = 1.0f / 16.0f
-        layers.WorldTransform <- Matrix4x4.CreateScale(float32 tileWidth, float32 tileHeight, 1.0f)
-        layers.TextureTransform <- Matrix4x4.CreateScale(texTileSize, texTileSize, 1.0f)
+        viewport.WorldTransform <- Matrix4x4.CreateScale(float32 tileWidth, float32 tileHeight, 1.0f)
+        viewport.TextureTransform <- Matrix4x4.CreateScale(texTileSize, texTileSize, 1.0f)
         ren.Background <- RgbaFloat.Black
         ren.Add(layers)
     member private c.DrawWorld(world) =
-        let tiles = layers.GetLayer(1)
+        let tiles = layers.GetLayer(layerDesc)
         tiles.DrawWorld(world)
         tiles.Flush()
         // Note we only invalidate when something changes instead of every frame
@@ -82,8 +91,8 @@ type Game(fs : IStreamSource) =
             // with origin in upper left of view
             let displayScale = float32 tileScale
             let size = ren.WindowSize.ToVector2() / displayScale
-            layers.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, -size.Y, -100.0f, 100.0f)
-            layers.ViewTransform <- Matrix4x4.CreateTranslation(-size.X * 0.5f, -size.Y * 0.5f, 0.0f)
+            viewport.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, -size.Y, -100.0f, 100.0f)
+            viewport.ViewTransform <- Matrix4x4.CreateTranslation(-size.X * 0.5f, -size.Y * 0.5f, 0.0f)
             ren.Draw()
             // Sleep to avoid spinning CPU (note sleep(1) typically takes ~15 ms)
             Thread.Sleep(1)

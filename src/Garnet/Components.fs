@@ -42,7 +42,7 @@ type Components<'k, 'c, 'm, 'a
         let seg = segments.Get(sid)
         if seg.Mask &&& (1UL <<< ci) = 0UL then 
             failwithf "Cannot get %s %s" (Format.typeToString typeof<'a>) (id.ToString())
-        seg.Data.[ci]
+        &seg.Data.[ci]
     member c.Set(id, value) =
         let sid = IdSegmentMapper.getSegmentKey<'k, 'c, 'm> id
         let ci = IdSegmentMapper.getComponentIndex<'k, 'c, 'm> id
@@ -160,7 +160,7 @@ type Entity<'k, 'c, 'm
     member c.Add x = c.Components.Get<_>().Add(c.Id, x)
     member c.Set x = c.Components.Get<_>().Set(c.Id, x)
     member c.Remove<'a>() = c.Components.Get<'a>().Remove(c.Id)
-    member c.Get<'a>() = c.Components.Get<'a>().Get(c.Id)    
+    member c.Get<'a>() = &c.Components.Get<'a>().Get(c.Id)    
     member c.CopyTo<'a> destId = c.Components.Get<'a>().Copy(c.Id, destId)    
     member c.TryGet<'a>([<Out>] value : byref<_>) = c.Components.Get<'a>().TryGet(c.Id, &value)
     member c.GetOrDefault<'a> fallback = c.Components.Get<'a>().GetOrDefault(c.Id, fallback)

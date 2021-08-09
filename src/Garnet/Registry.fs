@@ -2,6 +2,7 @@
 
 open System
 open System.Collections.Generic
+open System.Runtime.InteropServices
 open System.Threading
 open Garnet.Comparisons
 open Garnet.Formatting
@@ -19,6 +20,8 @@ type IRegistry =
     abstract member SetValue<'a> : 'a -> unit
     /// Gets or creates a reference to a typed value
     abstract member GetValue<'a> : unit -> 'a byref
+    /// Attempts to resolve a type, returning true if successful
+    abstract member TryGetValue<'a> : [<Out>] value : byref<'a> -> bool
     /// Iterates over all instances, calling handler for each
     abstract member IterValues<'p> : 'p * IRegistryHandler<'p> -> unit
     
@@ -53,6 +56,24 @@ type Registry() =
     let mutable factories = Array.zeroCreate<Func<RegistryEntry>>(8)
     let mutable lookup = Array.zeroCreate<obj>(8)
     let instances = List<RegistryEntry>()
+    member private c.TryGetReference<'a>([<Out>] reference : byref<'a ref>) =
+        let id = RegistryTypeId<'a>.Id
+        if id >= lookup.Length then
+            Garnet.Buffer.resizeArray (id + 1) &lookup    
+        let value = lookup.[id]
+        if isNotNull value then
+            // Value is present already
+            reference <- value :?> 'a ref
+            true
+        elif id < factories.Length && isNotNull factories.[id] then
+            // Use factory to create
+            let factory = factories.[id]
+            let entry = factory.Invoke()
+            lookup.[id] <- entry.Reference        
+            instances.Add(entry)
+            reference <- entry.Reference :?> 'a ref
+            true
+        else false
     member c.SetFactory<'a>(create : unit -> 'a) =
         let id = RegistryTypeId<'a>.Id
         if id >= factories.Length then
@@ -83,27 +104,21 @@ type Registry() =
         let cell = lookup.[id] :?> 'a ref
         cell.Value <- newValue        
     member c.GetValue<'a>() =
-        let id = RegistryTypeId<'a>.Id
-        if id >= lookup.Length then
-            Garnet.Buffer.resizeArray (id + 1) &lookup    
-        let value = lookup.[id]
-        if isNotNull value then
-            // Value is present already
-            &(value :?> 'a ref).contents
-        elif id < factories.Length && isNotNull factories.[id] then
-            // Use factory to create
-            let factory = factories.[id]
-            let entry = factory.Invoke()
-            lookup.[id] <- entry.Reference        
-            instances.Add(entry)
-            &(entry.Reference :?> 'a ref).contents
+        let mutable cell = Unchecked.defaultof<_>
+        if c.TryGetReference(&cell) then &cell.contents
         else
             // No factory, create default value
             let value = Activator.CreateInstance<'a>()
             let cell = ref value
+            let id = RegistryTypeId<'a>.Id
             lookup.[id] <- cell :> obj
             instances.Add(RegistryEntry.Create(cell))
             &cell.contents
+    member c.TryGetValue<'a>([<Out>] value : byref<'a>) =
+        let mutable cell = Unchecked.defaultof<_>
+        let result = c.TryGetReference(&cell)
+        if result then value <- cell.contents
+        result
     member c.IterValues(param, handler) =
         c.IterValues(param, handler, 0)
     member c.IterValues(param, handler : IRegistryHandler<'p>, offset) =
@@ -113,6 +128,7 @@ type Registry() =
         member c.SetFactory(x) = c.SetFactory(x)
         member c.SetValue(x) = c.SetValue(x)
         member c.GetValue<'a>() = &c.GetValue<'a>()
+        member c.TryGetValue<'a>([<Out>] value) = c.TryGetValue<'a>(&value)
         member c.IterValues(param, handler) =
             c.IterValues(param, handler)
     member c.ToString(writer : IStringBlockWriter) =
@@ -137,3 +153,12 @@ module Registry =
         member c.CopyTo(dest : IRegistry) =
             let handler = CopyRegistryHandler()
             c.IterValues(dest, handler)
+            
+        member c.GetValueOrDefault<'a>(fallback : 'a) =
+            match c.TryGetValue<'a>() with
+            | true, x -> x
+            | false, _ -> fallback
+
+        member c.GetValueOrDefault<'a>() =
+            c.GetValueOrDefault(Unchecked.defaultof<'a>)
+        
