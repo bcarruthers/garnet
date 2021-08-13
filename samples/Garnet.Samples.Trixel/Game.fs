@@ -6,7 +6,6 @@ open System.Threading
 open System.IO
 open Veldrid
 open SixLabors.ImageSharp
-open Garnet.Resources
 open Garnet.Samples.Engine
 
 module Resources =

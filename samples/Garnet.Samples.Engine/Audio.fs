@@ -7,7 +7,6 @@ open System.IO
 open System.Runtime.InteropServices
 open OpenTK.Audio.OpenAL
 open OpenTK.Audio.OpenAL.Extensions
-open Garnet.Resources
 
 [<Struct>]
 type SoundId = SoundId of int

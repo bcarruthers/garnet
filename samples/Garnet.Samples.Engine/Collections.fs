@@ -2,7 +2,7 @@
 
 open System
 open System.Collections.Generic
-open Garnet.Comparisons
+open Garnet.Samples.Engine.Comparisons
 
 /// Mutable min-heap
 type Heap<'k, 'a when 'k :> IComparable<'k>>() =

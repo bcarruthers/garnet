@@ -20,7 +20,6 @@
     <Compile Include="Entities.fs" />
     <Compile Include="Containers.fs" />
     <Compile Include="Actors.fs" />
-    <Compile Include="Resources.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.Memory" Version="4.5.4" />

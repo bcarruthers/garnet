@@ -7,7 +7,6 @@ open System.Runtime.InteropServices
 open Veldrid
 open SixLabors.ImageSharp
 open SixLabors.ImageSharp.PixelFormats
-open Garnet.Resources
 
 type TextureAtlasEntry = {
     Bounds : Range2i

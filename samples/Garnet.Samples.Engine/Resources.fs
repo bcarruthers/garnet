@@ -1,4 +1,4 @@
-﻿namespace Garnet.Resources
+﻿namespace Garnet.Samples.Engine
 
 open System
 open System.Diagnostics

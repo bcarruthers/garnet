@@ -8,7 +8,6 @@ open System.IO
 open System.Numerics
 open System.Runtime.InteropServices
 open Veldrid
-open Garnet.Resources
 
 /// JSON-serializable
 [<Struct>]

@@ -5,7 +5,6 @@ open System.Numerics
 open System.Diagnostics
 open System.Threading
 open Veldrid
-open Garnet.Resources
 open Garnet.Samples.Engine
 open Garnet.Composition
 

@@ -1,7 +1,6 @@
 ﻿namespace Garnet.Samples.Engine
 
 open Newtonsoft.Json
-open Garnet.Resources
 
 [<AutoOpen>]
 module LoaderExtensions =
