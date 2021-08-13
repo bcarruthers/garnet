@@ -5,27 +5,14 @@ open System.IO
 open Veldrid
 open Veldrid.StartupUtilities
 
-type CreateWindow = {
-    windowX : int
-    windowY : int
-    windowWidth : int
-    windowHeight : int
-    title : string
-    assetPath : string
-    backgroundColor : RgbaFloat
+type WindowDescriptor = {
+    WindowX : int
+    WindowY : int
+    WindowWidth : int
+    WindowHeight : int
+    Title : string
     }
 
-module CreateWindow =
-    let defaults = {
-        windowX = 100
-        windowY = 100
-        windowWidth = 960
-        windowHeight = 540
-        title = ""
-        assetPath = ""
-        backgroundColor = RgbaFloat.Black
-        }
-    
 type WindowRenderer(param) =
     let addPathVariables() =
         // set path variable so native DLLs can be found when running in FSI
@@ -34,18 +21,17 @@ type WindowRenderer(param) =
         let ev = Environment.GetEnvironmentVariable("Path")
         if not (ev.Contains(nativePath)) then
             Environment.SetEnvironmentVariable("Path", $"{ev};{nativePath}")
-            //printfn "Setting path to %s" nativePath
     let window = 
         addPathVariables()
         // Create window initially hidden until background can be drawn
         let windowCI = 
             WindowCreateInfo(
-                X = param.windowX,
-                Y = param.windowY,
-                WindowWidth = param.windowWidth,
-                WindowHeight = param.windowHeight,
+                X = param.WindowX,
+                Y = param.WindowY,
+                WindowWidth = param.WindowWidth,
+                WindowHeight = param.WindowHeight,
                 WindowInitialState = WindowState.Hidden,
-                WindowTitle = param.title
+                WindowTitle = param.Title
             )
         VeldridStartup.CreateWindow(windowCI)
     let device = 
@@ -61,7 +47,7 @@ type WindowRenderer(param) =
     do
         // Add ImGui after all other drawables
         renderer.Add(drawables)
-        renderer.Add(new Drawable(fun cmds -> imGui.Render(device, cmds)))
+        renderer.Add(new Drawable(fun context -> imGui.Render(device, context.Commands)))
     member val Background = RgbaFloat.Black with get, set
     member c.ImGui = imGui
     member c.Device = device
@@ -102,5 +88,4 @@ type WindowRenderer(param) =
         imGui.Dispose()
         device.Dispose()
     interface IDisposable with
-        member c.Dispose() =
-            c.Dispose()
+        member c.Dispose() = c.Dispose()

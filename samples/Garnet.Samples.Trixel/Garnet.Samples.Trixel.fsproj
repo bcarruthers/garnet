@@ -28,7 +28,7 @@
     <Compile Include="Types.fs" />
     <Compile Include="Functions.fs" />
     <Compile Include="Imaging.fs" />
-    <Compile Include="View.fs" />
+    <Compile Include="Drawing.fs" />
     <Compile Include="Gui.fs" />
     <Compile Include="Game.fs" />
     <Compile Include="Program.fs" />

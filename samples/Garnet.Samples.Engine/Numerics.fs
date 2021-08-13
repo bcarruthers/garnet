@@ -264,6 +264,20 @@ module Vector2Extensions =
             let v = v.Round()
             Vector2i(int v.X, int v.Y)
 
+        member v.IsInTriangle(p0 : Vector2, p1 : Vector2, p2 : Vector2) =
+            let a = 0.5f * (-p1.Y * p2.X + p0.Y * (-p1.X + p2.X) + p0.X * (p1.Y - p2.Y) + p1.X * p2.Y)
+            let sign = if a < 0.0f then -1.0f else 1.0f;
+            let s = (p0.Y * p2.X - p0.X * p2.Y + (p2.Y - p0.Y) * v.X + (p0.X - p2.X) * v.Y) * sign
+            let t = (p0.X * p1.Y - p0.Y * p1.X + (p0.Y - p1.Y) * v.X + (p1.X - p0.X) * v.Y) * sign
+            //s > 0.0f && t > 0.0f && (s + t) < 2.0f * A * sign
+            s >= 0.0f && t >= 0.0f && (s + t) <= 2.0f * a * sign
+
+[<AutoOpen>]
+module Vector3Extensions =
+    type Vector3 with
+        member v.ToVector2() =
+            Vector2(v.X, v.Y)
+
 [<AutoOpen>]
 module Matrix4x4Extensions =
     type Matrix4x4 with

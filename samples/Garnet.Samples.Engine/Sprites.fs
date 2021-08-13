@@ -7,76 +7,26 @@ open System.Numerics
 open System.Runtime.CompilerServices
 open Veldrid
 
-[<Struct>]
-type Blend =
-    | Additive = 0
-    | Alpha = 1
-    | Override = 2
-
-[<Struct>]
-type Filtering =
-    | Point = 0
-    | Linear = 1
-
 [<Struct>]    
 type Primitive =
     | Triangle
     | Quad
+    
+[<Struct>]    
+type SpriteFlushMode =
+    | NoFlush
+    | FlushOnDraw
 
 [<Struct>]
 type SpriteLayerDescriptor = {
     Depth : int
-    Blend : Blend
-    Filtering : Filtering
+    CameraId : int
     Primitive : Primitive
-    ViewportId : int
+    Pipeline : TexturePipelineDescriptor
+    FlushMode : SpriteFlushMode
     }
 
-module SpriteLayerDescriptor =
-    let init z blend filtering viewportId = {
-        Depth = z
-        Blend = blend
-        Filtering = filtering
-        Primitive = Quad
-        ViewportId = viewportId
-        }
-
-    let depth z = init z Blend.Alpha Filtering.Linear 0
-    let zero = depth 0
-    
-[<Struct>]
-type SpritePipelineKey = {
-    Blend : Blend
-    Filtering : Filtering
-    }
-    
-type SpritePipelineCache(device : GraphicsDevice, shaders, texture, outputDesc) =
-    let pipelines = Dictionary<SpritePipelineKey, ColorTextureTrianglePipeline>()
-    member c.GetPipeline(key) =
-        match pipelines.TryGetValue(key) with
-        | true, pipeline -> pipeline
-        | false, _ ->
-            let sampler =
-                match key.Filtering with
-                | Filtering.Point -> device.PointSampler
-                | Filtering.Linear -> device.LinearSampler
-                | x -> failwith $"Invalid filtering {x}"
-            let blend =
-                match key.Blend with
-                | Blend.Additive -> BlendStateDescription.SingleAdditiveBlend
-                | Blend.Alpha -> BlendStateDescription.SingleAlphaBlend
-                | Blend.Override -> BlendStateDescription.SingleOverrideBlend
-                | x -> failwith $"Invalid blend {x}"
-            let pipeline = new ColorTextureTrianglePipeline(device, shaders, texture, sampler, blend, outputDesc)
-            pipelines.Add(key, pipeline)
-            pipeline
-    member c.Dispose() =
-        for pipeline in pipelines.Values do
-            pipeline.Dispose()
-    interface IDisposable with
-        member c.Dispose() = c.Dispose()
-
-type SpriteViewport() =
+type SpriteCamera() =
     member val WorldTransform = Matrix4x4.Identity with get, set
     member val TextureTransform = Matrix4x4.Identity with get, set
     member val ViewTransform = Matrix4x4.Identity with get, set
@@ -85,69 +35,59 @@ type SpriteViewport() =
         let projView = c.ViewTransform * c.ProjectionTransform 
         projView.GetInverseOrIdentity()
     
-type SpriteRenderer(device, shaders, texture, outputDesc) =
+type SpriteRenderer(device, shaders, texture) =
     let indexes = new QuadIndexBuffer(device)
-    let pipelines = new SpritePipelineCache(device, shaders, texture, outputDesc)
+    let pipelines = new TexturePipelineCache(device, shaders, texture)
     let layers = List<SpriteLayerDescriptor>()
     let meshes = List<IVertexBuffer>()
-    let viewports = List<SpriteViewport>()
+    let cameras = List<SpriteCamera>()
     /// Layer depth must uniquely define a layer
-    member c.GetLayer<'v
-            when 'v : struct 
-            and 'v : (new : unit -> 'v) 
-            and 'v :> ValueType> desc =
+    member c.GetVertices<'v
+                when 'v : struct 
+                and 'v : (new : unit -> 'v) 
+                and 'v :> ValueType> desc =
         while meshes.Count <= desc.Depth do
-            layers.Add(SpriteLayerDescriptor.depth meshes.Count)
+            layers.Add { Unchecked.defaultof<_> with Depth = -1 }
             meshes.Add(new VertexBuffer<'v>(device))
         layers.[desc.Depth] <- desc
         meshes.[desc.Depth] :?> VertexBuffer<'v>
-    member c.GetViewport(i) =
-        while viewports.Count <= i do
-            viewports.Add(SpriteViewport())
-        viewports.[i]
-    member c.Draw(cmds) =
-        let mutable current = ValueNone
+    member c.GetCamera(i) =
+        while cameras.Count <= i do
+            cameras.Add(SpriteCamera())
+        cameras.[i]
+    member c.Draw(context : RenderContext) =
         for i = 0 to layers.Count - 1 do
             let layer = layers.[i]
-            let key = {
-                Blend = layer.Blend
-                Filtering = layer.Filtering
-                }
-            let pipeline =
-                match current with
-                | ValueNone ->
-                    let pipeline = pipelines.GetPipeline(key)
-                    current <- ValueSome struct(key, pipeline)
-                    pipeline
-                | ValueSome struct(lastKey, pipeline) ->
-                    if key = lastKey then pipeline
-                    else
-                        let pipeline = pipelines.GetPipeline(key)
-                        current <- ValueSome struct(key, pipeline)
-                        pipeline
-            // Set shader params
-            let viewport = c.GetViewport(layer.ViewportId)
-            pipeline.SetPipeline(cmds)
-            pipeline.SetProjectionView(viewport.ProjectionTransform, viewport.ViewTransform, cmds)
-            pipeline.SetWorldTexture(viewport.WorldTransform, viewport.TextureTransform, cmds)
-            // Draw primitives
-            let vertexCount = meshes.[i].SetVertexBuffer(cmds)
-            if vertexCount > 0 then
-                match layers.[i].Primitive with
-                | Quad -> indexes.Draw(cmds, vertexCount / 4)
-                | Triangle ->
-                    cmds.Draw(
-                        vertexCount = uint32 vertexCount,
-                        instanceCount = 1u,
-                        vertexStart = 0u,
-                        instanceStart = 0u)
+            if layer.Depth >= 0 then
+                let pipeline = pipelines.GetPipeline(layer.Pipeline, context.OutputDescription)
+                // Set shader params
+                let camera = c.GetCamera(layer.CameraId)
+                pipeline.SetPipeline(context.Commands)
+                pipeline.SetProjectionView(camera.ProjectionTransform, camera.ViewTransform, context.Commands)
+                pipeline.SetWorldTexture(camera.WorldTransform, camera.TextureTransform, context.Commands)
+                // Flush if needed
+                let vertices = meshes.[i]
+                match layer.FlushMode with
+                | NoFlush -> ()
+                | FlushOnDraw -> vertices.Flush()
+                // Draw primitives
+                let vertexCount = vertices.SetVertexBuffer(context.Commands)
+                if vertexCount > 0 then
+                    match layers.[i].Primitive with
+                    | Quad -> indexes.Draw(context.Commands, vertexCount / 4)
+                    | Triangle ->
+                        context.Commands.Draw(
+                            vertexCount = uint32 vertexCount,
+                            instanceCount = 1u,
+                            vertexStart = 0u,
+                            instanceStart = 0u)
     member c.Dispose() =
         for mesh in meshes do
             mesh.Dispose()
         pipelines.Dispose()
         indexes.Dispose()
     interface IDrawable with
-        member c.Draw(cmds) = c.Draw(cmds)
+        member c.Draw(context) = c.Draw(context)
     interface IDisposable with
         member c.Dispose() = c.Dispose()
 
@@ -174,6 +114,46 @@ type internal ReadOnlyArray4<'a> = {
         
 [<Extension>]
 type SpriteVertexSpanExtensions =
+    /// Returns index of first vertex contained in rect
+    [<Extension>]
+    static member TryPickPoint(span : Span<PositionTextureDualColorVertex>, rect : Range2) = 
+        let mutable found = false
+        let mutable i = 0
+        while not found && i < span.Length do
+            let v = span.[i].Position.ToVector2()
+            found <- rect.Contains(v)
+            i <- i + 1
+        if found then ValueSome i else ValueNone
+
+    /// Returns index of first triangle containing point
+    [<Extension>]
+    static member TryPickTriangle(span : Span<PositionTextureDualColorVertex>, p : Vector2) = 
+        let mutable found = false
+        let mutable i = 0
+        while not found && i < span.Length do
+            let v0 = span.[i + 0].Position.ToVector2()
+            let v1 = span.[i + 1].Position.ToVector2()
+            let v2 = span.[i + 2].Position.ToVector2()
+            found <- p.IsInTriangle(v0, v1, v2)
+            i <- i + 3
+        if found then ValueSome (i / 3) else ValueNone
+        
+    /// Returns index of first quad containing point
+    [<Extension>]
+    static member TryPickQuad(span : Span<PositionTextureDualColorVertex>, p : Vector2) = 
+        let mutable found = false
+        let mutable i = 0
+        while not found && i < span.Length do
+            let v0 = span.[i + 0].Position.ToVector2()
+            let v1 = span.[i + 1].Position.ToVector2()
+            let v2 = span.[i + 2].Position.ToVector2()
+            let v3 = span.[i + 3].Position.ToVector2()
+            found <-
+                p.IsInTriangle(v0, v1, v2) ||
+                p.IsInTriangle(v0, v2, v3)
+            i <- i + 4
+        if found then ValueSome (i / 4) else ValueNone
+        
     [<Extension>]
     static member DrawSprite(span : Span<PositionTextureDualColorVertex>, 
             center : Vector2, 
@@ -303,30 +283,4 @@ type SpriteVertexBufferWriterExtensions =
                     Range2(t0, t1),
                     fg,
                     bg)
-        w.Advance(span.Length)
-
-    [<Extension>]
-    static member DrawText(w : IBufferWriter<PositionTextureDualColorVertex>,
-            text : string,
-            pos : Vector2i,
-            atlasSize : Vector2i,
-            fontTexBounds : Range2i,
-            charMargin : Vector2i,
-            color : RgbaFloat) =
-        let charSetSize = fontTexBounds.Size
-        let charSize = charSetSize / Vector2i(16, 16)
-        let displayCharSize = charSize + charMargin
-        let atlasScale = Vector2.One / atlasSize.ToVector2()
-        let span = w.GetSpriteSpan(text.Length)
-        for i = 0 to text.Length - 1 do
-            let ch = text.[i]
-            let tileId = int ch
-            let tx = tileId &&& 0xf
-            let ty = tileId >>> 4
-            let t0 = Vector2i(tx, ty) * charSize + fontTexBounds.Min
-            let t1 = t0 + charSize
-            let tb = Range2(t0.ToVector2() * atlasScale, t1.ToVector2() * atlasScale)
-            let b = Range2i.Sized(pos + Vector2i(i * displayCharSize.X, 0), charSize)
-            let span = span.Slice(i * 4)
-            span.DrawRect(b.ToRange2(), tb, color, RgbaFloat.Clear)
         w.Advance(span.Length)

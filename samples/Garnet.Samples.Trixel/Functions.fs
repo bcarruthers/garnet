@@ -4,7 +4,6 @@ open System
 open System.Numerics
 open Newtonsoft.Json
 open Garnet.Samples.Engine
-open Garnet.Samples.Trixel.Types
 open Veldrid
 
 module CellLocation =

@@ -8,7 +8,6 @@ open Veldrid
 open Garnet.Resources
 open Garnet.Samples.Engine
 open Garnet.Composition
-open Garnet.Samples.Flocking.Types
 
 type UpdateTimer(fixedDeltaTime) =
     let mutable lastTime = 0L
@@ -27,32 +26,33 @@ type UpdateTimer(fixedDeltaTime) =
         lastTime <- time
         result
 
-type Game(fs : IStreamSource) =
+type Game(fs : IReadOnlyFolder) =
+    // Create window and graphics device
     let ren = new WindowRenderer { 
-        CreateWindow.defaults with 
-            title = "Flocking" 
-            windowWidth = 800
-            windowHeight = 600
+        Title = "Flocking"
+        WindowX = 100
+        WindowY = 100
+        WindowWidth = 800
+        WindowHeight = 600
         }
-    let shaders = 
-        fs.LoadShaderSet(ren.Device, 
-            "texture-dual-color.vert", 
-            "texture-dual-color.frag", 
-            PositionTextureDualColorVertex.Description)
-    let atlas = fs.LoadTextureAtlas(ren.Device, 512, 512, [ "hex.png"; "triangle.png" ])
-    let layers = new SpriteRenderer(ren.Device, shaders, atlas.Texture, ren.Device.SwapchainFramebuffer.OutputDescription)
+    // Initialize rendering
+    let shaders = new ShaderSetCache()
+    let textures = new TextureCache()
+    let sprites = new SpriteRenderer(ren.Device, shaders, textures)
     do
+        shaders.Load(ren.Device, fs, Resources.shaderSet)
+        textures.Load(ren.Device, fs, Resources.atlas, 512, 512)
         ren.Background <- RgbaFloat(0.0f, 0.1f, 0.2f, 1.0f) 
-        ren.Add(layers)
+        ren.Add(sprites)
     member _.Run() =
         // Create ECS container to hold game state and handle messages
         let c = Container.Create <| fun c ->
             Disposable.Create [
-                c.AddCoreSystems()
-                c.AddDrawingSystems()
+                SimulationSystems.register c
+                DrawingSystems.register c
                 ]
-        c.SetValue<TextureAtlas>(atlas)
-        c.SetValue<SpriteRenderer>(layers)
+        c.SetValue<TextureAtlas>(textures.[Resources.atlas])
+        c.SetValue<SpriteRenderer>(sprites)
         c.SetValue<WorldSettings>(WorldSettings.defaults)
         // Start loop
         c.Run(Start())
@@ -67,8 +67,8 @@ type Game(fs : IStreamSource) =
             // with +Y as up.
             let displayScale = 1.0f
             let size = ren.WindowSize.ToVector2() / displayScale
-            let viewport = layers.GetViewport(0)
-            viewport.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, size.Y, -100.0f, 100.0f)
+            let camera = sprites.GetCamera(0)
+            camera.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, size.Y, -100.0f, 100.0f)
             // Call systems to draw
             c.Run(Draw())
             hud.Draw()
@@ -76,11 +76,13 @@ type Game(fs : IStreamSource) =
             ren.Invalidate()
             ren.Draw()
             // Sleep to avoid spinning CPU
-            //Thread.Sleep(1)
+            // Uncomment to test max FPS
+            Thread.Sleep(1)
     interface IDisposable with
         member c.Dispose() =
-            atlas.Dispose()
+            textures.Dispose()
             shaders.Dispose()
+            sprites.Dispose()
             ren.Dispose()
     static member Run(fs) =
         use game = new Game(fs)

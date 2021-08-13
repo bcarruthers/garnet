@@ -4,7 +4,6 @@ open System.Collections.Generic
 open System.Numerics
 open Veldrid
 open Garnet.Samples.Engine
-open Garnet.Samples.Flocking.Types
 
 module WorldSettings =
     let defaults = {

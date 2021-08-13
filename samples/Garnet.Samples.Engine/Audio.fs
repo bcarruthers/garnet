@@ -10,6 +10,9 @@ open OpenTK.Audio.OpenAL.Extensions
 open Garnet.Resources
 
 [<Struct>]
+type SoundId = SoundId of int
+
+[<Struct>]
 type SoundDescriptor = {
     channels : int
     bitsPerSample : int
@@ -27,9 +30,6 @@ module SoundDescriptor =
 
     let getDuration desc =
         desc.sampleCount * 1000 / desc.channels / desc.sampleRate
-
-[<Struct>]
-type SoundId = SoundId of int
 
 [<AutoOpen>]
 module internal OpenALInternal =
@@ -77,7 +77,7 @@ type AudioDevice() =
     let device = ALC.OpenDevice(null)
     let context = 
         let c = ALC.CreateContext(device, Array.empty)
-        let result = ALC.MakeContextCurrent(c)
+        let _ = ALC.MakeContextCurrent(c)
         c
     let sources = new SourcePool()
     let sounds = List<Sound>()
@@ -153,14 +153,6 @@ type AudioDevice with
             sampleCount = data.Length * 8 / 16
             }
         c.CreateSound(desc, ReadOnlyMemory(data))
-    
-type AudioCache(entries : (string * SoundId) seq) =
-    let nameToId =
-        let dict = Dictionary<string, SoundId>()
-        for key, id in entries do
-            dict.[key] <- id
-        dict
-    member c.Item with get name = nameToId.[name]
 
 [<AutoOpen>]
 module AudioLoaderExtensions =
@@ -170,25 +162,25 @@ module AudioLoaderExtensions =
             // https://stackoverflow.com/questions/8754111/how-to-read-the-data-in-a-wav-file-to-an-array
             use reader = new BinaryReader(stream)
             // chunk 0
-            let chunkId       = reader.ReadInt32()
-            let fileSize      = reader.ReadInt32()
-            let riffType      = reader.ReadInt32()
+            let _           = reader.ReadInt32() // chunkId
+            let _           = reader.ReadInt32() // fileSize
+            let _           = reader.ReadInt32() // riffType
             // chunk 1
-            let fmtID         = reader.ReadInt32()
-            let fmtSize       = reader.ReadInt32() // bytes for this chunk (expect 16 or 18)
+            let _           = reader.ReadInt32() // fmtID
+            let fmtSize     = reader.ReadInt32() // bytes for this chunk (expect 16 or 18)
             // 16 bytes coming
-            let fmtCode       = int (reader.ReadInt16())
-            let channels      = int (reader.ReadInt16())
-            let sampleRate    = reader.ReadInt32()
-            let byteRate      = reader.ReadInt32()
-            let fmtBlockAlign = int (reader.ReadInt16())
-            let bitDepth      = int (reader.ReadInt16())
+            let _           = int (reader.ReadInt16()) // fmtCode
+            let channels    = int (reader.ReadInt16())
+            let sampleRate  = reader.ReadInt32()
+            let _           = reader.ReadInt32() // byteRate
+            let _           = int (reader.ReadInt16()) // fmtBlockAlign
+            let bitDepth    = int (reader.ReadInt16())
             if fmtSize = 18 then
                 // Read any extra values
                 let fmtExtraSize = int (reader.ReadInt16())
                 stream.Seek(int64 fmtExtraSize, SeekOrigin.Current) |> ignore
             // chunk 2
-            let dataId = reader.ReadInt32()
+            let _ = reader.ReadInt32() // dataId
             let length = reader.ReadInt32()
             // Read data
             // https://stackoverflow.com/questions/10996917/openal-albufferdata-returns-al-invalid-value-even-though-input-variables-look
@@ -205,12 +197,16 @@ module AudioLoaderExtensions =
                 sampleCount = sampleCount
                 }
             device.CreateSound(desc, ReadOnlyMemory(data))
-            
-    type IReadOnlyFolder with
-        member c.LoadWavesFromFolder(device : AudioDevice, folderName) =
-            let entries =
-                c.GetFiles(folderName)
-                |> Seq.map (fun path ->
-                    let key = path.Replace(folderName, "").TrimStart('/')
-                    key, c.LoadWave(device, path))
-            AudioCache(entries)
+
+type AudioCache() =
+    let sounds = Dictionary<string, SoundId>()
+    member c.Item with get name = sounds.[name]
+    member c.Add(name, soundId) =
+        sounds.Add(name, soundId)
+
+type AudioCache with
+    member c.Load(device, fs : IReadOnlyFolder, path) =
+        for file in fs.GetFiles(path) do
+            let soundId = fs.LoadWave(device, file)
+            c.Add(file, soundId)
+    

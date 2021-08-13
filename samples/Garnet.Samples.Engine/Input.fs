@@ -6,59 +6,19 @@ open System.Numerics
 open Veldrid
 
 [<Struct>]
-type MouseWheel = {
-    modifiers : int
-    wheel : int
-    }
-
-[<Struct>]
-type MouseUpdate = {
-    pos : Vector2
-    devicePos : Vector2i
-    button1 : bool
-    button2 : bool
-    }
-
-[<Struct>]
-type MouseMoved = {
-    pos : Vector2
-    delta : Vector2
-    devicePos : Vector2i
-    deviceDelta : Vector2i
-    modifiers : ModifierKeys
-    }
-
-[<Struct>]
-type MouseDown = {
-    pos : Vector2
-    devicePos : Vector2i
-    button : int
-    modifiers : ModifierKeys
-    }
-
-[<Struct>]
-type MouseUp = {
-    pos : Vector2
-    devicePos : Vector2i
-    button : int
-    }
-
-[<Struct>]
 type KeyDown = {
-    keyCode : Key
-    modifiers : ModifierKeys
-    }
-
-module KeyDown =
-    let none = {
-        keyCode = Key.Unknown
-        modifiers = ModifierKeys.None
+    KeyCode : Key
+    Modifiers : ModifierKeys
+    } with
+    static member None = {
+        KeyCode = Key.Unknown
+        Modifiers = ModifierKeys.None
         }
 
 [<Struct>]
 type KeyUp = {
-    keyCode : Key
-    modifiers : ModifierKeys
+    KeyCode : Key
+    Modifiers : ModifierKeys
     }
 
 [<AutoOpen>]
@@ -121,8 +81,8 @@ type InputCollection() =
         keys.[int code]
     member c.IsKeyPressed(code, modifiers) =
         keyDownEvents.Contains { 
-            keyCode = code
-            modifiers = modifiers
+            KeyCode = code
+            Modifiers = modifiers
             }
     member c.UpdateMouse(newPos, newNormPos, newWheelDelta) =
         wheelDelta <- newWheelDelta
@@ -138,14 +98,14 @@ type InputCollection() =
     member c.Add(code, modifier) =
         keys.[int code] <- true
         keyDownEvents.Add { 
-            keyCode = code
-            modifiers = modifier
+            KeyCode = code
+            Modifiers = modifier
             }
     member c.Remove(code, modifier) =
         keys.[int code] <- false
         keyUpEvents.Add { 
-            keyCode = code
-            modifiers = modifier
+            KeyCode = code
+            Modifiers = modifier
             }
     member c.Clear() =
         Array.Clear(keys, 0, keys.Length)
@@ -186,7 +146,6 @@ type InputCollection with
             let e = snapshot.KeyEvents.[i]
             let m = e.Modifiers
             let key = e.Key
-            //printfn "Key change: %A %A %A" key e.Down (float (Stopwatch.GetTimestamp()) / float Stopwatch.Frequency)
             if e.Down then c.Add(key, m)
             else c.Remove(key, e.Modifiers)
 

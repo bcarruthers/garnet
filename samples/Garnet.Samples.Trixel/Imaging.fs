@@ -2,7 +2,6 @@
 
 open System
 open System.Numerics
-open Garnet.Samples.Trixel.Types
 open SixLabors.ImageSharp
 open Veldrid
 open ImGuiNET

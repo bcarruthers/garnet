@@ -1,70 +1,74 @@
-﻿namespace Garnet.Samples.Trixel.Types
+﻿namespace Garnet.Samples.Trixel
 
 open System.Numerics
 open Garnet.Samples.Engine
 open Veldrid
 
-type Command<'a> =
-    | Identity
-    | Undo
-    | Redo
-    | Replace of 'a
-    | Apply of ('a -> 'a)
+[<AutoOpen>]
+module Grids =
+    [<Struct>]
+    type CellLocation = {
+        x : int
+        y : int
+        }
 
-type UndoState<'a> = {
-    prev : 'a list
-    next : 'a list
-    current : 'a 
-    }
+    type GridState = {
+        cells : Map<CellLocation, RgbaByte>
+        }
 
-[<Struct>]
-type CellLocation = {
-    x : int
-    y : int
-    }
+    type GridStateChanged = {
+        newGridState : GridState
+        }
 
-type GridState = {
-    cells : Map<CellLocation, RgbaByte>
-    }
+    [<Struct>]
+    type SamplingParams = {
+        outputWidth : int
+        outputHeight : int
+        sampleFactor : int
+        bounds : Range2
+        background : RgbaByte
+        }
 
-type GridStateChanged = {
-    newGridState : GridState
-    }
+    type GridLineState = {
+        lineSpacing : int
+        }
 
-[<Struct>]
-type SamplingParams = {
-    outputWidth : int
-    outputHeight : int
-    sampleFactor : int
-    bounds : Range2
-    background : RgbaByte
-    }
+    type ViewportSize = {
+        viewportSize : int
+        }
 
-type GridLineState = {
-    lineSpacing : int
-    }
+    [<Struct>]
+    type TriPositions = {
+        p0 : Vector2
+        p1 : Vector2
+        p2 : Vector2
+        }
 
-type ViewportSize = {
-    viewportSize : int
-    }
+[<AutoOpen>]
+module Commands =
+    type Command<'a> =
+        | Identity
+        | Undo
+        | Redo
+        | Replace of 'a
+        | Apply of ('a -> 'a)
 
-[<Struct>]
-type TriPositions = {
-    p0 : Vector2
-    p1 : Vector2
-    p2 : Vector2
-    }
+    type UndoState<'a> = {
+        prev : 'a list
+        next : 'a list
+        current : 'a 
+        }
 
-type FileCommand =
-    | Load of string
-    | Save of string
-    
-type ExportCommand = {
-    exportFile : string
-    samplingParams : SamplingParams
-    }
+    type FileCommand =
+        | Load of string
+        | Save of string
+        
+    type ExportCommand = {
+        exportFile : string
+        samplingParams : SamplingParams
+        }
 
-type Command =
-    | Export of ExportCommand
-    | FileCommand of FileCommand
-    | GridCommand of Command<GridState>
+    type Command =
+        | Export of ExportCommand
+        | FileCommand of FileCommand
+        | GridCommand of Command<GridState>

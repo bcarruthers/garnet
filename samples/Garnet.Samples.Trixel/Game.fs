@@ -8,67 +8,87 @@ open Veldrid
 open SixLabors.ImageSharp
 open Garnet.Resources
 open Garnet.Samples.Engine
-open Garnet.Samples.Trixel.Types
 
-type Game(fs : IStreamSource) =
-    let ren = new WindowRenderer { 
-        CreateWindow.defaults with 
-            title = "Trixel" 
-            windowWidth = 800
-            windowHeight = 600
+module Resources =
+    let squareTex = "square.png"
+
+    let shaderSet = {
+        VertexShader = "texture-dual-color.vert"
+        FragmentShader = "texture-dual-color.frag"
+        Layout = PositionTextureDualColorVertex.Description
         }
-    let shaders = 
-        fs.LoadShaderSet(ren.Device, 
-            "texture-dual-color.vert", 
-            "texture-dual-color.frag", 
-            PositionTextureDualColorVertex.Description)
-    let texture = fs.LoadTexture(ren.Device, "square.png")
-    let layers = new SpriteRenderer(ren.Device, shaders, texture, ren.Device.SwapchainFramebuffer.OutputDescription)
-    let gui = new Gui(ren.Device, ren.ImGui)
+
+    let pipeline = {
+        Blend = Blend.Alpha
+        Filtering = Filtering.Linear
+        ShaderSet = shaderSet
+        Texture = squareTex
+        }
+
     let cellLayer = {
         Depth = 4
-        Blend = Blend.Alpha
-        Filtering = Filtering.Linear
+        CameraId = 0
         Primitive = Triangle
-        ViewportId = 0
+        FlushMode = NoFlush
+        Pipeline = pipeline 
         }
+
     let gridLineLayer = {
         Depth = 3
-        Blend = Blend.Alpha
-        Filtering = Filtering.Linear
+        CameraId = 0
         Primitive = Quad
-        ViewportId = 0
+        FlushMode = NoFlush
+        Pipeline = pipeline 
         }
-    do 
+
+[<AutoOpen>]
+module DrawingExtensions =
+    type SpriteRenderer with
+        member c.DrawGrid(state) =
+            let mesh = c.GetVertices(Resources.cellLayer)
+            mesh.DrawGridCells(state.current)
+            mesh.Flush()        
+
+type Game(fs : IReadOnlyFolder) =
+    // Create window and graphics device
+    let ren = new WindowRenderer { 
+        Title = "Trixel" 
+        WindowX = 100
+        WindowY = 100
+        WindowWidth = 800
+        WindowHeight = 600
+        }
+    // Initialize rendering
+    let shaders = new ShaderSetCache()
+    let textures = new TextureCache()
+    let sprites = new SpriteRenderer(ren.Device, shaders, textures)
+    let gui = new Gui(ren.Device, ren.ImGui)
+    do
+        shaders.Load(ren.Device, fs, Resources.shaderSet)
+        textures.Load(ren.Device, fs, Resources.squareTex)
         ren.Background <- RgbaFloat(0.0f, 0.1f, 0.2f, 1.0f)
-        ren.Add(layers)
-    member private c.UpdateGrid(state) =
-        let mesh = layers.GetLayer(cellLayer)
-        mesh.DrawGridCells(state.current)
-        mesh.Flush()        
+        ren.Add(sprites)
     member c.Run() =
         let mutable state = UndoState.init GridState.empty
-        c.UpdateGrid(state)
-        // grid lines
-        let mesh = layers.GetLayer(gridLineLayer)
+        sprites.DrawGrid(state)
+        // Grid lines
+        let mesh = sprites.GetVertices(Resources.gridLineLayer)
         mesh.DrawGridLines()
         mesh.Flush()
-        // cells
-        let mesh = layers.GetLayer(cellLayer)
+        // Cells
+        let mesh = sprites.GetVertices(Resources.cellLayer)
         mesh.DrawGridCells(state.current)
         mesh.Flush()
         // Start loop
         ren.Invalidate()
         while ren.Update(0.0f) do
             // Calculate transforms
-            let center = Vector2i.Zero
-            let eucCenter = TriCoords.vertexToEuc center
             let sizeInTiles = Viewport.getViewSize 0 ren.WindowSize.X ren.WindowSize.Y
             let proj = Matrix4x4.CreateOrthographic(sizeInTiles.X, sizeInTiles.Y, -100.0f, 100.0f)
             let view = Matrix4x4.Identity
-            let viewport = layers.GetViewport(0)
-            viewport.ProjectionTransform <- proj
-            viewport.ViewTransform <-view
+            let camera = sprites.GetCamera(0)
+            camera.ProjectionTransform <- proj
+            camera.ViewTransform <-view
             // Draw GUI and collect any user command
             let projView = proj * view
             let invProjView = Viewport.getInverseOrIdentity projView
@@ -81,7 +101,7 @@ type Game(fs : IStreamSource) =
                 | GridCommand cmd ->
                     // Update state from command
                     state <- Command.apply state cmd
-                    c.UpdateGrid(state)
+                    sprites.DrawGrid(state)
                 | Export cmd ->
                     let image = Image.createRenderedGridImage cmd.samplingParams state.current
                     use fs = File.OpenWrite(cmd.exportFile)
@@ -94,19 +114,20 @@ type Game(fs : IStreamSource) =
                             |> GridState.deserialize
                             |> Replace
                         state <- Command.apply state cmd
-                        c.UpdateGrid(state)
+                        sprites.DrawGrid(state)
                     | Save file -> 
                         Directory.CreateDirectory(Path.GetDirectoryName(file)) |> ignore
                         File.WriteAllText(file, GridState.serialize state.current)
             // Draw to window
             ren.Invalidate()
             ren.Draw()            
-            // Sleep to avoid spinning CPU (note sleep(1) typically takes ~15 ms)
+            // Sleep to avoid spinning CPU
             Thread.Sleep(1)
     interface IDisposable with
         member c.Dispose() =
-            texture.Dispose()
+            textures.Dispose()
             shaders.Dispose()
+            sprites.Dispose()
             gui.Dispose()
             ren.Dispose()
     static member Run(fs) =

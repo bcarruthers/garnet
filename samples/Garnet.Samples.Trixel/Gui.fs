@@ -6,7 +6,6 @@ open System.Numerics
 open Veldrid
 open ImGuiNET
 open Garnet.Samples.Engine
-open Garnet.Samples.Trixel.Types
 
 type CursorGui() =
     member c.Draw(inputs : InputCollection, invProjView : Matrix4x4) =    

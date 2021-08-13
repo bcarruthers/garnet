@@ -9,10 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="assets\hex.png">
+    <None Include="assets\textures\hex.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="assets\triangle.png">
+    <None Include="assets\textures\triangle.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="assets\texture-dual-color.frag">
@@ -30,7 +30,9 @@
     <Compile Include="Types.fs" />
     <Compile Include="Functions.fs" />
     <Compile Include="Debug.fs" />
-    <Compile Include="Systems.fs" />
+    <Compile Include="Resources.fs" />
+    <Compile Include="Simulation.fs" />
+    <Compile Include="Drawing.fs" />
     <Compile Include="Game.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

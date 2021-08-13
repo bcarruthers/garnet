@@ -6,12 +6,7 @@ open System.Runtime.CompilerServices
 open System.Numerics
 open Veldrid
 open Garnet.Samples.Engine
-open Garnet.Samples.Trixel.Types
 
-module Layers =
-    let gridLines = 3
-    let gridCells = 4
-    
 [<Extension>]
 type VertexSpanExtensions =
     [<Extension>]
