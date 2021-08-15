@@ -4,9 +4,7 @@ open System
 open System.Collections.Generic
 open System.Buffers
 open System.Threading
-open Garnet
-open Garnet.Comparisons
-open Garnet.Formatting
+open Garnet.Composition.Comparisons
 
 /// Identifies an actor
 [<Struct>]

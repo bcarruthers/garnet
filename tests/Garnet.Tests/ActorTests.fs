@@ -5,8 +5,6 @@ open System.Collections.Generic
 open System.IO
 open System.Threading
 open Expecto
-open Garnet
-open Garnet.Formatting
 open Garnet.Composition
 open Garnet.Streaming
 

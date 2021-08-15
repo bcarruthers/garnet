@@ -3,7 +3,7 @@
 open System
 open System.Collections.Generic
 open System.Runtime.CompilerServices
-open Garnet.Comparisons
+open Garnet.Composition.Comparisons
 
 [<Struct>]
 type MaskEnumerator = 
@@ -65,9 +65,9 @@ type SegmentData<'a> =
     member inline c.Item with get i : byref<'a> =
         &c.Array.[c.Offset + i]
     member c.AsSpan() =
-        Span(c.Array, c.Offset, Segment.segmentSize)
+        Span(c.Array, c.Offset, Segment.SegmentSize)
     member c.AsReadOnlySpan() =
-        ReadOnlySpan(c.Array, c.Offset, Segment.segmentSize)
+        ReadOnlySpan(c.Array, c.Offset, Segment.SegmentSize)
 
 type internal SD<'a> = SegmentData<'a>
 

@@ -2,9 +2,7 @@
 
 open System
 open System.Runtime.CompilerServices
-open Garnet
-open Garnet.Comparisons
-open Garnet.Formatting
+open Garnet.Composition.Comparisons
 
 module Eid =
     // Entity ID bits:
@@ -84,9 +82,9 @@ type Eid =
     member inline eid.Partition =
         (eid.Value >>> Eid.IndexBits) &&& Eid.PartitionMask
     member inline eid.SegmentIndex = 
-        eid.Slot >>> Segment.segmentBits
+        eid.Slot >>> Segment.SegmentBits
     member inline eid.ComponentIndex = 
-        eid.Value &&& Segment.segmentMask
+        eid.Value &&& Segment.SegmentMask
     member inline eid.WithGen(gen) =
         Eid(eid.Slot ||| (gen <<< Eid.SlotBits))
     member inline eid.IncrementGen() =
@@ -114,7 +112,7 @@ type EidPool(partition) =
     let mutable known = Array.zeroCreate 1
     let mutable used = Array.zeroCreate 1
     let mutable eids = Array.zeroCreate 64
-    let mutable current = Segment.segmentBits - 1
+    let mutable current = Segment.SegmentBits - 1
     let mutable mask = 0UL
     member c.Used = Bits.bitCount64Array used
     member c.Allocated = Bits.bitCount64Array known
@@ -132,7 +130,7 @@ type EidPool(partition) =
         Array.Clear(eids, 0, eids.Length)
         c.Reset()
     member c.Reset() =
-        current <- Segment.segmentBits - 1
+        current <- Segment.SegmentBits - 1
         mask <- 0UL
     member c.Next() =
         if mask = 0UL then

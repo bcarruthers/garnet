@@ -5,10 +5,7 @@ open System.Buffers
 open System.Collections.Generic
 open System.Diagnostics
 open System.Text
-open Garnet
-open Garnet.Comparisons
-open Garnet.Formatting
-open Garnet.Metrics
+open Garnet.Composition.Comparisons
 
 type internal EventHandler<'a> = ReadOnlyMemory<'a> -> unit
 
@@ -244,6 +241,18 @@ type internal NullPublisher() =
     static member Instance = instance
     interface IPublisher with
         member c.PublishAll(_, _) = ()
+
+/// Single recorded timing consisting of N operations in a window of time.
+[<Struct>]
+type Timing = {
+    Name : string
+    Start : int64
+    Stop : int64
+    Count : int
+    } with
+    member t.Duration = t.Stop - t.Start
+    override t.ToString() =
+        sprintf "%A, %A to %A (%A), %A ops" t.Name t.Start t.Stop t.Duration t.Count
 
 type PrintPublisherOptions = {
     EnableLog : bool

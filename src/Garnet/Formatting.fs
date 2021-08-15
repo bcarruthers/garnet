@@ -1,10 +1,10 @@
-﻿namespace Garnet.Formatting
+﻿namespace Garnet.Composition
 
 open System
 open System.Collections
 open System.Collections.Generic
 open System.Text
-open Garnet.Comparisons
+open Garnet.Composition.Comparisons
 
 /// Provides debug formatting for specific types
 type IFormatter =
@@ -167,3 +167,8 @@ module internal Format =
         if remaining > 0 then
             sb.AppendLine() |> ignore
             sb.Append(sprintf "  +%d" remaining) |> ignore
+    
+    let formatIndexedList prefix (segments : ReadOnlyMemory<_>) =
+        segments.ToArray()
+        |> Seq.mapi (fun i x -> sprintf "%d %s" i (x.ToString()))
+        |> listToString prefix "" 

@@ -2,7 +2,7 @@
 
 open System
 open System.Threading
-open Garnet.Comparisons
+open Garnet.Composition.Comparisons
 
 module RingBuffer =
     let defaultBufferSize = 32

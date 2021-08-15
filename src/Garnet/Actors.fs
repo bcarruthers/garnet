@@ -5,8 +5,6 @@ open System.Diagnostics
 open System.Threading
 open System.Collections.Generic
 open System.Runtime.InteropServices
-open Garnet
-open Garnet.Formatting
 
 /// Defines how an actor is executed
 type DispatcherType =

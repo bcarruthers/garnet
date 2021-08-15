@@ -2,8 +2,7 @@
 
 open System
 open System.Runtime.InteropServices
-open Garnet.Comparisons
-open Garnet.Formatting
+open Garnet.Composition.Comparisons
 
 type ISegmentKeyMapper<'k, 'c> = 
     abstract GetSegmentKey : 'c -> 'k

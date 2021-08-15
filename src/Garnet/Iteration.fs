@@ -1,6 +1,6 @@
 ﻿namespace Garnet.Composition
 
-open Garnet.Comparisons
+open Garnet.Composition.Comparisons
 
 module Join =
     module Array =

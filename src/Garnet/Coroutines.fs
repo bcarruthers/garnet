@@ -2,8 +2,7 @@
 
 open System
 open System.Collections.Generic
-open Garnet.Comparisons
-open Garnet.Collections
+open Garnet.Composition.Comparisons
 
 [<Struct>]
 type Wait =

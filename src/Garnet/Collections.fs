@@ -1,13 +1,127 @@
-﻿module internal Garnet.Collections
+﻿namespace Garnet.Composition
 
 open System
 open System.Collections
 open System.Collections.Generic
 open System.Runtime.InteropServices
-open Garnet.Comparisons
+open Garnet.Composition.Comparisons
+open System.Buffers
 
+module internal Bits =
+    let inline bitCount x =
+        let x = x - ((x >>> 1) &&& 0x55555555)
+        let x = (x &&& 0x33333333) + ((x >>> 2) &&& 0x33333333)
+        (((x + (x >>> 4)) &&& 0x0F0F0F0F) * 0x01010101) >>> 24
+
+    let inline bitCount64 (x : uint64) =
+        bitCount (int (x >>> 32)) + bitCount (int (x &&& 0xffffffffUL))
+
+    let bitCount64Array (arr : uint64[]) =
+        let mutable total = 0
+        for x in arr do
+            total <- total + bitCount64 x
+        total
+
+    let inline getNextPow2 x =
+        let mutable y = x - 1
+        y <- y ||| (y >>> 1)
+        y <- y ||| (y >>> 2)
+        y <- y ||| (y >>> 4)
+        y <- y ||| (y >>> 8)
+        y <- y ||| (y >>> 16)
+        y <- y + 1
+        if y > 0 then y else 1
+
+module internal Buffer =
+    let expandArray required (arr : _[]) =
+        let newArr = Array.zeroCreate (Bits.getNextPow2 required)
+        arr.CopyTo(newArr, 0)
+        newArr
+
+    let resizeArray count (arr : byref<_[]>) =
+        if count > arr.Length then
+            arr <- expandArray count arr
+
+    let addToArray (count : byref<int>) (arr : byref<_[]>) x =
+        count <- count + 1
+        resizeArray count &arr
+        arr.[count - 1] <- x
+
+    let addAllToArray (count : byref<int>) (arr : byref<_[]>) (src : ReadOnlySpan<_>) =
+        let destOffset = count
+        count <- count + src.Length
+        resizeArray count &arr
+        let dest = Span(arr, destOffset, src.Length)
+        src.CopyTo(dest)
+        
+    let copyArrayMask mask (src : _[]) (dest : _[]) =
+        let mutable m = mask
+        let mutable i = 0
+        while m <> 0UL do
+            if m &&& 1UL <> 0UL then dest.[i] <- src.[i]
+            m <- m >>> 1
+            i <- i + 1
+
+    let clearArray (arr : _[]) =
+        Array.Clear(arr, 0, arr.Length)
+        
+    let clearArrayMask mask (arr : _[]) =
+        let mutable m = mask
+        let mutable i = 0
+        while m <> 0UL do
+            if m &&& 1UL <> 0UL then arr.[i] <- Unchecked.defaultof<_>
+            m <- m >>> 1
+            i <- i + 1
+
+    let getArrayBitCount64 (masks : uint64[]) count =
+        let mutable total = 0
+        for i = 0 to count - 1 do
+            total <- total + Bits.bitCount64 masks.[i]
+        total
+
+/// Similar to ArrayBufferWriter, but provides additional read/write access to 
+/// the underlying array.
+type internal ResizableBuffer<'a>(capacity) =
+    let mutable buffer = Array.zeroCreate<'a> capacity
+    let mutable pos = 0
+    member c.Item 
+        with get i = buffer.[i]
+        and set i x = buffer.[i] <- x
+    member c.WrittenCount = pos
+    member c.WrittenSpan =
+        ReadOnlySpan(buffer, 0, pos)
+    member c.WrittenMemory =
+        ReadOnlyMemory(buffer, 0, pos)
+    member c.GetMemory(count) =
+        // note min allocation in case count is zero
+        let required = pos + max count 8
+        Buffer.resizeArray required &buffer
+        buffer.AsMemory().Slice(pos)
+    member c.GetSpan(count) =
+        c.GetMemory(count).Span
+    member c.Advance(count) = 
+        if count < 0 then failwithf "Cannot advance a negative value: %d" count
+        pos <- pos + count
+    member c.WriteValue(value) =
+        if pos >= buffer.Length then
+            Buffer.resizeArray (pos + 1) &buffer
+        buffer.[pos] <- value
+        pos <- pos + 1
+    member c.RemoveLast() =
+        pos <- pos - 1
+    member c.Clear() =
+        Array.Clear(buffer, 0, pos)
+        pos <- 0
+    interface IBufferWriter<'a> with
+        member c.GetSpan(count) =
+            c.GetSpan(count)
+        member c.GetMemory(count) =
+            c.GetMemory(count)
+        member c.Advance(count) = 
+            c.Advance(count)        
+    
 /// Mutable min-heap
-type Heap<'k, 'a when 'k :> IComparable<'k>>() =
+type internal Heap<'k, 'a when 'k :> IComparable<'k>>() =
     // create a dummy value for easier indexing
     let items = List<KeyValuePair<'k, 'a>>()
     do items.Add(Unchecked.defaultof<_>)
@@ -89,7 +203,7 @@ module internal DictionarySlim =
 
 // Adapted from:
 // https://github.com/dotnet/corefxlab/blob/master/src/Microsoft.Experimental.Collections/Microsoft/Collections/Extensions/DictionarySlim.cs
-type DictionarySlim<'TKey, 'TValue 
+type internal DictionarySlim<'TKey, 'TValue 
     when 'TKey :> IEquatable<'TKey>
     and 'TKey : equality>(capacity) =
     let mutable _count = 0
@@ -200,7 +314,7 @@ type DictionarySlim<'TKey, 'TValue
         member c.GetEnumerator() =
             new Enumerator<'TKey,'TValue>(c) :> IEnumerator
 
-and Enumerator<'TKey, 'TValue
+and internal Enumerator<'TKey, 'TValue
     when 'TKey :> IEquatable<'TKey>
     and 'TKey : equality> =
     val _dictionary : DictionarySlim<'TKey, 'TValue>

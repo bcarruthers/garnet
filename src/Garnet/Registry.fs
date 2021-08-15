@@ -4,8 +4,7 @@ open System
 open System.Collections.Generic
 open System.Runtime.InteropServices
 open System.Threading
-open Garnet.Comparisons
-open Garnet.Formatting
+open Garnet.Composition.Comparisons
 
 type IRegistryHandler<'p> =
     /// Serves as a callback when iterating over typed instances in registry.
@@ -59,7 +58,7 @@ type Registry() =
     member private c.TryGetReference<'a>([<Out>] reference : byref<'a ref>) =
         let id = RegistryTypeId<'a>.Id
         if id >= lookup.Length then
-            Garnet.Buffer.resizeArray (id + 1) &lookup    
+            Buffer.resizeArray (id + 1) &lookup    
         let value = lookup.[id]
         if isNotNull value then
             // Value is present already
@@ -77,7 +76,7 @@ type Registry() =
     member c.SetFactory<'a>(create : unit -> 'a) =
         let id = RegistryTypeId<'a>.Id
         if id >= factories.Length then
-            Garnet.Buffer.resizeArray (id + 1) &factories
+            Buffer.resizeArray (id + 1) &factories
         factories.[id] <- Func<_>(fun () ->
             // Entry is temporarily marked null to detect cycles
             if obj.ReferenceEquals(factories.[id], null) 
@@ -96,7 +95,7 @@ type Registry() =
     member c.SetValue<'a>(newValue : 'a) =
         let id = RegistryTypeId<'a>.Id
         if id >= lookup.Length then
-            Garnet.Buffer.resizeArray (id + 1) &lookup
+            Buffer.resizeArray (id + 1) &lookup
         if isNull lookup.[id] then
             let cell = ref newValue
             lookup.[id] <- cell :> obj

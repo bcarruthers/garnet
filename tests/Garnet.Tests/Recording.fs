@@ -4,8 +4,7 @@ open System
 open System.IO
 open System.Collections.Generic
 open System.Text
-open Garnet.Comparisons
-open Garnet.Formatting
+open Garnet.Composition.Comparisons
 open Garnet.Composition
 
 /// Logs incoming and outgoing messages

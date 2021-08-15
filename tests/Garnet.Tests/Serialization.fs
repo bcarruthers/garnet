@@ -4,8 +4,6 @@ open System
 open System.IO
 open System.Collections.Generic
 open System.Runtime.InteropServices
-open Garnet
-open Garnet.Formatting
 open Garnet.Composition
 
 type ISerializer<'a> =

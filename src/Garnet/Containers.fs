@@ -3,8 +3,7 @@
 open System
 open System.Collections.Generic
 open System.Runtime.InteropServices
-open Garnet.Comparisons
-open Garnet.Formatting
+open Garnet.Composition.Comparisons
 
 type DisposableReference<'a when 'a :> IDisposable>(init : 'a) =
     let mutable current = init
