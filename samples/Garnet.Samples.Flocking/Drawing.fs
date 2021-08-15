@@ -32,7 +32,7 @@ module DrawingSystems =
                 for r in c.Query<Trail, Position, Faction, Lifespan, Rotation>() do
                     mesh.DrawSprite(
                         center = r.Value2.pos, 
-                        rotation = Vector2.fromRadians r.Value5.radians,
+                        rotation = Vector2.FromRadians(r.Value5.radians),
                         size = r.Value4.lifespan * 0.3f * Vector2.One * 60.0f,
                         texBounds = texBounds,
                         fg = (Faction.toColor r.Value3).MultiplyAlpha(r.Value4.lifespan * 0.3f),

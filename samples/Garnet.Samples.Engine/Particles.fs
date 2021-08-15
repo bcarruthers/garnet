@@ -159,7 +159,7 @@ type ParticleSet(anim : ParticleAnimation) =
             let c0 = anim.StartColor
             let c1 = anim.EndColor
             for i = 0 to pc - 1 do
-                b.colors.[i] <- RgbaFloat.lerp c0 c1 b.energies.[i]
+                b.colors.[i] <- RgbaFloat.Lerp(c0, c1, b.energies.[i])
     member c.ParticleCount = pc
     member c.Clear() =
         pc <- 0
@@ -208,10 +208,10 @@ type ParticleSet(anim : ParticleAnimation) =
                     let h = rand.NextSingle(anim.MinHue, anim.MaxHue)
                     let s = rand.NextSingle(anim.MinSaturation, anim.MaxSaturation)
                     let v = rand.NextSingle(anim.MinValue, anim.MaxValue)
-                    let c = HsvaFloat(h, s, v, 1.0f).ToRgba()
+                    let c = HsvaFloat(h, s, v, 1.0f).ToRgbaFloat()
                     let tint =
-                        let c = RgbaFloat.lerp minTint maxTint (rand.NextSingle())
-                        let tint = RgbaFloat.lerp RgbaFloat.White pe.Color anim.TintWeight
+                        let c = RgbaFloat.Lerp(minTint, maxTint, rand.NextSingle())
+                        let tint = RgbaFloat.Lerp(RgbaFloat.White, pe.Color, anim.TintWeight)
                         c.Multiply(tint)
                     c.Multiply(tint)
                 color

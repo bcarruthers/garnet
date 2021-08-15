@@ -12,6 +12,10 @@
   <ItemGroup>
     <Compile Include="Comparisons.fs" />
     <Compile Include="Numerics.fs" />
+    <Compile Include="Vectors.fs" />
+    <Compile Include="Ranges.fs" />
+    <Compile Include="Colors.fs" />
+    <Compile Include="Hashing.fs" />
     <Compile Include="Random.fs" />
     <Compile Include="Noise.fs" />
     <Compile Include="Collections.fs" />

@@ -81,7 +81,7 @@ type PcgRandom with
         c.NextSingle() * (max - min) + min
 
     member c.NextRotation(radiansRange) =
-        (c.NextSingle() - 0.5f) * radiansRange |> Vector2.fromRadians
+        Vector2.FromRadians((c.NextSingle() - 0.5f) * radiansRange) 
 
     member c.NextRotationDegrees(degreesRange) =
         c.NextRotation(degreesRange * MathF.PI / 180.0f)
@@ -91,6 +91,35 @@ type PcgRandom with
         
     member c.NextVector2(range : Range2) =
         Range2.Lerp(range, c.NextVector2())
+
+    member c.NextVector3() =
+        Vector3(c.NextSingle(), c.NextSingle(), c.NextSingle())
+        
+    member c.NextVector3(range : Range3) =
+        Range3.Lerp(range, c.NextVector3())
+
+    member c.NextVector2i(r : Range2i) =
+        Vector2i(
+            c.NextInt32(r.Min.X, r.Max.X),
+            c.NextInt32(r.Min.Y, r.Max.Y))
+
+    member c.NextVector2i(min, max) =
+        let r = Rangei(min, max)
+        c.NextVector2i(Range2i(r, r))
+
+    member c.NextVector3i(r : Range3i) =
+        Vector3i(
+            c.NextInt32(r.Min.X, r.Max.X),
+            c.NextInt32(r.Min.Y, r.Max.Y),
+            c.NextInt32(r.Min.Z, r.Max.Z))
+
+    member c.NextVector3i(min, max) =
+        let r = Rangei(min, max)
+        c.NextVector3i(Range3i(r, r, r))
+
+    member c.Next(dest : Span<int>) =
+        for i = 0 to dest.Length - 1 do
+            dest.[i] <- c.NextInt32()
         
     member c.Shuffle(items) =
         let r = items |> Seq.toArray
