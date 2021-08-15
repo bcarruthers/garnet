@@ -1,9 +1,10 @@
-﻿namespace Garnet.Samples.Engine
+﻿namespace Garnet.Graphics
 
 open System
 open System.Collections.Generic
 open System.Numerics
 open Veldrid
+open Garnet.Numerics
 
 [<Struct>]
 type KeyDown = {

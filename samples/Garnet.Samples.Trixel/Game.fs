@@ -6,7 +6,9 @@ open System.Threading
 open System.IO
 open Veldrid
 open SixLabors.ImageSharp
-open Garnet.Samples.Engine
+open Garnet.Numerics
+open Garnet.Resources
+open Garnet.Graphics
 
 module Resources =
     let squareTex = "square.png"

@@ -1,10 +1,11 @@
-﻿namespace Garnet.Samples.Engine
+﻿namespace Garnet.Graphics
 
 open System
 open System.Collections.Generic
 open System.IO
 open System.Text
 open Veldrid
+open Garnet.Resources
 
 [<Struct>]
 type ShaderSetDescriptor = {

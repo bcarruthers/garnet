@@ -1,10 +1,10 @@
 # Samples
 
-## Engine
+## Toolkit
 
-[[Code](Garnet.Samples.Engine)]
+[[Code](Garnet.Toolkit)]
 
-Utility code for sprite drawing, tiling, and texture atlasing using Veldrid. Also includes wave loading and playback using OpenTK.OpenAL.
+Shared code used by samples, including sprite drawing, particles, noise, audio playback, and more. Depends on [Veldrid](https://veldrid.dev/) for graphics and [OpenTK.OpenAL](https://opentk.net/) for audio. No dependency on Garnet ECS.
 
 ## Flocking
 

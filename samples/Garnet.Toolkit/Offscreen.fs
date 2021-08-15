@@ -1,9 +1,8 @@
-﻿namespace CausalityDrive
+﻿namespace Garnet.Graphics
 
 open System
 open System.Collections.Generic
 open System.Numerics
-open Garnet.Samples.Engine
 open Veldrid
 
 type PositionTextureColorQuadMesh(device : GraphicsDevice) =

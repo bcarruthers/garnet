@@ -1,9 +1,10 @@
-﻿namespace Garnet.Samples.Engine
+﻿namespace Garnet.Graphics
 
 open System
 open System.IO
 open Veldrid
 open Veldrid.StartupUtilities
+open Garnet.Numerics
 
 type WindowDescriptor = {
     WindowX : int

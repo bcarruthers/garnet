@@ -1,4 +1,4 @@
-﻿namespace Garnet.Samples.Engine
+﻿namespace Garnet
 
 // The purpose of this is to avoid equality operator allocations for value types.
 // Be careful if using this with floating point values.

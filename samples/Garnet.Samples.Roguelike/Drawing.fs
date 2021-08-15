@@ -3,8 +3,7 @@
 open System.Buffers
 open System.Runtime.CompilerServices
 open Veldrid
-open Garnet.Samples.Engine
-open Garnet.Samples.Roguelike.Types
+open Garnet.Graphics
 
 [<Struct>]
 type DisplayTile = {

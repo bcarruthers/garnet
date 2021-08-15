@@ -2,7 +2,6 @@
 
 open System
 open System.Collections.Generic
-open Garnet.Samples.Roguelike.Types
 
 module Vector =
     let init x y = { x = x; y = y }

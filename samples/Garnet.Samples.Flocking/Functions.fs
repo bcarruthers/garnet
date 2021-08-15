@@ -3,7 +3,7 @@
 open System.Collections.Generic
 open System.Numerics
 open Veldrid
-open Garnet.Samples.Engine
+open Garnet.Numerics
 
 module WorldSettings =
     let defaults = {

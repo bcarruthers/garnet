@@ -3,8 +3,9 @@
 open System
 open System.Numerics
 open Veldrid
-open Garnet.Samples.Engine
 open Garnet.Composition
+open Garnet.Numerics
+open Garnet.Graphics
 
 module DrawingSystems =
     type Container with

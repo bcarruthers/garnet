@@ -1,4 +1,4 @@
-﻿namespace Garnet.Samples.Engine
+﻿namespace Garnet.Graphics
 
 open System
 open System.Buffers
@@ -8,6 +8,8 @@ open System.IO
 open System.Numerics
 open System.Runtime.InteropServices
 open Veldrid
+open Garnet.Numerics
+open Garnet.Resources
 
 /// JSON-serializable
 [<Struct>]

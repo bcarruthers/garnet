@@ -1,6 +1,6 @@
 ﻿namespace Garnet.Samples.Flocking
 
-open Garnet.Samples.Engine
+open Garnet.Graphics
 
 module Resources =
     let shaderSet = {

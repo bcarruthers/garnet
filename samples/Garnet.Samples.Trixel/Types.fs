@@ -1,7 +1,7 @@
 ﻿namespace Garnet.Samples.Trixel
 
 open System.Numerics
-open Garnet.Samples.Engine
+open Garnet.Numerics
 open Veldrid
 
 [<AutoOpen>]

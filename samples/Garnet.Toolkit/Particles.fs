@@ -1,8 +1,10 @@
-﻿namespace Garnet.Samples.Engine
+﻿namespace Garnet.Graphics
 
 open System.Collections.Generic
 open System.Numerics
 open Veldrid
+open Garnet.Numerics
+open Garnet.Collections
 
 type ParticleAnimation = {
     RandomSeed : uint64

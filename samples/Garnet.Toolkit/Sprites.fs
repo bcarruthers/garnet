@@ -1,4 +1,4 @@
-﻿namespace Garnet.Samples.Engine
+﻿namespace Garnet.Graphics
 
 open System
 open System.Collections.Generic
@@ -6,6 +6,7 @@ open System.Buffers
 open System.Numerics
 open System.Runtime.CompilerServices
 open Veldrid
+open Garnet.Numerics
 
 [<Struct>]    
 type Primitive =

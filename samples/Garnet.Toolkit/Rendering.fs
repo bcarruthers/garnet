@@ -1,8 +1,9 @@
-﻿namespace Garnet.Samples.Engine
+﻿namespace Garnet.Graphics
 
 open System
 open System.Collections.Generic
 open Veldrid
+open Garnet.Numerics
 
 type RenderContext(commands : CommandList) =
     let frameBuffers = Stack<Framebuffer>()

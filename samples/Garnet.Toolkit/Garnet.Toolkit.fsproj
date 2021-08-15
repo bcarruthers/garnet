@@ -7,10 +7,12 @@
     <IsOSX Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX)))' == 'true'">true</IsOSX>
     <IsLinux Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))' == 'true'">true</IsLinux>
     <Is64Bit Condition="'$(Prefer32Bit)' == 'false' Or '$(PlatformTarget)' == 'x64'">true</Is64Bit>
+    <RootNamespace>Garnet.Toolkit</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="Comparisons.fs" />
+    <Compile Include="Collections.fs" />
     <Compile Include="Numerics.fs" />
     <Compile Include="Vectors.fs" />
     <Compile Include="Ranges.fs" />
@@ -18,7 +20,6 @@
     <Compile Include="Hashing.fs" />
     <Compile Include="Random.fs" />
     <Compile Include="Noise.fs" />
-    <Compile Include="Collections.fs" />
     <Compile Include="Timing.fs" />
     <Compile Include="Resources.fs" />
     <Compile Include="Serialization.fs" />

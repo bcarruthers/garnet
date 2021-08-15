@@ -5,7 +5,7 @@ open System.Numerics
 open SixLabors.ImageSharp
 open Veldrid
 open ImGuiNET
-open Garnet.Samples.Engine
+open Garnet.Graphics
 
 module Image =
     let createRenderedGridImage param state =

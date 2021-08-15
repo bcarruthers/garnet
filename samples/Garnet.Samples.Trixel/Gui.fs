@@ -5,7 +5,8 @@ open System.IO
 open System.Numerics
 open Veldrid
 open ImGuiNET
-open Garnet.Samples.Engine
+open Garnet.Numerics
+open Garnet.Graphics
 
 type CursorGui() =
     member c.Draw(inputs : InputCollection, invProjView : Matrix4x4) =    

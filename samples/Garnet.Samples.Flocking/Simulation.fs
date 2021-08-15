@@ -3,7 +3,7 @@
 open System
 open System.Collections.Generic
 open System.Numerics
-open Garnet.Samples.Engine
+open Garnet.Numerics
 open Garnet.Composition
 
 module SimulationSystems =

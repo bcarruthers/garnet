@@ -4,8 +4,9 @@ open System
 open System.Numerics
 open System.Threading
 open Veldrid
-open Garnet.Samples.Engine
-open Garnet.Samples.Roguelike.Types
+open Garnet.Numerics
+open Garnet.Resources
+open Garnet.Graphics
 
 module Resources =
     let tileTexture = "drake-10x10-transparent.png"

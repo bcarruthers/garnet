@@ -39,7 +39,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Garnet\Garnet.fsproj" />
-    <ProjectReference Include="..\Garnet.Samples.Engine\Garnet.Samples.Engine.fsproj" />
+    <ProjectReference Include="..\Garnet.Toolkit\Garnet.Toolkit.fsproj" />
   </ItemGroup>
 
 </Project>

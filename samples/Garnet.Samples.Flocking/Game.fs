@@ -5,8 +5,10 @@ open System.Numerics
 open System.Diagnostics
 open System.Threading
 open Veldrid
-open Garnet.Samples.Engine
 open Garnet.Composition
+open Garnet.Numerics
+open Garnet.Resources
+open Garnet.Graphics
 
 type UpdateTimer(fixedDeltaTime) =
     let mutable lastTime = 0L

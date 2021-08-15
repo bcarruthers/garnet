@@ -1,8 +1,8 @@
-﻿namespace Garnet.Samples.Engine
+﻿namespace Garnet.Collections
 
 open System
 open System.Collections.Generic
-open Garnet.Samples.Engine.Comparisons
+open Garnet.Comparisons
 
 /// Mutable min-heap
 type Heap<'k, 'a when 'k :> IComparable<'k>>() =

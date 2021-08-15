@@ -3,7 +3,7 @@
 open System
 open System.Numerics
 open Newtonsoft.Json
-open Garnet.Samples.Engine
+open Garnet.Numerics
 open Veldrid
 
 module CellLocation =

@@ -1,4 +1,4 @@
-﻿namespace Garnet.Samples.Engine
+﻿namespace Garnet.Graphics
 
 open System
 open System.Collections.Generic
@@ -7,6 +7,8 @@ open System.Runtime.InteropServices
 open Veldrid
 open SixLabors.ImageSharp
 open SixLabors.ImageSharp.PixelFormats
+open Garnet.Numerics
+open Garnet.Resources
 
 type TextureAtlasEntry = {
     Bounds : Range2i

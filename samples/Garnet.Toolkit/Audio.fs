@@ -1,4 +1,4 @@
-﻿namespace Garnet.Samples.Engine
+﻿namespace Garnet.Audio
 
 open System
 open System.Collections.Generic
@@ -7,6 +7,8 @@ open System.IO
 open System.Runtime.InteropServices
 open OpenTK.Audio.OpenAL
 open OpenTK.Audio.OpenAL.Extensions
+open Garnet.Resources
+open Garnet.Collections
 
 [<Struct>]
 type SoundId = SoundId of int

@@ -1,4 +1,4 @@
-﻿namespace Garnet.Samples.Engine
+﻿namespace Garnet.Numerics
 
 // Adapted for F# from Stefan Gustavson code
 // Simplex noise demystified:

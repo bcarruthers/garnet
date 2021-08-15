@@ -5,7 +5,8 @@ open System.Buffers
 open System.Runtime.CompilerServices
 open System.Numerics
 open Veldrid
-open Garnet.Samples.Engine
+open Garnet.Numerics
+open Garnet.Graphics
 
 [<Extension>]
 type VertexSpanExtensions =

@@ -1,4 +1,4 @@
-open Garnet.Samples.Engine
+open Garnet.Resources
 open Garnet.Samples.Flocking
 
 [<EntryPoint>]
