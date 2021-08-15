@@ -1,16 +1,11 @@
 ﻿module Garnet.Tests.StateMachine
 
-open System
-open System.Collections.Generic
 open Garnet.Composition
 open Expecto
 
 module Partition =
     let globals = 0
     let objects = 1
-
-module Eid =
-    let globals = Eid.fromParts 0 Partition.globals 64
 
 [<Struct>]
 type WorldStatus =

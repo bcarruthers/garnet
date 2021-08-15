@@ -39,7 +39,7 @@ type Container() =
     member c.IterValues(param, handler) =
         reg.IterValues(param, handler)
     member c.GetAddresses() =
-        outbox.Current.addresses
+        outbox.Current.Addresses
     member internal c.Clear() =
         channels.Clear()
         components.Clear()
@@ -69,8 +69,8 @@ type Container() =
         while c.RunOnce() do
             c.DispatchAll()
     member c.Contains(eid : Eid) =
-        let sid = Eid.getSegmentIndex eid
-        let ci = Eid.getComponentIndex eid
+        let sid = eid.SegmentIndex
+        let ci = eid.ComponentIndex
         let mask = eids.GetMask sid
         (mask &&& (1UL <<< ci)) <> 0UL
     member c.Get(eid) = { 
@@ -79,8 +79,8 @@ type Container() =
         }
     member internal c.CreateEid(partition) =
         let eid = eidPools.Next(partition)
-        let sid = Eid.getSegmentIndex eid
-        let ci = Eid.getComponentIndex eid
+        let sid = eid.SegmentIndex
+        let ci = eid.ComponentIndex
         let data = eids.Add(sid, 1UL <<< ci)
         data.[ci] <- eid
         eid
@@ -93,8 +93,8 @@ type Container() =
     member c.Destroy(eid : Eid) =
         // Only removing from eids and relying on commit to remove
         // other components.
-        let sid = Eid.getSegmentIndex eid
-        let ci = Eid.getComponentIndex eid
+        let sid = eid.SegmentIndex
+        let ci = eid.ComponentIndex
         eids.Remove(sid, 1UL <<< ci)
     member c.Step deltaTime =
         scheduler.Step deltaTime
@@ -171,10 +171,10 @@ type PluginRegistry() =
 
 type Container with
     member c.GetSourceId() =
-        c.GetAddresses().sourceId
+        c.GetAddresses().SourceId
 
     member c.GetDestinationId() =
-        c.GetAddresses().destinationId
+        c.GetAddresses().DestinationId
 
     member c.Create(partition) =
         let eid = c.CreateEid(partition)
@@ -193,10 +193,10 @@ type Container with
         c.Run()
 
     member c.BeginRespond() =
-        c.BeginSend(c.GetAddresses().sourceId)
+        c.BeginSend(c.GetAddresses().SourceId)
 
     member c.Respond(msg) =
-        c.Send(c.GetAddresses().sourceId, msg)
+        c.Send(c.GetAddresses().SourceId, msg)
 
     member c.Register(name : string, register : Container -> IDisposable) =
         let reg = c.GetValue<PluginRegistry>()
@@ -206,7 +206,7 @@ type Container with
         let outbox = c.GetValue<Outbox>()
         use s = outbox.Push {
             Outbox = actorOutbox
-            SourceId = ActorId.undefined
+            SourceId = ActorId.Undefined
             DestinationId = actorId
             Message = ()
             }

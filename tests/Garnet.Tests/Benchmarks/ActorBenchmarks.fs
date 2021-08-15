@@ -73,7 +73,7 @@ module PingPong =
                     let c = Interlocked.Increment receivedCount
                     if log then
                         onReceive { 
-                            sourceId = ActorId.undefined
+                            sourceId = ActorId.Undefined
                             destId = actorId
                             sequence = c
                             payload = span.[0]
@@ -109,7 +109,7 @@ module PingPong =
                     batch.WriteValue (payload + i * 10000 |> int64)
                 if log  then
                     onSend { 
-                        sourceId = ActorId.undefined
+                        sourceId = ActorId.Undefined
                         destId = destId
                         sequence = 0
                         payload = payload |> int64

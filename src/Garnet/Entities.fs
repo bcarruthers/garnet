@@ -6,13 +6,6 @@ open Garnet
 open Garnet.Comparisons
 open Garnet.Formatting
 
-/// 32-bit entity ID
-[<Struct>]
-type Eid =
-    val Value : int
-    new(value) = { Value = value }
-    override e.ToString() = "0x" + e.Value.ToString("x")
-    
 module Eid =
     // Entity ID bits:
     // gggg gggg [ pppp xxxx xxxx xxxx xxxx xxxx ]
@@ -59,69 +52,61 @@ module Eid =
     
     [<Literal>]
     let IndexCount = 0x100000
+
+    [<Literal>]
     let IndexMask = 0xfffff
 
-    let inline init id = Eid id
+    [<Literal>]
+    let SegmentToPartitionBits = 14
 
-    let undefined = init 0
-    
-    let inline getIndex (eid : Eid) =
-        eid.Value &&& IndexMask
+    [<Literal>]
+    let SegmentInPartitionMask = 0x3fff
 
-    let inline getPartition (eid : Eid) =
-        (eid.Value >>> IndexBits) &&& PartitionMask
-
-    let inline getSlot (eid : Eid) =
-        eid.Value &&& SlotMask
-
-    let inline getGen (eid : Eid) = 
-        uint32 eid.Value >>> SlotBits |> int
-
-    let inline setGen (eid : Eid) gen =
-        (getSlot eid) ||| (gen <<< SlotBits)
-        |> init
-        
-    let inline incrementGen (eid : Eid) =
-        let gen = getGen eid
-        let next = (gen + 1) &&& GenMask
-        setGen eid next
-        
-    let inline getSegmentIndex (eid : Eid) = 
-        getSlot eid >>> Segment.segmentBits
-
-    let inline getComponentIndex (eid : Eid) = 
+/// 32-bit entity ID
+[<Struct>]
+type Eid =
+    val Value : int
+    new(value) = { Value = value }
+    new(gen, partition, index) = {
+        Value =
+            (gen <<< Eid.SlotBits) |||
+            (partition <<< Eid.IndexBits) |||
+            index
+        }
+    member inline eid.IsDefined = eid.Value <> 0
+    member inline eid.IsUndefined = eid.Value = 0
+    member inline eid.Index =
+        eid.Value &&& Eid.IndexMask
+    member inline eid.Slot =
+        eid.Value &&& Eid.SlotMask
+    member inline eid.Gen =
+        uint32 eid.Value >>> Eid.SlotBits |> int
+    member inline eid.Partition =
+        (eid.Value >>> Eid.IndexBits) &&& Eid.PartitionMask
+    member inline eid.SegmentIndex = 
+        eid.Slot >>> Segment.segmentBits
+    member inline eid.ComponentIndex = 
         eid.Value &&& Segment.segmentMask
-
-    let inline fromParts gen partition id =
-        (gen <<< SlotBits) |||
-        (partition <<< IndexBits) |||
-        id
-        |> init
-
-    let formatEid eid =
-        sprintf "%d %d %d" (getGen eid) (getPartition eid) (getIndex eid)
-
-    let segmentToPartitionBits = IndexBits - Segment.segmentBits
-    let segmentInPartitionMask = (1 <<< segmentToPartitionBits) - 1
-
-    let inline segmentToPartition sid =
-        sid >>> segmentToPartitionBits
-
-type Eid with
-    member i.Index = Eid.getIndex i
-    member i.Slot = Eid.getSlot i
-    member i.Gen = Eid.getGen i
-    member i.Partition = Eid.getPartition i
-    member i.IsDefined = i.Value <> 0
-    member i.IsUndefined = i.Value = 0
+    member inline eid.WithGen(gen) =
+        Eid(eid.Slot ||| (gen <<< Eid.SlotBits))
+    member inline eid.IncrementGen() =
+        let next = (eid.Gen + 1) &&& Eid.GenMask
+        eid.WithGen(next)
+    override e.ToString() =
+        "0x" + e.Value.ToString("x")
+    member eid.ToPartString() =
+        sprintf "%d %d %d" eid.Gen eid.Partition eid.Index
+    static member inline Undefined = Eid 0
+    static member inline SegmentToPartition(sid) =
+        sid >>> Eid.SegmentToPartitionBits
 
 [<Struct>]
 type EidSegmentKeyMapper =
     interface ISegmentKeyMapper<int, Eid> with
         [<MethodImpl(MethodImplOptions.AggressiveInlining)>]
-        member c.GetSegmentKey(id) = Eid.getSegmentIndex id
+        member c.GetSegmentKey(id) = id.SegmentIndex
         [<MethodImpl(MethodImplOptions.AggressiveInlining)>]
-        member c.GetComponentIndex(id) = Eid.getComponentIndex id
+        member c.GetComponentIndex(id) = id.ComponentIndex
 
 type Entity = Entity<int, Eid, EidSegmentKeyMapper>
 
@@ -167,7 +152,7 @@ type EidPool(partition) =
                 let mutable i = offset
                 while m <> 0UL do
                     if m &&& 1UL <> 0UL then 
-                        eids.[i] <- Eid.fromParts 0 partition i
+                        eids.[i] <- Eid(0, partition, i)
                     m <- m >>> 1
                     i <- i + 1
                 known.[si] <- UInt64.MaxValue
@@ -186,12 +171,12 @@ type EidPool(partition) =
     member c.Recycle(eid : Eid) =
         c.Apply {
             Data = null
-            Id = Eid.getSegmentIndex eid
+            Id = eid.SegmentIndex
             Mask = 0UL
-            RemovalMask = 1UL <<< (Eid.getComponentIndex eid)
+            RemovalMask = 1UL <<< eid.ComponentIndex
         }
     member internal c.Apply(seg : PendingSegment<int, Eid>) =
-        let sid = seg.Id &&& Eid.segmentInPartitionMask
+        let sid = seg.Id &&& Eid.SegmentInPartitionMask
         c.EnsureSize sid
         let offset = sid * 64
         if seg.Mask &&& seg.RemovalMask <> 0UL then
@@ -204,7 +189,7 @@ type EidPool(partition) =
             let mutable i = 0
             while m <> 0UL do
                 if m &&& 1UL <> 0UL then 
-                    eids.[offset + i] <- Eid.incrementGen seg.Data.[i]
+                    eids.[offset + i] <- seg.Data.[i].IncrementGen()
                 m <- m >>> 1
                 i <- i + 1
             known.[sid] <- known.[sid] ||| addMask
@@ -225,7 +210,7 @@ type EidPool(partition) =
             let mutable i = offset
             while m <> 0UL do
                 if m &&& 1UL <> 0UL then 
-                    eids.[i] <- Eid.incrementGen eids.[i]
+                    eids.[i] <- eids.[i].IncrementGen()
                 m <- m >>> 1
                 i <- i + 1
             used.[sid] <- used.[sid] &&& ~~~removalMask
@@ -259,7 +244,7 @@ type EidPools() =
     member c.Apply(active : Segments<int, Eid>) =
         for i = 0 to active.PendingCount - 1 do
             let seg = active.GetPending i
-            let p = Eid.segmentToPartition seg.Id
+            let p = Eid.SegmentToPartition(seg.Id)
             pools.[p].Apply seg        
     member c.Clear() =
         for pool in pools do

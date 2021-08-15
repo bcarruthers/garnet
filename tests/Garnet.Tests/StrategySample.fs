@@ -70,7 +70,7 @@ type Occupant = {
     }
 
 module Occupant =
-    let none = { unitEid = Eid.undefined }
+    let none = { unitEid = Eid.Undefined }
 
 // entity components    
 [<Struct>]

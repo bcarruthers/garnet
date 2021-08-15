@@ -24,28 +24,28 @@ type DispatcherDescriptor = {
     /// fairness while higher values reduce overhead from locking and other worker
     /// queue operations.
     Throughput : int
-    }
+    } with
 
-module DispatcherDescriptor =
     // Allow at least one background thread
-    let defaultThreadCount = Environment.ProcessorCount - 1 |> max 1
+    static member DefaultThreadCount =
+        Environment.ProcessorCount - 1 |> max 1
 
     /// Pool of background threads
-    let background = {
+    static member Background = {
         DispatcherType = DispatcherType.Background
-        ThreadCount = defaultThreadCount
+        ThreadCount = DispatcherDescriptor.DefaultThreadCount
         Throughput = 100
         }
 
     /// Single foreground thread
-    let foreground = {
+    static member Foreground = {
         DispatcherType = DispatcherType.Foreground
         ThreadCount = 0
         Throughput = 100
         }
 
     /// Single dedicated background thread
-    let dedicated = {
+    static member Dedicated = {
         DispatcherType = DispatcherType.Background
         ThreadCount = 1
         Throughput = 1000
@@ -55,25 +55,25 @@ type ActorSystemConfiguration = {
     /// The last dispatcher in the list is used if an actor defines 
     /// a dispatcher ID that does not exist
     Dispatchers : DispatcherDescriptor[]
-    }
-
-module ActorSystemConfiguration =
-    let singleThread = {
+    } with
+    
+    static member SingleThread = {
         Dispatchers = [| 
-            DispatcherDescriptor.foreground 
+            DispatcherDescriptor.Foreground 
             |]
         }
-
-    let createDefaults workerCount = 
-        if workerCount = 0 then singleThread
+    
+    static member Create(workerCount) = 
+        if workerCount = 0 then ActorSystemConfiguration.SingleThread
         else {
             Dispatchers = [| 
-                { DispatcherDescriptor.background with ThreadCount = workerCount }
-                DispatcherDescriptor.foreground
+                { DispatcherDescriptor.Background with ThreadCount = workerCount }
+                DispatcherDescriptor.Foreground
                 |]
             }
-
-    let defaults = createDefaults DispatcherDescriptor.defaultThreadCount
+        
+    static member Default =
+        ActorSystemConfiguration.Create(DispatcherDescriptor.DefaultThreadCount)
 
 type ActorException(sourceId : ActorId, destId : ActorId, msg : string, innerEx : Exception) =
     inherit Exception(msg, innerEx)
@@ -100,7 +100,7 @@ module internal Sending =
         let mutable bufferLength = 0
         let mutable recipientCount = 0
         let mutable receiveCount = 0
-        let mutable sourceId = ActorId.undefined
+        let mutable sourceId = ActorId.Undefined
         member c.SourceId = sourceId
         member c.Capacity = buffer.Length
         member c.Buffer = ReadOnlyMemory(buffer, 0, bufferLength)
@@ -120,7 +120,7 @@ module internal Sending =
             c.OriginPool <- null
             c.OriginStack <- null                    
             c.Sender <- NullOutboxSender.Instance
-            sourceId <- ActorId.undefined
+            sourceId <- ActorId.Undefined
             bufferLength <- 0
             recipientCount <- 0
         interface IMessageWriter<'a> with
@@ -922,8 +922,8 @@ type ActorSystem(config) =
     let outbox = SharedOutbox(pool, actors)
     let handlers = ExceptionHandlers()
     do dispatchers.SetDispatchers(actors, pool, handlers.Handle, config.Dispatchers)
-    new() = new ActorSystem(ActorSystemConfiguration.defaults)
-    new(workerCount) = new ActorSystem(ActorSystemConfiguration.createDefaults workerCount)
+    new() = new ActorSystem(ActorSystemConfiguration.Default)
+    new(workerCount) = new ActorSystem(ActorSystemConfiguration.Create(workerCount))
     member c.ActorCount =
         actors.Count
     member c.Register(factory : IActorFactory) =
@@ -956,7 +956,7 @@ type ActorSystem(config) =
             (Format.addIndent (pool.ToString()))
             (Format.addIndent (dispatchers.ToString()))
     static member CreateSingleThread() =
-        new ActorSystem(ActorSystemConfiguration.singleThread)
+        new ActorSystem(ActorSystemConfiguration.SingleThread)
 
 type NullMessagePump() =
     static let mutable instance = new NullMessagePump() :> IMessagePump
@@ -974,7 +974,7 @@ type ActorReference = {
     } with
     override c.ToString() = c.ActorId.ToString()
     static member Null = {
-        ActorId = ActorId.undefined
+        ActorId = ActorId.Undefined
         MessagePump = NullMessagePump.Instance
         }
 
@@ -1027,9 +1027,9 @@ module ActorSystem =
             c.Register(predicate, 0, register)
             
         /// Creates for any actor ID
-        member c.Register(disptcherId, register : Container -> IDisposable) =
+        member c.Register(dispatcherId, register : Container -> IDisposable) =
             let predicate (_ : ActorId) = true
-            c.Register(predicate, disptcherId, register)
+            c.Register(predicate, dispatcherId, register)
 
         member c.Register(register : Container -> IDisposable) =
             c.Register(0, register)

@@ -31,39 +31,41 @@ type ActorLogFilter = {
     }
 
 module ActorLogFilter =
+    let isAny (_ : ActorId) = true
+
     let all = {
-        actorFilter = ActorId.isAny
-        sourceFilter = ActorId.isAny
-        destinationFilter = ActorId.isAny
+        actorFilter = isAny
+        sourceFilter = isAny
+        destinationFilter = isAny
         }
 
     let singleLog actorId = {
         actorFilter = (=)actorId
-        sourceFilter = ActorId.isAny
-        destinationFilter = ActorId.isAny
+        sourceFilter = isAny
+        destinationFilter = isAny
         }
 
     let toActor actorId = {
         actorFilter = (=)actorId
-        sourceFilter = ActorId.isAny
-        destinationFilter = ActorId.isAny
+        sourceFilter = isAny
+        destinationFilter = isAny
         }
 
     let receivedBy actorId = {
         actorFilter = (=)actorId
-        sourceFilter = ActorId.isAny
+        sourceFilter = isAny
         destinationFilter = (=)actorId
         }
 
     let sent actorId = {
         actorFilter = (=)actorId
-        sourceFilter = ActorId.isAny
+        sourceFilter = isAny
         destinationFilter = (<>)actorId
         }
 
     let sentTo actorId destinationId = {
         actorFilter = (=)actorId
-        sourceFilter = ActorId.isAny
+        sourceFilter = isAny
         destinationFilter = (=)destinationId
         }
 
@@ -144,7 +146,7 @@ type DirectoryActorStreamSource(path) =
         
 /// Single file/stream
 type FileActorStreamSource(path) =
-    let actorIds = [| ActorId.undefined |] :> seq<_>
+    let actorIds = [| ActorId.Undefined |] :> seq<_>
     interface IActorStreamSource with
         member c.GetActorIds() = actorIds
         member c.OpenRead (id : ActorId) =

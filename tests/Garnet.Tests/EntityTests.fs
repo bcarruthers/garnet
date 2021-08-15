@@ -27,13 +27,12 @@ let tests =
 
     testList "entities" [
         testCase "increment ID version" <| fun () ->
-            Eid.fromParts 1 0 0 |> Eid.getGen |> shouldEqual 1
-            Eid.incrementGen (Eid 100) |> shouldEqual (Eid.fromParts 1 0 100)
+            Eid(1, 0, 0).Gen |> shouldEqual 1
+            Eid(100).IncrementGen() |> shouldEqual (Eid(1, 0, 100))
 
         testCase "incrementing ID version wraps" <| fun () ->
-            Eid.fromParts Eid.MaxGen 0 100 
-            |> Eid.incrementGen 
-            |> shouldEqual (Eid.fromParts 0 0 100)
+            Eid(Eid.MaxGen, 0, 100).IncrementGen()
+            |> shouldEqual (Eid(0, 0, 100))
 
         testCase "create IDs from pool" <| fun () ->
             let p = EidPools()

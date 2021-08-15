@@ -14,10 +14,7 @@ type ActorId =
     val Value : int
     new(value) = { Value = value }
     override e.ToString() = "0x" + e.Value.ToString("x")
-    
-module ActorId =
-    let undefined = ActorId 0
-    let isAny (_ : ActorId) = true
+    static member inline Undefined = ActorId 0
 
 [<Struct>]
 type Destination = {
@@ -45,7 +42,7 @@ type IOutbox =
 type MessageWriter<'a>(dispose : Action<_>) =
     let mutable pos = 0
     let mutable arr = ArrayPool<'a>.Shared.Rent(0)
-    let mutable sourceId = ActorId.undefined
+    let mutable sourceId = ActorId.Undefined
     let recipients = List<Destination>()
     new() = new MessageWriter<'a>(Action<_>(ignore))
     member c.Recipients = recipients
@@ -78,7 +75,7 @@ type MessageWriter<'a>(dispose : Action<_>) =
         span.CopyTo(writer.GetSpan(span.Length))
         writer.Advance(span.Length)
     member c.Dispose() = 
-        sourceId <- ActorId.undefined
+        sourceId <- ActorId.Undefined
         recipients.Clear()
         ArrayPool.Shared.Return(arr, true)
         arr <- ArrayPool<'a>.Shared.Rent(0)
@@ -208,8 +205,8 @@ type internal MessageTypeId<'a>() =
 type Mailbox() =
     let mutable lookup = Array.zeroCreate<obj>(8)
     let mutable outbox = NullOutbox() :> IOutbox
-    let mutable sourceId = ActorId.undefined
-    let mutable destId = ActorId.undefined
+    let mutable sourceId = ActorId.Undefined
+    let mutable destId = ActorId.Undefined
     member c.SourceId = sourceId
     member c.DestinationId = destId
     member c.OnAll<'a>(action : ReadOnlyMemory<'a> -> unit) =
@@ -243,8 +240,8 @@ type Mailbox() =
                     true
                 finally
                     outbox <- NullOutbox.Instance
-                    sourceId <- ActorId.undefined
-                    destId <- ActorId.undefined
+                    sourceId <- ActorId.Undefined
+                    destId <- ActorId.Undefined
             else false
         else false
     member c.BeginSend<'a>() =
@@ -394,33 +391,31 @@ type Disposable(dispose) =
 
 [<Struct>]
 type Addresses = {
-    sourceId : ActorId
-    destinationId : ActorId
-    }
-
-module Addresses = 
-    let undefined = {        
-        sourceId = ActorId.undefined
-        destinationId = ActorId.undefined
+    SourceId : ActorId
+    DestinationId : ActorId
+    } with
+    static member inline Undefined = {        
+        SourceId = ActorId.Undefined
+        DestinationId = ActorId.Undefined
         }
 
 [<Struct>]
 type internal MessageContext = {
-    addresses : Addresses
-    outbox : IOutbox
+    Addresses : Addresses
+    Outbox : IOutbox
     }
              
 module internal MessageContext = 
     let empty = {
-        addresses = Addresses.undefined
-        outbox = NullOutbox.Instance
+        Addresses = Addresses.Undefined
+        Outbox = NullOutbox.Instance
         }
     
     let fromEnvelope (c : Envelope<_>) = {
-        outbox = c.Outbox
-        addresses = {
-            sourceId = c.SourceId
-            destinationId = c.DestinationId
+        Outbox = c.Outbox
+        Addresses = {
+            SourceId = c.SourceId
+            DestinationId = c.DestinationId
             }
         }
 
@@ -447,7 +442,7 @@ type internal Outbox() =
     /// Create an outgoing message batch which is sent on batch disposal
     member c.BeginSend() =             
         // get current outbox
-        let batch = current.outbox.BeginSend()
+        let batch = current.Outbox.BeginSend()
         batchCount <- batchCount + 1
         batch
     interface IOutbox with
