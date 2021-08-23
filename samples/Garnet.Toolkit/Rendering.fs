@@ -3,7 +3,14 @@
 open System
 open System.Collections.Generic
 open Veldrid
-open Garnet.Numerics
+
+// Allow auto invalidate to avoid requiring extra call when every frame
+// is considered invalidated (for uses of manual mode, consider simple
+// turn-based games without animation or tools that don't need to be
+// constantly drawing.
+type Redraw =
+    | Manual = 0
+    | Auto = 1
 
 type RenderContext(commands : CommandList) =
     let frameBuffers = Stack<Framebuffer>()
@@ -17,66 +24,45 @@ type RenderContext(commands : CommandList) =
         frameBuffers.Pop() |> ignore
         if frameBuffers.Count > 0 then
             commands.SetFramebuffer(frameBuffers.Peek())
-   
-type IDrawable =
-    inherit IDisposable
-    abstract Draw : RenderContext -> unit
-
-type Drawable(draw) =
-    interface IDrawable with
-        member c.Draw(context) = draw context
-        member c.Dispose() = ()
-
-/// Adding drawables passes ownership and responsibility for disposal
-type DrawableCollection() =
-    let drawables = List<IDrawable>()
-    member c.Add(drawable) =
-        drawables.Add(drawable)
-    member c.Draw(context) =
-        for drawable in drawables do
-            drawable.Draw(context)
-    member c.Dispose() =
-        for drawable in drawables do
-            drawable.Dispose()
-    interface IDrawable with
-        member c.Draw(context) = c.Draw(context)
-        member c.Dispose() = c.Dispose()
         
-type Renderer(device : GraphicsDevice) =
-    let drawables = new DrawableCollection()
-    let cmds = device.ResourceFactory.CreateCommandList()
-    let context = RenderContext(cmds)
-    let mutable size = Vector2i.Zero
+type Renderer(device : GraphicsDevice, redraw) =
+    let commands = device.ResourceFactory.CreateCommandList()
+    let context = RenderContext(commands)
+    let mutable width = 0
+    let mutable height = 0
     let mutable valid = false
+    member c.Context = context
     member c.Invalidate() =
         valid <- false
-    member c.Add(drawable) =
-        drawables.Add(drawable)
-    member c.Draw(newSize : Vector2i, bgColor) =
-        if newSize <> size then
-            device.ResizeMainWindow(uint32 newSize.X, uint32 newSize.Y)
-            size <- newSize
-            valid <- false
-        // Require manual invalidation instead of constantly drawing
-        if not valid then
-            valid <- true
-            cmds.Begin()        
+    member c.BeginDraw(newWidth : int, newHeight : int, bgColor) =
+        let resized = newWidth <> width || newHeight <> height 
+        if resized then
+            device.ResizeMainWindow(uint32 newWidth, uint32 newHeight)
+            width <- newWidth
+            height <- newHeight
+        // Only proceed if something to redraw
+        if valid && not resized then false
+        else
+            commands.Begin()        
             // We want to render directly to the output window
             context.PushFramebuffer(device.SwapchainFramebuffer)
             // Clear viewports
-            cmds.ClearColorTarget(0u, bgColor)
-            // Call drawing
-            drawables.Draw(context)
-            // End() must be called before commands can be submitted for execution.
-            cmds.End()
-            device.SubmitCommands(cmds)
-            // Once commands have been submitted, the rendered image can be presented to 
-            // the application window.
-            device.SwapBuffers()
-            context.PopFramebuffer()
+            commands.ClearColorTarget(0u, bgColor)
+            // Mark valid if using manual redraw
+            match redraw with
+            | Redraw.Auto -> ()
+            | Redraw.Manual | _ -> valid <- true           
+            true
+    member c.EndDraw() =
+        // End() must be called before commands can be submitted for execution.
+        commands.End()
+        device.SubmitCommands(commands)
+        // Once commands have been submitted, the rendered image can be presented to 
+        // the application window.
+        device.SwapBuffers()
+        context.PopFramebuffer()
     member c.Dispose() =
-        drawables.Dispose()
-        cmds.Dispose()
+        device.WaitForIdle()
+        commands.Dispose()
     interface IDisposable with
-        member c.Dispose() =
-            c.Dispose()
+        member c.Dispose() = c.Dispose()

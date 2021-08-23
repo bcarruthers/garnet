@@ -21,7 +21,7 @@ module Resources =
         }
     
     let vehicleLayer = {
-        Depth = 2
+        LayerId = 2
         CameraId = 0
         Primitive = Quad
         FlushMode = FlushOnDraw
@@ -29,7 +29,7 @@ module Resources =
         }
 
     let trailLayer = {
-        Depth = 1
+        LayerId = 1
         CameraId = 0
         Primitive = Quad
         FlushMode = FlushOnDraw

@@ -17,39 +17,39 @@ module Components =
 
     [<Struct>]
     type Position = {
-        pos : Vector2
+        Pos : Vector2
         }
 
     [<Struct>]
     type Heading = {
-        direction : Vector2
-        speed : float32
+        Direction : Vector2
+        Speed : float32
         }
 
     [<Struct>]
     type Vehicle = {
-        radius : float32
-        maxSpeed : float32
+        Radius : float32
+        MaxSpeed : float32
         }
 
     [<Struct>]
     type TrailLifespan = {
-        trailLifespan : float32
+        TrailLifespan : float32
         }
 
     [<Struct>]
     type Lifespan = {
-        lifespan : float32
+        Lifespan : float32
         }
 
     [<Struct>]
     type AngularVelocity = {
-        rotationSpeed : float32
+        RotationSpeed : float32
         }
 
     [<Struct>]
     type Rotation = {
-        radians : float32
+        Radians : float32
         }
 
     type TrailEmitter = struct end
@@ -58,48 +58,48 @@ module Components =
 [<AutoOpen>]
 module Settings =
     type SteeringSettings = {
-        forwardWeight : float32
-        cohesionWeight : float32
-        tetherWeight : float32
-        separationWeight : float32
-        alignmentWeight : float32
-        maxAlignmentDistance : float32
-        maxSeparationDistance : float32
-        maxCohesionDistance : float32
-        maxTetherDistance : float32
+        ForwardWeight : float32
+        CohesionWeight : float32
+        TetherWeight : float32
+        SeparationWeight : float32
+        AlignmentWeight : float32
+        MaxAlignmentDistance : float32
+        MaxSeparationDistance : float32
+        MaxCohesionDistance : float32
+        MaxTetherDistance : float32
         }
 
     type WorldSettings = {
-        seed : int
-        spawnRange : float32
-        vehicleCount : int
-        maxVehicleSpeed : float32
-        trailLifespan : float32
-        steering : SteeringSettings
+        Seed : int
+        SpawnRange : float32
+        VehicleCount : int
+        MaxVehicleSpeed : float32
+        TrailLifespan : float32
+        Steering : SteeringSettings
         }
 
 [<AutoOpen>]
 module SteeringTypes =
     [<Struct>]
     type Steerer = {
-        steerPos : Vector2
-        steerDir : Vector2
+        SteerPos : Vector2
+        SteerDir : Vector2
         }
 
     [<Struct>]
     type Neighbor = {
-        direction : Vector2
-        directionToNeighbor : Vector2
-        distance : float32
-        teamWeight : float32
+        Direction : Vector2
+        DirectionToNeighbor : Vector2
+        Distance : float32
+        TeamWeight : float32
         }
 
     [<Struct>]
     type CurrentVehicle = {
-        eid : Eid
-        pos : Vector2
-        dir : Vector2
-        faction : Faction
+        Eid : Eid
+        Pos : Vector2
+        Dir : Vector2
+        Faction : Faction
         }
 
 [<AutoOpen>]

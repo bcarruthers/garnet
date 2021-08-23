@@ -4,61 +4,61 @@ open System
 open System.Collections.Generic
 
 module Vector =
-    let init x y = { x = x; y = y }
+    let init x y = { X = x; Y = y }
     let zero = init 0 0
     let one = init 1 1
 
-    let min a b = { x = min a.x b.x; y = min a.y b.y }
-    let max a b = { x = max a.x b.x; y = max a.y b.y }
+    let min a b = { X = min a.X b.X; Y = min a.Y b.Y }
+    let max a b = { X = max a.X b.X; Y = max a.Y b.Y }
 
     let add a b = { 
-        x = a.x + b.x
-        y = a.y + b.y
+        X = a.X + b.X
+        Y = a.Y + b.Y
         }
 
     let subtract a b = { 
-        x = a.x - b.x
-        y = a.y - b.y
+        X = a.X - b.X
+        Y = a.Y - b.Y
         }
 
 module Bounds =
-    let init min max = { min = min; max = max }
+    let init min max = { Min = min; Max = max }
     let sized min size = init min (Vector.add min size)
     let zero = init Vector.zero Vector.zero
     let zeroToOne = init Vector.zero Vector.one
 
     let maxToMin = {
-        min = { x = Int32.MaxValue; y = Int32.MaxValue }
-        max = { x = Int32.MinValue; y = Int32.MinValue }
+        Min = { X = Int32.MaxValue; Y = Int32.MaxValue }
+        Max = { X = Int32.MinValue; Y = Int32.MinValue }
         }
 
     let including bounds p = { 
-        min = Vector.min bounds.min p
-        max = Vector.max bounds.max p
+        Min = Vector.min bounds.Min p
+        Max = Vector.max bounds.Max p
         }
 
     let union a b = { 
-        min = Vector.min a.min b.min
-        max = Vector.max a.max b.max
+        Min = Vector.min a.Min b.Min
+        Max = Vector.max a.Max b.Max
         }
 
     let getSize b =
-        Vector.subtract b.max b.min
+        Vector.subtract b.Max b.Min
 
     let getCenter b =
-        let v = Vector.add b.max b.min
-        { x = v.x / 2; y = v.y / 2 }
+        let v = Vector.add b.Max b.Min
+        { X = v.X / 2; Y = v.Y / 2 }
 
     let getCentered contentSize b = 
         let size = getSize b
         {
-            x = b.min.x + (size.x - contentSize.x) / 2
-            y = b.min.y + (size.y - contentSize.y) / 2
+            X = b.Min.X + (size.X - contentSize.X) / 2
+            Y = b.Min.Y + (size.Y - contentSize.Y) / 2
         }
         
     let expand margin b = {
-        min = Vector.subtract b.min margin.min
-        max = Vector.add b.max margin.max
+        Min = Vector.subtract b.Min margin.Min
+        Max = Vector.add b.Max margin.Max
         }
 
     let includingAll locs =
@@ -76,14 +76,14 @@ module Direction =
 
     let getNext loc dir =
         match dir with
-        | East -> { loc with x = loc.x + 1 } 
-        | West -> { loc with x = loc.x - 1 }
-        | North -> { loc with y = loc.y - 1 }
-        | South -> { loc with y = loc.y + 1 }
+        | East -> { loc with X = loc.X + 1 } 
+        | West -> { loc with X = loc.X - 1 }
+        | North -> { loc with Y = loc.Y - 1 }
+        | South -> { loc with Y = loc.Y + 1 }
     
 module DistanceMap =
     let empty = {
-        distances = Map.empty
+        Distances = Map.empty
         }
 
     let create isPassable (tiles : Map<Vector, _>) seeds =
@@ -106,14 +106,14 @@ module DistanceMap =
                 let next = Direction.getNext p dir
                 enqueue next nextDist
         {
-            distances = 
+            Distances = 
                 result
                 |> Seq.map (fun kvp -> kvp.Key, kvp.Value)
                 |> Map.ofSeq
         }
 
     let getDistance p map =
-        match map.distances.TryGetValue(p) with
+        match map.Distances.TryGetValue(p) with
         | true, dist -> dist
         | false, _ -> Int32.MaxValue
 
@@ -126,83 +126,83 @@ module DistanceMap =
         else '+'
     
     let format map =
-        let b = map.distances |> Seq.map (fun kvp -> kvp.Key) |> Bounds.includingAll
+        let b = map.Distances |> Seq.map (fun kvp -> kvp.Key) |> Bounds.includingAll
         let size = Bounds.getSize b
-        let dw = size.x + 1
-        let data = Array.create (dw * size.y) ' '
-        for y = 0 to size.y - 1 do
+        let dw = size.X + 1
+        let data = Array.create (dw * size.Y) ' '
+        for y = 0 to size.Y - 1 do
             data.[y * dw + dw - 1] <- '\n'
-        for kvp in map.distances do
-            let p = Vector.subtract kvp.Key b.min
-            data.[p.y * dw + p.x] <- distanceToChar kvp.Value
+        for kvp in map.Distances do
+            let p = Vector.subtract kvp.Key b.Min
+            data.[p.Y * dw + p.X] <- distanceToChar kvp.Value
         String(data)
 
 module Tile =
     let getChar tile =
-        match tile.entity with
+        match tile.Entity with
         | Some e ->
-            match e.entityType with
+            match e.EntityType with
             | Rogue -> '@'
             | Minion -> 'm'
         | None ->
-            match tile.terrain with
+            match tile.Terrain with
             | Floor -> '.'
             | Wall -> '#' 
 
     let getMoveEvents loc nextLoc dir tile = seq {
-        match tile.entity with
+        match tile.Entity with
         | Some entity -> 
-            if entity.hits = 1 then yield Destroyed nextLoc
+            if entity.Hits = 1 then yield Destroyed nextLoc
             else
                 yield Attacked {
-                    attackerLoc = loc
-                    attackDir = dir
-                    damage = 1     
+                    AttackerLoc = loc
+                    AttackDir = dir
+                    Damage = 1     
                     }
         | None -> yield Moved {
-            sourceLoc = loc
-            moveDir = dir
+            SourceLoc = loc
+            MoveDir = dir
             }
         }
     
     let addEntity entity tile =
-        { tile with entity = Some entity }
+        { tile with Entity = Some entity }
 
     let removeEntity tile =
-        { tile with entity = None }
+        { tile with Entity = None }
 
     let isPassable tile =
-        match tile.terrain with
+        match tile.Terrain with
         | Wall -> false
         | Floor -> true
         
 module Entity =
     let rogue = {
-        entityType = Rogue
-        hits = 3
+        EntityType = Rogue
+        Hits = 3
     }
 
     let minion = {
-        entityType = Minion
-        hits = 1
+        EntityType = Minion
+        Hits = 1
     }
 
     let applyDamage damage entity =
-        { entity with hits = entity.hits - damage }
+        { entity with Hits = entity.Hits - damage }
 
 module Animation =
     let format =
         function
-        | Moving e -> $"Moved {e.moveDir}"
-        | Attacking e -> $"{e.attackerEntityType} attacked {e.targetEntityType}"
-        | Destroying e -> $"{e.destroyedEntityType} destroyed"
+        | Moving e -> $"Moved {e.MoveDir}"
+        | Attacking e -> $"{e.AttackerEntityType} attacked {e.TargetEntityType}"
+        | Destroying e -> $"{e.DestroyedEntityType} destroyed"
 
 module World =
     let empty = {
-        turn = 0
-        randomSeed = 0UL
-        tiles = Map.empty
-        animations = List.empty
+        Turn = 0
+        RandomSeed = 0UL
+        Tiles = Map.empty
+        Animations = List.empty
         }
 
     let generate mapRadius seed =
@@ -241,8 +241,8 @@ module World =
                     let terrain = if cells2.[i] then Wall else Floor
                     let p = Vector.init x y
                     yield p, {
-                        terrain = terrain
-                        entity =
+                        Terrain = terrain
+                        Entity =
                             match terrain with
                             | Wall -> None
                             | Floor ->
@@ -252,57 +252,57 @@ module World =
                     }
             }
         { empty with 
-            randomSeed = uint64 seed
-            tiles = Map.ofSeq tiles
+            RandomSeed = uint64 seed
+            Tiles = Map.ofSeq tiles
         }
 
     let getMinLocation world =
-        world.tiles |> Seq.map (fun kvp -> kvp.Key) |> Seq.reduce Vector.min
+        world.Tiles |> Seq.map (fun kvp -> kvp.Key) |> Seq.reduce Vector.min
 
     let formatTiles world =
-        let b = world.tiles |> Seq.map (fun kvp -> kvp.Key) |> Bounds.includingAll
+        let b = world.Tiles |> Seq.map (fun kvp -> kvp.Key) |> Bounds.includingAll
         let size = Bounds.getSize b
-        let dw = size.x + 1
-        let data = Array.create (dw * size.y) ' '
-        for y = 0 to size.y - 1 do
+        let dw = size.X + 1
+        let data = Array.create (dw * size.Y) ' '
+        for y = 0 to size.Y - 1 do
             data.[y * dw + dw - 1] <- '\n'
-        for kvp in world.tiles do
-            let p = Vector.subtract kvp.Key b.min
-            data.[p.y * dw + p.x] <- Tile.getChar kvp.Value
+        for kvp in world.Tiles do
+            let p = Vector.subtract kvp.Key b.Min
+            data.[p.Y * dw + p.X] <- Tile.getChar kvp.Value
         String(data)
 
     let formatAnimations world =
-        world.animations
+        world.Animations
         |> List.rev
         |> Seq.map Animation.format
         |> String.concat "\n"
 
     let format world =
-        $"Turn {world.turn}:\n{formatAnimations world}\n{formatTiles world}"
+        $"Turn {world.Turn}:\n{formatAnimations world}\n{formatTiles world}"
 
     let getEntityLocations entityType world = seq {
-        for kvp in world.tiles do
-            match kvp.Value.entity with
-            | Some entity -> if entity.entityType = entityType then yield kvp.Key
+        for kvp in world.Tiles do
+            match kvp.Value.Entity with
+            | Some entity -> if entity.EntityType = entityType then yield kvp.Key
             | None -> ()
         }
         
     let isOccupied loc world =
-        match Map.tryFind loc world.tiles with
-        | Some tile -> tile.terrain = Wall || tile.entity.IsSome
+        match Map.tryFind loc world.Tiles with
+        | Some tile -> tile.Terrain = Wall || tile.Entity.IsSome
         | None -> true
         
     let tryGetEntity loc world =
-        Map.tryFind loc world.tiles
-        |> Option.bind (fun tile -> tile.entity)
+        Map.tryFind loc world.Tiles
+        |> Option.bind (fun tile -> tile.Entity)
 
     let mapTile map loc world =
-        match Map.tryFind loc world.tiles with
-        | Some tile -> { world with tiles = Map.add loc (map tile) world.tiles }
+        match Map.tryFind loc world.Tiles with
+        | Some tile -> { world with Tiles = Map.add loc (map tile) world.Tiles }
         | None -> world
 
     let mapEntity map loc world =
-        mapTile (fun tile -> { tile with entity = Option.map map tile.entity }) loc world
+        mapTile (fun tile -> { tile with Entity = Option.map map tile.Entity }) loc world
 
     let addEntity loc entity world =
         mapTile (Tile.addEntity entity) loc world
@@ -319,28 +319,28 @@ module World =
         | None -> world
 
     let appendAnimation anim world = {
-        world with animations = anim :: world.animations
+        world with Animations = anim :: world.Animations
         }
 
     let find entityType world =
-        world.tiles
+        world.Tiles
         |> Map.tryPick (fun loc tile ->
-            tile.entity 
+            tile.Entity 
             |> Option.bind (fun e -> 
-                if e.entityType = entityType then Some (loc, e) else None))
+                if e.EntityType = entityType then Some (loc, e) else None))
 
     let getDistanceMap map targets =
-        DistanceMap.create Tile.isPassable map.tiles targets
+        DistanceMap.create Tile.isPassable map.Tiles targets
 
     let stepTurn world =
-        { world with turn = world.turn + 1 }
+        { world with Turn = world.Turn + 1 }
 
 module Action =
     let getEvents action loc world =
         match action with
         | Move dir ->
             let nextLoc = Direction.getNext loc dir
-            match Map.tryFind nextLoc world.tiles with
+            match Map.tryFind nextLoc world.Tiles with
             | Some tile -> Tile.getMoveEvents loc nextLoc dir tile
             | None -> Seq.empty
 
@@ -353,29 +353,29 @@ module Event =
     let applyEvent world event =
         match event with
         | Attacked e -> 
-            match World.tryGetEntity e.attackerLoc world with
+            match World.tryGetEntity e.AttackerLoc world with
             | None -> world
             | Some attacker ->
-                let targetLoc = Direction.getNext e.attackerLoc e.attackDir
+                let targetLoc = Direction.getNext e.AttackerLoc e.AttackDir
                 match World.tryGetEntity targetLoc world with
                 | None -> world
                 | Some target ->
                     world
-                    |> World.mapEntity (Entity.applyDamage e.damage) targetLoc
+                    |> World.mapEntity (Entity.applyDamage e.Damage) targetLoc
                     |> World.appendAnimation (Attacking {
-                        attackerLoc = e.attackerLoc
-                        attackerEntityType = attacker.entityType
-                        attackDir = e.attackDir
-                        damage = e.damage
-                        targetEntityType = target.entityType
+                        AttackerLoc = e.AttackerLoc
+                        AttackerEntityType = attacker.EntityType
+                        AttackDir = e.AttackDir
+                        Damage = e.Damage
+                        TargetEntityType = target.EntityType
                         })
         | Moved e -> 
-            let targetLoc = Direction.getNext e.sourceLoc e.moveDir
+            let targetLoc = Direction.getNext e.SourceLoc e.MoveDir
             world
-            |> World.moveEntity e.sourceLoc targetLoc
+            |> World.moveEntity e.SourceLoc targetLoc
             |> World.appendAnimation (Moving {
-                sourceLoc = e.sourceLoc
-                moveDir = e.moveDir
+                SourceLoc = e.SourceLoc
+                MoveDir = e.MoveDir
                 })
         | Destroyed p -> 
             match World.tryGetEntity p world with
@@ -384,8 +384,8 @@ module Event =
                 world
                 |> World.removeEntity p
                 |> World.appendAnimation (Destroying {
-                    destroyedLoc = p
-                    destroyedEntityType = target.entityType
+                    DestroyedLoc = p
+                    DestroyedEntityType = target.EntityType
                     })
 
 module Loop =
@@ -428,8 +428,8 @@ module Loop =
                     let next = Direction.getNext p dir
                     DistanceMap.getDistance next dm)
             Moved {
-                sourceLoc = p
-                moveDir = nearestDir
+                SourceLoc = p
+                MoveDir = nearestDir
                 }
             |> Event.applyEvent world
         
@@ -441,7 +441,7 @@ module Loop =
         |> Seq.fold (fun state p -> getHostileMoveEvents p dm state) world           
             
     let stepWorld world action =
-        { world with animations = List.empty }
+        { world with Animations = List.empty }
         |> applyPlayerEvents action
         |> applyHostileEvents
         |> World.stepTurn

@@ -7,21 +7,21 @@ open Garnet.Numerics
 
 module WorldSettings =
     let defaults = {
-        seed = 1
-        vehicleCount = 100
-        spawnRange = 300.0f
-        maxVehicleSpeed = 50.0f
-        trailLifespan = 0.6f
-        steering = {
-            forwardWeight = 20.0f
-            cohesionWeight = 3.0f
-            tetherWeight = 1.0f
-            separationWeight = 3.0f
-            alignmentWeight = 1.0f
-            maxAlignmentDistance = 100.0f
-            maxSeparationDistance = 70.0f
-            maxCohesionDistance = 400.0f
-            maxTetherDistance = 300.0f
+        Seed = 1
+        VehicleCount = 100
+        SpawnRange = 300.0f
+        MaxVehicleSpeed = 50.0f
+        TrailLifespan = 0.6f
+        Steering = {
+            ForwardWeight = 20.0f
+            CohesionWeight = 3.0f
+            TetherWeight = 1.0f
+            SeparationWeight = 3.0f
+            AlignmentWeight = 1.0f
+            MaxAlignmentDistance = 100.0f
+            MaxSeparationDistance = 70.0f
+            MaxCohesionDistance = 400.0f
+            MaxTetherDistance = 300.0f
         }
     }
 
@@ -42,13 +42,13 @@ module Scalar =
 
 module Heading =
     let getVelocity vehicle =
-        vehicle.speed * vehicle.direction
+        vehicle.Speed * vehicle.Direction
 
     let fromVelocity (newVelocity : Vector2) =
         let newSpeed = newVelocity.Length()
         { 
-            speed = newSpeed 
-            direction = newVelocity.DivideOrZero(newSpeed)
+            Speed = newSpeed 
+            Direction = newVelocity.DivideOrZero(newSpeed)
         }
 
     let getNextPosition (deltaTime : float32) vehicle pos =
@@ -58,11 +58,11 @@ module Heading =
 
 module Steering =
     let getForward current =
-        current.steerDir
+        current.SteerDir
 
     let getTether maxDistance current =
         let tetherPoint = Vector2.Zero
-        let toTether = tetherPoint - current.steerPos
+        let toTether = tetherPoint - current.SteerPos
         let distance = toTether.Length()
         let scale = Scalar.smoothStep 0.0f maxDistance distance
         toTether.DivideOrZero(distance) * scale
@@ -70,31 +70,31 @@ module Steering =
     let getCohesion minDistance maxDistance (neighbors : List<Neighbor>) =
         let mutable sum = Vector2.Zero
         for neighbor in neighbors do
-            let weight = Scalar.smoothStep minDistance maxDistance neighbor.distance
-            sum <- sum + (neighbor.teamWeight * weight) * neighbor.directionToNeighbor
+            let weight = Scalar.smoothStep minDistance maxDistance neighbor.Distance
+            sum <- sum + (neighbor.TeamWeight * weight) * neighbor.DirectionToNeighbor
         sum.NormalizeOrZero()
 
     let getSeparation maxDistance (neighbors : List<_>) =
         let mutable sum = Vector2.Zero
         for neighbor in neighbors do
-            let weight = Scalar.smoothStep maxDistance 0.0f neighbor.distance
-            sum <- sum + -weight * neighbor.directionToNeighbor
+            let weight = Scalar.smoothStep maxDistance 0.0f neighbor.Distance
+            sum <- sum + -weight * neighbor.DirectionToNeighbor
         sum
 
     let getAlignment maxDistance (neighbors : List<_>) current =
         let mutable sum = Vector2.Zero
         for neighbor in neighbors do
-            let weight = Scalar.smoothStep maxDistance 0.0f neighbor.distance
-            sum <- sum + -(neighbor.teamWeight * weight) * current.steerDir
+            let weight = Scalar.smoothStep maxDistance 0.0f neighbor.Distance
+            sum <- sum + -(neighbor.TeamWeight * weight) * current.SteerDir
         sum.NormalizeOrZero()
 
     let getSteeringDirection s neighbors current =
         let sum = 
-            getForward current * s.forwardWeight +
-            getTether s.maxTetherDistance current * s.tetherWeight +
-            getCohesion s.maxSeparationDistance s.maxCohesionDistance neighbors * s.cohesionWeight +
-            getSeparation s.maxSeparationDistance neighbors * s.separationWeight +
-            getAlignment s.maxAlignmentDistance neighbors current * s.alignmentWeight
+            getForward current * s.ForwardWeight +
+            getTether s.MaxTetherDistance current * s.TetherWeight +
+            getCohesion s.MaxSeparationDistance s.MaxCohesionDistance neighbors * s.CohesionWeight +
+            getSeparation s.MaxSeparationDistance neighbors * s.SeparationWeight +
+            getAlignment s.MaxAlignmentDistance neighbors current * s.AlignmentWeight
         sum.NormalizeOrZero()
         
 module Faction =

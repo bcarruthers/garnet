@@ -17,8 +17,8 @@ module DrawingSystems =
                 let mesh = layers.GetVertices(Resources.vehicleLayer)
                 for r in c.Query<Vehicle, Position, Faction, Heading>() do
                     mesh.DrawSprite(
-                        center = r.Value2.pos, 
-                        rotation = r.Value4.direction,
+                        center = r.Value2.Pos, 
+                        rotation = r.Value4.Direction,
                         size = 0.1f * Vector2(1.0f, 1.0f) * 140.0f,
                         texBounds = texBounds,
                         fg = Faction.toColor r.Value3,
@@ -32,11 +32,11 @@ module DrawingSystems =
                 let mesh = layers.GetVertices(Resources.trailLayer)
                 for r in c.Query<Trail, Position, Faction, Lifespan, Rotation>() do
                     mesh.DrawSprite(
-                        center = r.Value2.pos, 
-                        rotation = Vector2.FromRadians(r.Value5.radians),
-                        size = r.Value4.lifespan * 0.3f * Vector2.One * 60.0f,
+                        center = r.Value2.Pos, 
+                        rotation = Vector2.FromRadians(r.Value5.Radians),
+                        size = r.Value4.Lifespan * 0.3f * Vector2.One * 60.0f,
                         texBounds = texBounds,
-                        fg = (Faction.toColor r.Value3).MultiplyAlpha(r.Value4.lifespan * 0.3f),
+                        fg = (Faction.toColor r.Value3).MultiplyAlpha(r.Value4.Lifespan * 0.3f),
                         bg = RgbaFloat.Clear)
 
     let register (c : Container) =

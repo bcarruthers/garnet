@@ -72,7 +72,7 @@ type ColorDepthRenderTarget(device : GraphicsDevice, width, height) =
     interface IDisposable with
         member c.Dispose() = c.Dispose()
 
-type ColorRenderTarget(device : GraphicsDevice, width, height) =
+type ColorRenderTargetBuffer(device : GraphicsDevice, width, height) =
     let renderTarget =
         device.ResourceFactory.CreateTexture(
             TextureDescription(
@@ -99,7 +99,7 @@ type ColorRenderTarget(device : GraphicsDevice, width, height) =
         member c.Dispose() = c.Dispose()
 
 type ColorRenderTargetPipeline(device : GraphicsDevice, width, height, shaders, sampler, blend) =
-    let target = new ColorRenderTarget(device, width, height)
+    let target = new ColorRenderTargetBuffer(device, width, height)
     let pipelines = Dictionary<_, TextureTrianglePipeline>()
     member c.Width = width
     member c.Height = height
@@ -125,34 +125,43 @@ type ColorRenderTargetPipeline(device : GraphicsDevice, width, height, shaders, 
 
 /// Offscreen render target along with a quad mesh so render target can be drawn in
 /// another viewport. Does not take ownership of shaders or drawables.
-type OffscreenQuadDrawable(device : GraphicsDevice, width, height, shaders, filtering, blend) =
+type RenderTarget(device : GraphicsDevice, shaders, filtering, blend) =
     let sampler = device.GetSampler(filtering)
-    let drawables = new DrawableCollection()
     let mesh = new PositionTextureColorQuadMesh(device)
-    let mutable pipeline = new ColorRenderTargetPipeline(device, width, height, shaders, sampler, blend)
+    let mutable pipelineOpt = ValueNone
     member val Background = RgbaFloat.Black with get, set
     member val WorldTransform = Matrix4x4.Identity with get, set
-    member c.Resize(width, height) =
-        if pipeline.Width <> width || pipeline.Height <> height then
-            pipeline.Dispose()
-            pipeline <- new ColorRenderTargetPipeline(device, width, height, shaders, sampler, blend)
-    member c.Add(drawable) =
-        drawables.Add(drawable)
-    member c.Draw(context) =
+    member val Width = 0 with get, set
+    member val Height = 0 with get, set
+    member private c.CreatePipeline() =
+        let pipeline = new ColorRenderTargetPipeline(device, c.Width, c.Height, shaders, sampler, blend)
+        pipelineOpt <- ValueSome pipeline
+        pipeline
+    member c.BeginDraw(context) =
+        let pipeline =
+            match pipelineOpt with
+            | ValueNone -> c.CreatePipeline()
+            | ValueSome pipeline ->
+                if pipeline.Width = c.Width && pipeline.Height = c.Height then pipeline
+                else 
+                    pipeline.Dispose()
+                    c.CreatePipeline()
         // Set target before making draw calls for render target
         pipeline.PushFramebuffer(context)
         context.Commands.ClearColorTarget(0u, c.Background)
-        // Draw onto render target
-        drawables.Draw(context)
-        // Draw render target itself as a quad
-        context.PopFramebuffer()
-        pipeline.SetPipeline(context.Commands, c.WorldTransform, context.OutputDescription)
-        mesh.Draw(context.Commands)
+    member c.EndDraw(context : RenderContext) =
+        match pipelineOpt with
+        | ValueNone -> () 
+        | ValueSome pipeline ->
+            // Draw render target itself as a quad
+            context.PopFramebuffer()
+            pipeline.SetPipeline(context.Commands, c.WorldTransform, context.OutputDescription)
+            mesh.Draw(context.Commands)
     member c.Dispose() =
-        pipeline.Dispose()
+        match pipelineOpt with
+        | ValueNone -> ()
+        | ValueSome pipeline -> pipeline.Dispose()
         mesh.Dispose()
-    interface IDrawable with
-        member c.Draw(context) = c.Draw(context)
     interface IDisposable with
         member c.Dispose() = c.Dispose()
 

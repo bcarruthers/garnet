@@ -3,13 +3,13 @@
 [<AutoOpen>]
 module WorldTypes =
     type Vector = {
-        x : int
-        y : int
+        X : int
+        Y : int
         }
 
     type Bounds = {
-        min : Vector
-        max : Vector
+        Min : Vector
+        Max : Vector
         }
 
     type Direction =
@@ -19,7 +19,7 @@ module WorldTypes =
         | South
 
     type DistanceMap = {
-        distances : Map<Vector, int>
+        Distances : Map<Vector, int>
         }
         
     type Terrain =
@@ -31,27 +31,27 @@ module WorldTypes =
         | Minion
 
     type Entity = {
-        entityType : EntityType
-        hits : int
+        EntityType : EntityType
+        Hits : int
         }
 
     type Tile = {
-        terrain : Terrain
-        entity : Entity option
+        Terrain : Terrain
+        Entity : Entity option
         }
 
     type Action =
         | Move of Direction
 
     type MovedEvent = {
-        sourceLoc : Vector
-        moveDir : Direction
+        SourceLoc : Vector
+        MoveDir : Direction
         }
 
     type AttackedEvent = {
-        attackerLoc : Vector
-        attackDir : Direction
-        damage : int
+        AttackerLoc : Vector
+        AttackDir : Direction
+        Damage : int
         }
 
     /// Events hold the minimal information needed to reconstruct world state
@@ -61,21 +61,21 @@ module WorldTypes =
         | Destroyed of Vector
         
     type MovingEvent = {
-        sourceLoc : Vector
-        moveDir : Direction
+        SourceLoc : Vector
+        MoveDir : Direction
         }
 
     type AttackingAnimation = {
-        attackerLoc : Vector
-        attackerEntityType : EntityType
-        attackDir : Direction
-        damage : int
-        targetEntityType : EntityType
+        AttackerLoc : Vector
+        AttackerEntityType : EntityType
+        AttackDir : Direction
+        Damage : int
+        TargetEntityType : EntityType
         }
         
     type DestroyingAnimation = {
-        destroyedLoc : Vector
-        destroyedEntityType : EntityType
+        DestroyedLoc : Vector
+        DestroyedEntityType : EntityType
         }
 
     /// Animations can enriched with extra info to help present events that occurred
@@ -86,10 +86,10 @@ module WorldTypes =
         | Destroying of DestroyingAnimation
 
     type World = {
-        turn : int
-        randomSeed : uint64
-        tiles : Map<Vector, Tile>
-        animations : Animation list
+        Turn : int
+        RandomSeed : uint64
+        Tiles : Map<Vector, Tile>
+        Animations : Animation list
         }
 
     [<Struct>]

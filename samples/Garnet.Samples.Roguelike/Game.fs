@@ -7,6 +7,7 @@ open Veldrid
 open Garnet.Numerics
 open Garnet.Resources
 open Garnet.Graphics
+open Garnet.Input
 
 module Resources =
     let tileTexture = "drake-10x10-transparent.png"
@@ -27,7 +28,7 @@ module Resources =
 
     // Avoid auto flush since we only update when an action occurs
     let tileLayer = {
-        Depth = 0
+        LayerId = 0
         CameraId = 0
         Primitive = Quad
         FlushMode = NoFlush
@@ -71,13 +72,13 @@ type Game(fs : IReadOnlyFolder) =
     let mapRadius = 15
     let mapExtent = mapRadius * 2 + 1
     // Create window and graphics device
-    let ren = new WindowRenderer { 
-        Title = "Roguelike" 
-        WindowX = 100
-        WindowY = 100
-        WindowWidth = mapExtent * tileWidth * tileScale
-        WindowHeight = mapExtent * tileHeight * tileScale
-        }
+    let ren =
+        new WindowRenderer( 
+            title = "Roguelike",
+            width = mapExtent * tileWidth * tileScale,
+            height = mapExtent * tileHeight * tileScale,
+            redraw = Redraw.Manual,
+            Background = RgbaFloat.Black)
     // Initialize rendering
     let shaders = new ShaderSetCache()
     let textures = new TextureCache()
@@ -85,20 +86,20 @@ type Game(fs : IReadOnlyFolder) =
     do 
         shaders.Load(ren.Device, fs, Resources.shaderSet)
         textures.Add(Resources.tileTexture, ren.Device.CreateTexture(image))
-        ren.Background <- RgbaFloat.Black
-        ren.Add(sprites)
     member c.Run() =
         // Set transforms so drawing code can use tile coords for source (16x16 tileset) 
         // and destination (80x25 display tiles)
+        let cameras = CameraSet()
         let texTileSize = 1.0f / 16.0f
-        let camera = sprites.GetCamera(0)
+        let camera = cameras.[0]
         camera.WorldTransform <- Matrix4x4.CreateScale(float32 tileWidth, float32 tileHeight, 1.0f)
         camera.TextureTransform <- Matrix4x4.CreateScale(texTileSize, texTileSize, 1.0f)
         // Start loop
+        let inputs = InputCollection()
         let mutable state = World.generate mapRadius 1
         sprites.DrawWorld(state)
-        while ren.Update(0.0f) do
-            for e in ren.Inputs.KeyDownEvents do
+        while ren.Update(0.0f, inputs) do
+            for e in inputs.KeyDownEvents do
                 match Command.getCommand e.KeyCode with
                 | Command.FullScreen -> ren.ToggleFullScreen()
                 | Command.None -> ()
@@ -110,13 +111,15 @@ type Game(fs : IReadOnlyFolder) =
                         sprites.DrawWorld(state)
                         // Note we only invalidate when something changes instead of every frame
                         ren.Invalidate()
-            // Update transforms according to window size so we can draw using pixel coords
-            // with origin in upper left of view
-            let displayScale = float32 tileScale
-            let size = ren.WindowSize.ToVector2() / displayScale
-            camera.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, -size.Y, -100.0f, 100.0f)
-            camera.ViewTransform <- Matrix4x4.CreateTranslation(-size.X * 0.5f, -size.Y * 0.5f, 0.0f)
-            ren.Draw()
+            if ren.BeginDraw() then
+                // Update transforms according to window size so we can draw using pixel coords
+                // with origin in upper left of view
+                let displayScale = float32 tileScale
+                let size = ren.WindowSize.ToVector2() / displayScale
+                camera.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, -size.Y, -100.0f, 100.0f)
+                camera.ViewTransform <- Matrix4x4.CreateTranslation(-size.X * 0.5f, -size.Y * 0.5f, 0.0f)
+                sprites.Draw(ren.RenderContext, cameras)
+                ren.EndDraw()
             // Sleep to avoid spinning CPU
             Thread.Sleep(1)
     interface IDisposable with

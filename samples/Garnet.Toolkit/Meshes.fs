@@ -132,29 +132,17 @@ type VertexBuffer<'v
     let vertices = ArrayBufferWriter<'v>()
     let vb = new ResizableDeviceBuffer(device, sizeof<'v>, BufferUsage.Dynamic ||| BufferUsage.VertexBuffer)
     let mutable vertexCount = 0
-    let mutable flush = false
-    member private c.ClearIfFlushed() =
-        // If we flushed and now start writing again, go ahead and clear first
-        // Note all write methods including Flush should call this
-        if flush then 
-            vertices.Clear()
-            flush <- false
     member c.WrittenSpan = vertices.WrittenSpan
     member c.GetMemory(count) =
-        c.ClearIfFlushed()
         vertices.GetMemory(count)
     member c.GetSpan(count) =
-        c.ClearIfFlushed()
         vertices.GetSpan(count)
     member c.Advance(count) =
-        c.ClearIfFlushed()
         vertices.Advance(count)
     member c.Flush() =
-        c.ClearIfFlushed()
         vertexCount <- vertices.WrittenCount
         vb.Write(vertices.WrittenMemory)
-        // Defer clearing buffer so it can be used for picking
-        flush <- true
+        vertices.Clear()
     interface IBufferWriter<'v> with
         member c.GetSpan(count) = c.GetSpan(count)
         member c.GetMemory(count) = c.GetMemory(count)

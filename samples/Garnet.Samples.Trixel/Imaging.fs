@@ -18,7 +18,7 @@ module Image =
                     data.[i * 4 + 1],
                     data.[i * 4 + 2],
                     data.[i * 4 + 3])
-        Image.WrapMemory(Memory(rgbaData), param.outputWidth, param.outputHeight)
+        Image.WrapMemory(Memory(rgbaData), param.OutputWidth, param.OutputHeight)
         
 type PreviewTexture(device : GraphicsDevice, renderer : ImGuiRenderer) =
     let mutable texture : Texture = null
@@ -33,7 +33,7 @@ type PreviewTexture(device : GraphicsDevice, renderer : ImGuiRenderer) =
             if texture <> null
                 then texture.Dispose()
             let data = GridState.sample param state
-            texture <- device.CreateTextureRgba(param.outputWidth, param.outputHeight, ReadOnlyMemory(data))        
+            texture <- device.CreateTextureRgba(param.OutputWidth, param.OutputHeight, ReadOnlyMemory(data))        
         if texture <> null then
             let texId = renderer.GetOrCreateImGuiBinding(device.ResourceFactory, texture)
             let width = float32 (int texture.Width * zoom / resolution |> max 1)

@@ -15,22 +15,22 @@ type SoundId = SoundId of int
 
 [<Struct>]
 type SoundDescriptor = {
-    channels : int
-    bitsPerSample : int
-    sampleRate : int
-    sampleCount : int
+    Channels : int
+    BitsPerSample : int
+    SampleRate : int
+    SampleCount : int
     }
 
 module SoundDescriptor =
     let getALFormat desc =
-        if desc.channels = 1 && desc.bitsPerSample = 8 then ALFormat.Mono8
-        elif desc.channels = 1 && desc.bitsPerSample = 16 then ALFormat.Mono16
-        elif desc.channels = 2 && desc.bitsPerSample = 8 then ALFormat.Stereo8
-        elif desc.channels = 2 && desc.bitsPerSample = 16 then ALFormat.Stereo16
-        else failwith $"Unsupported audio format, {desc.channels} channels, {desc.bitsPerSample} bits"
+        if desc.Channels = 1 && desc.BitsPerSample = 8 then ALFormat.Mono8
+        elif desc.Channels = 1 && desc.BitsPerSample = 16 then ALFormat.Mono16
+        elif desc.Channels = 2 && desc.BitsPerSample = 8 then ALFormat.Stereo8
+        elif desc.Channels = 2 && desc.BitsPerSample = 16 then ALFormat.Stereo16
+        else failwith $"Unsupported audio format, {desc.Channels} channels, {desc.BitsPerSample} bits"
 
     let getDuration desc =
-        desc.sampleCount * 1000 / desc.channels / desc.sampleRate
+        desc.SampleCount * 1000 / desc.Channels / desc.SampleRate
 
 [<AutoOpen>]
 module internal OpenALInternal =
@@ -88,7 +88,7 @@ type AudioDevice() =
         let buffers = AL.GenBuffers(1)
         use handle = data.Pin()
         let format = SoundDescriptor.getALFormat desc
-        AL.BufferData(buffers.[0], format, IntPtr handle.Pointer, desc.sampleCount, desc.sampleRate)
+        AL.BufferData(buffers.[0], format, IntPtr handle.Pointer, desc.SampleCount, desc.SampleRate)
         AL.ThrowIfError("loading audio data")
         let sound = {
             descriptor = desc
@@ -148,10 +148,10 @@ type AudioDevice with
         for i = 0 to dest.Length - 1 do
             dest.[i] <- int16 (amp * float Int16.MaxValue * sin (float i * dt * freq))
         let desc = {
-            channels = 1
-            bitsPerSample = 16
-            sampleRate = sampleRate
-            sampleCount = data.Length * 8 / 16
+            Channels = 1
+            BitsPerSample = 16
+            SampleRate = sampleRate
+            SampleCount = data.Length * 8 / 16
             }
         c.CreateSound(desc, ReadOnlyMemory(data))
 
@@ -192,10 +192,10 @@ module AudioLoaderExtensions =
             let bytesForSample = bitDepth / 8
             let sampleCount = multipleOf4Length / bytesForSample
             let desc = {
-                channels = channels
-                bitsPerSample = bitDepth
-                sampleRate = sampleRate
-                sampleCount = sampleCount
+                Channels = channels
+                BitsPerSample = bitDepth
+                SampleRate = sampleRate
+                SampleCount = sampleCount
                 }
             device.CreateSound(desc, ReadOnlyMemory(data))
 

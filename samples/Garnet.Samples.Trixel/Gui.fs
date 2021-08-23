@@ -6,7 +6,7 @@ open System.Numerics
 open Veldrid
 open ImGuiNET
 open Garnet.Numerics
-open Garnet.Graphics
+open Garnet.Input
 
 type CursorGui() =
     member c.Draw(inputs : InputCollection, invProjView : Matrix4x4) =    
@@ -26,8 +26,8 @@ type ViewGui() =
     let mutable cellMargin = 0.1f
     let mutable zoom = 0
     member c.Draw(state : UndoState<GridState>) =    
-        let grid = state.current
-        ImGui.Text($"Cells: {grid.cells.Count}")
+        let grid = state.Current
+        ImGui.Text($"Cells: {grid.Cells.Count}")
         let inv = false
         let inv = ImGui.InputInt("Zoom", &zoom) || inv
         let inv = ImGui.InputInt("X", &centerX) || inv
@@ -41,8 +41,8 @@ type EditGui() =
         if ImGui.Begin("Edit") then
             ImGui.ColorEdit4("Primary", &primary) |> ignore
             ImGui.ColorEdit4("Secondary", &secondary) |> ignore
-            let undo = ImGui.Button $"Undo (%d{state.prev.Length})"
-            let redo = ImGui.Button $"Redo (%d{state.next.Length})"
+            let undo = ImGui.Button $"Undo (%d{state.Previous.Length})"
+            let redo = ImGui.Button $"Redo (%d{state.Next.Length})"
             let leftButton = inputs.IsMouseDown(0)
             let rightButton = inputs.IsMouseDown(2)
             let drawCommand =
@@ -54,8 +54,8 @@ type EditGui() =
                     let viewPos = Vector2.Transform(normPos, invProjView)
                     let modifiers = inputs.Modifiers
                     let p = TriCoords.eucToContainingTriCell viewPos
-                    let cp = { x = p.X; y = p.Y }
-                    let current = state.current
+                    let cp = { X = p.X; Y = p.Y }
+                    let current = state.Current
                     let newState =
                         if leftButton then
                             let v = if modifiers.HasShift() then secondary else primary
@@ -101,17 +101,17 @@ type PreviewGui(device : GraphicsDevice, renderer : ImGuiRenderer) =
             let viewHeight = viewWidth * TriCoords.edgeToHeight
             let center = TriCoords.vertexToEuc (Vector2i(centerX, centerY))
             let param = {
-                outputWidth = width * resolution
-                outputHeight = height * resolution
-                sampleFactor = multisample
-                bounds = Range2.Sized(center, Vector2(viewWidth, viewHeight))
-                background = RgbaByte.Black
+                OutputWidth = width * resolution
+                OutputHeight = height * resolution
+                SampleFactor = multisample
+                Bounds = Range2.Sized(center, Vector2(viewWidth, viewHeight))
+                Background = RgbaByte.Black
                 }
             previewTex.Draw(param, state, zoom, resolution)
             ImGui.End()
             if export then Some {
-                exportFile = file
-                samplingParams = param
+                ExportFile = file
+                SamplingParams = param
                 }
             else None
         else None
@@ -175,7 +175,7 @@ type Gui(device : GraphicsDevice, renderer : ImGuiRenderer) =
         statusGui.Draw(state, inputs, invProjView)
         let editCommand = editGui.Draw(state, inputs, invProjView)
         let fileCommand = fileGui.Draw()
-        let previewCommand = previewGui.Draw(state.current)
+        let previewCommand = previewGui.Draw(state.Current)
         // resolve command
         if editCommand.IsSome then Some (GridCommand editCommand.Value)
         elif previewCommand.IsSome then Some (Export previewCommand.Value)

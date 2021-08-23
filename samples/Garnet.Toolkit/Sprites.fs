@@ -13,6 +13,12 @@ type Primitive =
     | Triangle
     | Quad
     
+type Primitive with
+    static member GetVertexCount(primitive) =
+        match primitive with
+        | Triangle -> 3
+        | Quad -> 4
+
 [<Struct>]    
 type SpriteFlushMode =
     | NoFlush
@@ -20,14 +26,14 @@ type SpriteFlushMode =
 
 [<Struct>]
 type SpriteLayerDescriptor = {
-    Depth : int
+    LayerId : int
     CameraId : int
     Primitive : Primitive
     Pipeline : TexturePipelineDescriptor
     FlushMode : SpriteFlushMode
     }
 
-type SpriteCamera() =
+type Camera() =
     member val WorldTransform = Matrix4x4.Identity with get, set
     member val TextureTransform = Matrix4x4.Identity with get, set
     member val ViewTransform = Matrix4x4.Identity with get, set
@@ -36,33 +42,34 @@ type SpriteCamera() =
         let projView = c.ViewTransform * c.ProjectionTransform 
         projView.GetInverseOrIdentity()
     
+type CameraSet() =
+    let cameras = List<Camera>()
+    member c.Item with get i =
+        while cameras.Count <= i do
+            cameras.Add(Camera())
+        cameras.[i]
+
 type SpriteRenderer(device, shaders, texture) =
     let indexes = new QuadIndexBuffer(device)
     let pipelines = new TexturePipelineCache(device, shaders, texture)
     let layers = List<SpriteLayerDescriptor>()
     let meshes = List<IVertexBuffer>()
-    let cameras = List<SpriteCamera>()
-    /// Layer depth must uniquely define a layer
     member c.GetVertices<'v
                 when 'v : struct 
                 and 'v : (new : unit -> 'v) 
                 and 'v :> ValueType> desc =
-        while meshes.Count <= desc.Depth do
-            layers.Add { Unchecked.defaultof<_> with Depth = -1 }
+        while meshes.Count <= desc.LayerId do
+            layers.Add { Unchecked.defaultof<_> with LayerId = -1 }
             meshes.Add(new VertexBuffer<'v>(device))
-        layers.[desc.Depth] <- desc
-        meshes.[desc.Depth] :?> VertexBuffer<'v>
-    member c.GetCamera(i) =
-        while cameras.Count <= i do
-            cameras.Add(SpriteCamera())
-        cameras.[i]
-    member c.Draw(context : RenderContext) =
+        layers.[desc.LayerId] <- desc
+        meshes.[desc.LayerId] :?> VertexBuffer<'v>
+    member c.Draw(context : RenderContext, cameras : CameraSet) =
         for i = 0 to layers.Count - 1 do
             let layer = layers.[i]
-            if layer.Depth >= 0 then
+            if layer.LayerId >= 0 then
                 let pipeline = pipelines.GetPipeline(layer.Pipeline, context.OutputDescription)
                 // Set shader params
-                let camera = c.GetCamera(layer.CameraId)
+                let camera = cameras.[layer.CameraId]
                 pipeline.SetPipeline(context.Commands)
                 pipeline.SetProjectionView(camera.ProjectionTransform, camera.ViewTransform, context.Commands)
                 pipeline.SetWorldTexture(camera.WorldTransform, camera.TextureTransform, context.Commands)
@@ -87,8 +94,6 @@ type SpriteRenderer(device, shaders, texture) =
             mesh.Dispose()
         pipelines.Dispose()
         indexes.Dispose()
-    interface IDrawable with
-        member c.Draw(context) = c.Draw(context)
     interface IDisposable with
         member c.Dispose() = c.Dispose()
 
@@ -115,46 +120,6 @@ type internal ReadOnlyArray4<'a> = {
         
 [<Extension>]
 type SpriteVertexSpanExtensions =
-    /// Returns index of first vertex contained in rect
-    [<Extension>]
-    static member TryPickPoint(span : Span<PositionTextureDualColorVertex>, rect : Range2) = 
-        let mutable found = false
-        let mutable i = 0
-        while not found && i < span.Length do
-            let v = span.[i].Position.ToVector2()
-            found <- rect.Contains(v)
-            i <- i + 1
-        if found then ValueSome i else ValueNone
-
-    /// Returns index of first triangle containing point
-    [<Extension>]
-    static member TryPickTriangle(span : Span<PositionTextureDualColorVertex>, p : Vector2) = 
-        let mutable found = false
-        let mutable i = 0
-        while not found && i < span.Length do
-            let v0 = span.[i + 0].Position.ToVector2()
-            let v1 = span.[i + 1].Position.ToVector2()
-            let v2 = span.[i + 2].Position.ToVector2()
-            found <- p.IsInTriangle(v0, v1, v2)
-            i <- i + 3
-        if found then ValueSome (i / 3) else ValueNone
-        
-    /// Returns index of first quad containing point
-    [<Extension>]
-    static member TryPickQuad(span : Span<PositionTextureDualColorVertex>, p : Vector2) = 
-        let mutable found = false
-        let mutable i = 0
-        while not found && i < span.Length do
-            let v0 = span.[i + 0].Position.ToVector2()
-            let v1 = span.[i + 1].Position.ToVector2()
-            let v2 = span.[i + 2].Position.ToVector2()
-            let v3 = span.[i + 3].Position.ToVector2()
-            found <-
-                p.IsInTriangle(v0, v1, v2) ||
-                p.IsInTriangle(v0, v2, v3)
-            i <- i + 4
-        if found then ValueSome (i / 4) else ValueNone
-        
     [<Extension>]
     static member DrawSprite(span : Span<PositionTextureDualColorVertex>, 
             center : Vector2, 

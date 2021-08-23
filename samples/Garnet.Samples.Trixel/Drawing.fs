@@ -77,16 +77,16 @@ type VertexBufferWriterExtensions =
     [<Extension>]
     static member DrawGridCells(w : IBufferWriter<PositionTextureDualColorVertex>, state) =
         let cellMargin = 0.1f
-        let vertexCount = state.cells.Count * 3
+        let vertexCount = state.Cells.Count * 3
         let span = w.GetSpan(vertexCount)
         let mutable i = 0
-        for kvp in state.cells do
-            let p = Vector2i(kvp.Key.x, kvp.Key.y)
+        for kvp in state.Cells do
+            let p = Vector2i(kvp.Key.X, kvp.Key.Y)
             let tri = TriPositions.fromTriCell p
-            let centroid = (tri.p0 + tri.p1 + tri.p2) / 3.0f
-            let p0 = Vector2.Lerp(tri.p0, centroid, cellMargin)
-            let p1 = Vector2.Lerp(tri.p1, centroid, cellMargin)
-            let p2 = Vector2.Lerp(tri.p2, centroid, cellMargin)
+            let centroid = (tri.P0 + tri.P1 + tri.P2) / 3.0f
+            let p0 = Vector2.Lerp(tri.P0, centroid, cellMargin)
+            let p1 = Vector2.Lerp(tri.P1, centroid, cellMargin)
+            let p2 = Vector2.Lerp(tri.P2, centroid, cellMargin)
             let color = kvp.Value.ToRgbaFloat()
             let verts = span.Slice(i * 3)
             verts.[0] <- {

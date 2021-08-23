@@ -1,4 +1,4 @@
-﻿namespace Garnet.Graphics
+﻿namespace Garnet.Input
 
 open System
 open System.Collections.Generic

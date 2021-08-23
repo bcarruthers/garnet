@@ -2,37 +2,40 @@
 
 open System
 open System.IO
+open System.Runtime.InteropServices
 open Veldrid
 open Veldrid.StartupUtilities
+open ImGuiNET
 open Garnet.Numerics
+open Garnet.Input
 
-type WindowDescriptor = {
-    WindowX : int
-    WindowY : int
-    WindowWidth : int
-    WindowHeight : int
-    Title : string
-    }
-
-type WindowRenderer(param) =
+module private Environment =
     let addPathVariables() =
-        // set path variable so native DLLs can be found when running in FSI
+        // Set path variable so native DLLs can be found when running in FSI
         let basePath = Path.GetDirectoryName(Directory.GetCurrentDirectory())
         let nativePath = Path.Combine(basePath, @"runtimes\win-x64\native")
         let ev = Environment.GetEnvironmentVariable("Path")
         if not (ev.Contains(nativePath)) then
             Environment.SetEnvironmentVariable("Path", $"{ev};{nativePath}")
+
+type WindowRenderer([<Optional; DefaultParameterValue("Garnet")>] title : string,
+        [<Optional; DefaultParameterValue(100)>] x : int,
+        [<Optional; DefaultParameterValue(100)>] y : int,
+        [<Optional; DefaultParameterValue(640)>] width : int,
+        [<Optional; DefaultParameterValue(360)>] height : int,
+        [<Optional; DefaultParameterValue(Redraw.Auto)>] redraw : Redraw
+        ) =
     let window = 
-        addPathVariables()
+        Environment.addPathVariables()
         // Create window initially hidden until background can be drawn
         let windowCI = 
             WindowCreateInfo(
-                X = param.WindowX,
-                Y = param.WindowY,
-                WindowWidth = param.WindowWidth,
-                WindowHeight = param.WindowHeight,
+                X = x,
+                Y = y,
+                WindowWidth = width,
+                WindowHeight = height,
                 WindowInitialState = WindowState.Hidden,
-                WindowTitle = param.Title
+                WindowTitle = title
             )
         VeldridStartup.CreateWindow(windowCI)
     let device = 
@@ -42,18 +45,13 @@ type WindowRenderer(param) =
         new ImGuiRenderer(device,
             device.MainSwapchain.Framebuffer.OutputDescription,
             window.Width, window.Height)
-    let drawables = new DrawableCollection()
-    let renderer = new Renderer(device)
-    let inputs = InputCollection()
-    do
-        // Add ImGui after all other drawables
-        renderer.Add(drawables)
-        renderer.Add(new Drawable(fun context -> imGui.Render(device, context.Commands)))
+    let renderer = new Renderer(device, redraw)
+    let mutable isDrawn = false
     member val Background = RgbaFloat.Black with get, set
     member c.ImGui = imGui
     member c.Device = device
-    member c.Inputs = inputs
     member c.WindowSize = Vector2i(window.Width, window.Height)
+    member c.RenderContext = renderer.Context
     member c.IsShown =
         match window.WindowState with
         | WindowState.Hidden
@@ -61,8 +59,6 @@ type WindowRenderer(param) =
         | _ -> window.Visible
     member c.Invalidate() =
         renderer.Invalidate()
-    member c.Add(drawable) =
-        drawables.Add(drawable)
     member c.Close() =
         window.Close()
     member c.ToggleFullScreen() =
@@ -70,19 +66,33 @@ type WindowRenderer(param) =
             match window.WindowState with
             | WindowState.BorderlessFullScreen -> WindowState.Normal
             | _ -> WindowState.BorderlessFullScreen
-    member c.Draw() =
-        window.Visible <- true
-        if c.IsShown then
+    member c.BeginDraw() =
+        // Avoid drawing when we've drawn at least once but window isn't visible
+        if isDrawn && not c.IsShown then false
+        else
+            // Proceed with drawing
             imGui.WindowResized(window.Width, window.Height)
-            renderer.Draw(c.WindowSize, c.Background)
-    member c.Update(deltaSeconds) =
+            renderer.BeginDraw(window.Width, window.Height, c.Background)
+    member c.EndDraw() =
+        // Need to call this after beginning drawing but before ending. If we call
+        // before any drawing, then there will be a brief white flicker as the window
+        // is shown. If we call after all drawing, the initial render will not be
+        // presented to the window, which is visible if doing manual redraw.
+        window.Visible <- true
+        isDrawn <- true
+        // Complete rendering
+        imGui.Render(device, renderer.Context.Commands)
+        renderer.EndDraw()
+    member c.Update(deltaSeconds, inputs : InputCollection) =
         let snapshot = window.PumpEvents()
         if not window.Exists then false
         else
             imGui.Update(deltaSeconds, snapshot)
             inputs.ClearEvents()
-            inputs.UpdateKeysFromSnapshot(snapshot)
-            inputs.UpdateMouseFromSnapshot(snapshot, c.WindowSize)                                
+            if not (ImGui.GetIO().WantCaptureKeyboard) then
+                inputs.UpdateKeysFromSnapshot(snapshot)
+            if not (ImGui.GetIO().WantCaptureMouse) then
+                inputs.UpdateMouseFromSnapshot(snapshot, c.WindowSize)                                
             true
     member c.Dispose() =
         renderer.Dispose()

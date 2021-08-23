@@ -20,6 +20,8 @@ type ShaderSet(device : GraphicsDevice,
                 layout : VertexLayoutDescription) =
     let shaders =
         try
+            //device.ResourceFactory.CreateFromSpirv(vert, frag)
+            //let (vsCode, fsCode) = Shaders.compile vert.ShaderBytes frag.ShaderBytes device.BackendType
             let vsCode = vert.ShaderBytes
             let fsCode = frag.ShaderBytes
             let vertexShader = device.ResourceFactory.CreateShader(ShaderDescription(vert.Stage, vsCode, vert.EntryPoint))

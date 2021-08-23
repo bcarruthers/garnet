@@ -7,7 +7,7 @@ open Garnet.Numerics
 open Veldrid
 
 module CellLocation =
-    let origin = { x = 0; y = 0 }
+    let origin = { X = 0; Y = 0 }
     
 module TriCoords =
     /// Height of an equilateral triangle with edge length one. Multiplier to determine simplex
@@ -47,34 +47,34 @@ module TriCoords =
 
 module UndoState =
     let init value = { 
-        prev = []
-        next = []
-        current = value 
+        Previous = []
+        Next = []
+        Current = value 
         }
 
 module Command =
     let undo state =
-        match state.prev with
+        match state.Previous with
         | head :: tail -> {
-            prev = tail
-            next = state.current :: state.next
-            current = head 
+            Previous = tail
+            Next = state.Current :: state.Next
+            Current = head 
             }
         | _ -> state
 
     let redo state =
-        match state.next with
+        match state.Next with
         | head :: tail -> {
-            prev = state.current :: state.prev
-            next = state.next.Tail
-            current = state.next.Head 
+            Previous = state.Current :: state.Previous
+            Next = state.Next.Tail
+            Current = state.Next.Head 
             }
         | _ -> state
 
     let replace state value = {
-        prev = state.current :: state.prev
-        next = []
-        current = value 
+        Previous = state.Current :: state.Previous
+        Next = []
+        Current = value 
         }
 
     let apply state cmd =
@@ -83,19 +83,19 @@ module Command =
         | Undo -> undo state
         | Redo -> redo state
         | Replace c -> replace state c
-        | Apply f -> replace state (f state.current)
+        | Apply f -> replace state (f state.Current)
 
 module GridState =
     let empty = {
-        cells = Map.empty
+        Cells = Map.empty
         }
 
     let draw p color state = {
-        state with cells = Map.add p color state.cells
+        state with Cells = Map.add p color state.Cells
         }  
         
     let erase p state = {
-        state with cells = Map.remove p state.cells
+        state with Cells = Map.remove p state.Cells
         }  
 
     type SavedGrid = {
@@ -109,9 +109,9 @@ module GridState =
     let serialize (state : GridState) =
         JsonConvert.SerializeObject({
             cells =
-                state.cells 
-                |> Seq.sortBy (fun kvp -> kvp.Key.y, kvp.Key.x)
-                |> Seq.map (fun kvp -> $"%d{kvp.Key.x} %d{kvp.Key.y} %s{toHexString kvp.Value}")
+                state.Cells 
+                |> Seq.sortBy (fun kvp -> kvp.Key.Y, kvp.Key.X)
+                |> Seq.map (fun kvp -> $"%d{kvp.Key.X} %d{kvp.Key.Y} %s{toHexString kvp.Value}")
                 |> Seq.toList
             }, Formatting.Indented)
         
@@ -130,20 +130,20 @@ module GridState =
     let deserialize str =
         let g = JsonConvert.DeserializeObject<SavedGrid>(str)
         { 
-            GridState.cells = 
+            GridState.Cells = 
                 g.cells 
                 |> Seq.map (fun c -> 
                     let parts = c.Split(' ')
-                    { x = Int32.Parse(parts.[0]); y = Int32.Parse(parts.[1]) }, 
+                    { X = Int32.Parse(parts.[0]); Y = Int32.Parse(parts.[1]) }, 
                     parseRgbaHex parts.[2])
                 |> Map.ofSeq
         }
 
     let sample param (grid : GridState) =
-        let w = max 0 param.outputWidth
-        let h = max 0 param.outputHeight
-        let r = param.bounds
-        let s = max 1 param.sampleFactor
+        let w = max 0 param.OutputWidth
+        let h = max 0 param.OutputHeight
+        let r = param.Bounds
+        let s = max 1 param.SampleFactor
         let samplesPerPixel = s * s
         let data = Array.zeroCreate (w * h * 4)
         // uniform supersampling of pixels
@@ -163,9 +163,9 @@ module GridState =
                         let ep = Range2.Lerp(r, np)
                         let cp = TriCoords.eucToContainingTriCell ep
                         let color =
-                            let cp = { x = cp.X; y = cp.Y }
-                            match grid.cells.TryGetValue(cp) with
-                            | false, _ -> param.background
+                            let cp = { X = cp.X; Y = cp.Y }
+                            match grid.Cells.TryGetValue(cp) with
+                            | false, _ -> param.Background
                             | true, x -> x
                         sr <- sr + int color.R
                         sg <- sg + int color.G
@@ -205,8 +205,8 @@ module TriPositions =
         let p10 = Vector2((py0.X + x1) * tileSize.X, py0.Y)
         let side = p.X &&& 1
         if side = 0 
-            then { p0 = Vector2((py0.X + x0) * tileSize.X, py0.Y); p1 = p10; p2 = p01 }
-            else { p0 = Vector2((py1.X + x1) * tileSize.X, py1.Y); p1 = p01; p2 = p10 }
+            then { P0 = Vector2((py0.X + x0) * tileSize.X, py0.Y); P1 = p10; P2 = p01 }
+            else { P0 = Vector2((py1.X + x1) * tileSize.X, py1.Y); P1 = p01; P2 = p10 }
 
     let inline fromTriCell (p : Vector2i) =
         fromTriCellScaled (Vector2(1.0f, TriCoords.edgeToHeight)) p
