@@ -22,6 +22,7 @@ type Range =
     static member inline (-) (a: Range, c) = Range(a.Min - c, a.Max - c)
     static member inline (*) (a: Range, c) = Range(a.Min * c, a.Max * c)
     static member inline (/) (a: Range, c) = Range(a.Min / c, a.Max / c)
+    static member inline Point(point) = Range(point, point)
     static member inline Sized(min, size) = 
         Range(min, min + size)
     static member inline Centered(center, size) = 
@@ -68,6 +69,7 @@ type Range2 =
     static member inline (-) (a: Range2, v : Vector2) = Range2(a.X - v.X, a.Y - v.Y)
     static member inline (*) (a: Range2, v : Vector2) = Range2(a.X * v.X, a.Y * v.Y)
     static member inline (/) (a: Range2, v : Vector2) = Range2(a.X / v.X, a.Y / v.Y)
+    static member inline Point(point : Vector2) = Range2(point, point)
     static member inline Sized(min : Vector2, size : Vector2) = 
         Range2(min, min + size)
     static member inline Centered(center : Vector2, size : Vector2) = 
@@ -127,6 +129,7 @@ type Range3 =
     static member inline (-) (a: Range3, v : Vector3) = Range3(a.X - v.X, a.Y - v.Y, a.Z - v.Z)
     static member inline (*) (a: Range3, v : Vector3) = Range3(a.X * v.X, a.Y * v.Y, a.Z * v.Z)
     static member inline (/) (a: Range3, v : Vector3) = Range3(a.X / v.X, a.Y / v.Y, a.Z / v.Z)
+    static member inline Point(point : Vector3) = Range3(point, point)
     static member inline Sized(min : Vector3, size : Vector3) = 
         Range3(min, min + size)
     static member inline Centered(center : Vector3, size : Vector3) = 
@@ -162,6 +165,7 @@ type Rangei =
     static member inline (-) (a: Rangei, c) = Rangei(a.Min - c, a.Max - c)
     static member inline (*) (a: Rangei, c) = Rangei(a.Min * c, a.Max * c)
     static member inline (/) (a: Rangei, c) = Rangei(a.Min / c, a.Max / c)
+    static member inline Point(point) = Rangei(point, point)
     static member inline Sized(min, size) = 
         Rangei(min, min + size)
     static member inline Centered(center, size) = 
@@ -208,6 +212,7 @@ type Range2i =
     static member inline (-) (a: Range2i, v : Vector2i) = Range2i(a.X - v.X, a.Y - v.Y)
     static member inline (*) (a: Range2i, v : Vector2i) = Range2i(a.X * v.X, a.Y * v.Y)
     static member inline (/) (a: Range2i, v : Vector2i) = Range2i(a.X / v.X, a.Y / v.Y)
+    static member inline Point(point : Vector2i) = Range2i(point, point)
     static member inline Sized(min : Vector2i, size : Vector2i) = 
         Range2i(min, min + size)
     static member inline Centered(center : Vector2i, size : Vector2i) = 
@@ -264,6 +269,7 @@ type Range3i =
     static member inline (-) (a: Range3i, v : Vector3i) = Range3i(a.X - v.X, a.Y - v.Y, a.Z - v.Z)
     static member inline (*) (a: Range3i, v : Vector3i) = Range3i(a.X * v.X, a.Y * v.Y, a.Z * v.Z)
     static member inline (/) (a: Range3i, v : Vector3i) = Range3i(a.X / v.X, a.Y / v.Y, a.Z / v.Z)
+    static member inline Point(point : Vector3i) = Range3i(point, point)
     static member inline Sized(min : Vector3i, size : Vector3i) = 
         Range3i(min, min + size)
     static member inline Centered(center : Vector3i, size : Vector3i) = 

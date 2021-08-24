@@ -22,6 +22,44 @@ type KeyUp = {
     Modifiers : ModifierKeys
     }
 
+[<Struct>]
+type MouseWheel = {
+    modifiers : int
+    wheel : int
+    }
+
+[<Struct>]
+type MouseUpdate = {
+    pos : Vector2
+    devicePos : Vector2i
+    button1 : bool
+    button2 : bool
+    }
+
+[<Struct>]
+type MouseMoved = {
+    pos : Vector2
+    delta : Vector2
+    devicePos : Vector2i
+    deviceDelta : Vector2i
+    modifiers : ModifierKeys
+    }
+
+[<Struct>]
+type MouseDown = {
+    pos : Vector2
+    devicePos : Vector2i
+    button : int
+    modifiers : ModifierKeys
+    }
+
+[<Struct>]
+type MouseUp = {
+    pos : Vector2
+    devicePos : Vector2i
+    button : int
+    }
+
 [<AutoOpen>]
 module InputExtensions =
     type ModifierKeys with

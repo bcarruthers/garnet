@@ -384,8 +384,8 @@ type Disposable(dispose) =
         new Disposable(dispose) :> IDisposable
     static member Create(items : IDisposable[]) =
         new DisposableCollection<_>(items) :> IDisposable
-    static member Create(items : IDisposable list) =
-        Disposable.Create(items |> List.toArray)
+    static member Create(items : IDisposable seq) =
+        Disposable.Create(items |> Seq.toArray)
 
 [<Struct>]
 type Addresses = {

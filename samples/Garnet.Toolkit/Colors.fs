@@ -3,6 +3,14 @@
 open System
 open Veldrid
 
+module private ColorParsing =
+    let parse defaultValue (parts : string[]) index =
+        if index >= parts.Length then defaultValue
+        else 
+            match Single.TryParse(parts.[index]) with
+            | true, x -> x
+            | false, _ -> defaultValue
+
 [<Struct>]
 type HsvaFloat =
     val H : float32
@@ -57,6 +65,14 @@ type HsvaFloat =
             MathF.Lerp(min.S, max.S, t),
             MathF.Lerp(min.V, max.V, t),
             MathF.Lerp(min.A, max.A, t))
+    static member Parse(str : string) =
+        // hsva(120,100%,50%,0.3)
+        let parts = str.Replace(" ", "").Replace("%", "").Split([|','; '('; ')'|], StringSplitOptions.RemoveEmptyEntries)
+        let h = ColorParsing.parse 0.0f parts 1 / 360.0f
+        let s = ColorParsing.parse 0.0f parts 2 / 100.0f
+        let v = ColorParsing.parse 0.0f parts 3 / 100.0f
+        let a = ColorParsing.parse 1.0f parts 4
+        HsvaFloat(h, s, v, a)
 
 [<Struct>]
 type HslaFloat =
@@ -116,7 +132,15 @@ type HslaFloat =
         if hue < 1.0f / 6.0f then n1 + (n2 - n1) * hue * 6.0f
         else if hue < 0.5f then n2
         else if (hue < 2.0f / 3.0f) then n1 + (n2 - n1) * (2.0f / 3.0f - hue) * 6.0f
-        else n1                    
+        else n1
+    static member Parse(str : string) =
+        // hsla(120,100%,50%,0.3)
+        let parts = str.Replace(" ", "").Replace("%", "").Split([|','; '('; ')'|], StringSplitOptions.RemoveEmptyEntries)
+        let h = ColorParsing.parse 0.0f parts 1 / 360.0f
+        let s = ColorParsing.parse 0.0f parts 2 / 100.0f
+        let l = ColorParsing.parse 0.0f parts 3 / 100.0f
+        let a = ColorParsing.parse 1.0f parts 4
+        HslaFloat(h, s, l, a)
 
 [<AutoOpen>]
 module RgbaByte =
@@ -188,3 +212,12 @@ module RgbaFloat =
             
         static member FromUInt32(x : uint) =
             RgbaByte.FromUInt32(x).ToRgbaFloat()
+            
+        static member Parse(str : string) =
+            if str.StartsWith("hsla") then HslaFloat.Parse(str).ToRgbaFloat()
+            elif str.StartsWith("hsva") then HsvaFloat.Parse(str).ToRgbaFloat()
+            else
+                // #rrggbbaa
+                match UInt32.TryParse(str.TrimStart([|'#'|]), Globalization.NumberStyles.HexNumber, null) with
+                | true, x -> RgbaFloat.FromUInt32(x)
+                | false, _ -> RgbaFloat.Clear

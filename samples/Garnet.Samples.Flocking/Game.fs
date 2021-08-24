@@ -7,7 +7,6 @@ open System.Threading
 open Veldrid
 open Garnet.Composition
 open Garnet.Numerics
-open Garnet.Resources
 open Garnet.Graphics
 open Garnet.Input
 
@@ -18,11 +17,11 @@ type UpdateTimer(fixedDeltaTime) =
     member c.Update() =
         let time = sw.ElapsedMilliseconds
         let result = { 
-            frameNumber = frameCount
-            time = time
-            deltaTime = time - lastTime
-            fixedDeltaTime = fixedDeltaTime
-            fixedTime = time
+            FrameNumber = frameCount
+            Time = time
+            DeltaTime = time - lastTime
+            FixedDeltaTime = fixedDeltaTime
+            FixedTime = time
             }
         frameCount <- frameCount + 1L
         lastTime <- time
@@ -38,11 +37,12 @@ type Game(fs : IReadOnlyFolder) =
             Background = RgbaFloat(0.0f, 0.1f, 0.2f, 1.0f))
     // Initialize rendering
     let shaders = new ShaderSetCache()
-    let textures = new TextureCache()
-    let sprites = new SpriteRenderer(ren.Device, shaders, textures)
+    let cache = new ResourceCache()
+    let sprites = new SpriteRenderer(ren.Device, shaders, cache)
     do
-        shaders.Load(ren.Device, fs, Resources.shaderSet)
-        textures.Load(ren.Device, fs, Resources.atlas, 512, 512)
+        cache.AddShaderLoaders(ren.Device)
+        fs.LoadShadersFromFolder(".", ren.Device.BackendType, cache)
+        fs.LoadTextureAtlasFromFolder(ren.Device, Resources.atlas, 512, 512, cache)
     member _.Run() =
         // Create ECS container to hold game state and handle messages
         let c = Container.Create <| fun c ->
@@ -50,7 +50,7 @@ type Game(fs : IReadOnlyFolder) =
                 SimulationSystems.register c
                 DrawingSystems.register c
                 ]
-        c.SetValue<TextureAtlas>(textures.[Resources.atlas])
+        c.SetValue<TextureAtlas>(cache.LoadResource(Resources.atlas))
         c.SetValue<SpriteRenderer>(sprites)
         c.SetValue<WorldSettings>(WorldSettings.defaults)
         // Initialize systems
@@ -71,11 +71,14 @@ type Game(fs : IReadOnlyFolder) =
                 // Update transforms so origin is in the center of the screen and we use pixel coords
                 // with +Y as up.
                 let displayScale = 1.0f
-                let size = ren.WindowSize.ToVector2() / displayScale
+                let size = ren.Size.ToVector2() / displayScale
                 let camera = cameras.[0]
                 camera.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, size.Y, -100.0f, 100.0f)
                 // Call systems to draw
-                c.Run(Draw())
+                c.Run<Draw> {
+                    Update = e
+                    ViewSize = ren.Size
+                    }
                 hud.Draw()
                 sprites.Draw(ren.RenderContext, cameras)
                 ren.EndDraw()
@@ -84,7 +87,7 @@ type Game(fs : IReadOnlyFolder) =
             Thread.Sleep(1)
     interface IDisposable with
         member c.Dispose() =
-            textures.Dispose()
+            cache.Dispose()
             shaders.Dispose()
             sprites.Dispose()
             ren.Dispose()

@@ -2,13 +2,12 @@
 
 open System
 open System.Collections.Generic
-open System.IO
 open System.Runtime.InteropServices
 open Veldrid
 open SixLabors.ImageSharp
 open SixLabors.ImageSharp.PixelFormats
 open Garnet.Numerics
-open Garnet.Resources
+open Garnet.Composition
 
 type TextureAtlasEntry = {
     Bounds : Range2i
@@ -117,25 +116,29 @@ type internal MaxRectsBinPack(size : Vector2i) =
                 j <- j + 1
             i <- i + 1
 
-type TextureAtlas(texture : Texture, entries : (string * Range2i) seq) =
-    let size = Vector2i(int texture.Width, int texture.Height)
+type TextureAtlas(size : Vector2i, entries : (string * Range2i) seq) =
     let dict = 
         let size = size.ToVector2() 
         let dict = Dictionary<string, TextureAtlasEntry>()
         for key, rect in entries do
             let p0 = rect.Min.ToVector2() / size
             let p1 = rect.Max.ToVector2() / size
-            dict.Add(key, {
+            let tex = {
                 Bounds = rect
                 NormalizedBounds = Range2(p0, p1)
-                })
+                }
+            dict.[key] <- tex
+            dict.[key.ToLowerInvariant()] <- tex
         dict
     member c.Size = size
-    member c.Texture = texture
-    member c.Item with get key = dict.[key]
-    member c.Dispose() = texture.Dispose()
-    interface IDisposable with
-        member c.Dispose() = c.Dispose()
+    member c.Item with get key =
+        match dict.TryGetValue(key) with
+        | false, _ -> failwith $"Could not find {key} in atlas"
+        | true, x -> x
+    member c.GetNormalizedBounds(key) =
+        match dict.TryGetValue(key) with
+        | false, _ -> Range2.Zero
+        | true, x -> x.NormalizedBounds
 
 [<AutoOpen>]
 module TextureExtensions =
@@ -257,9 +260,10 @@ module TextureExtensions =
             let entries =
                 packer.Entries
                 |> Seq.map (fun (key, rect) -> key, rect.Expand(Vector2i.One * -padding))
-            new TextureAtlas(texture, entries)
+            let size = Vector2i(int texture.Width, int texture.Height)
+            TextureAtlas(size, entries), texture
 
-type private JsonTextureEntry = {
+type JsonTextureEntry = {
     Name : string
     X : int
     Y : int
@@ -268,7 +272,7 @@ type private JsonTextureEntry = {
     Padding : int
     }
 
-type private JsonTextureAtlas = {
+type JsonTextureAtlas = {
     Width : int
     Height : int
     UndefinedName : string
@@ -276,7 +280,17 @@ type private JsonTextureAtlas = {
     }
 
 [<AutoOpen>]
-module TextureLoaderExtensions =
+module TextureLoadingExtensions =
+    let private getTexBounds (tex : JsonTextureEntry) =
+        let tc0 = Vector2i(tex.X, tex.Y)
+        let tc1 = tc0 + Vector2i(tex.Width, tex.Height)
+        let padding = Vector2i.One * tex.Padding
+        let p0 = tc0 + padding
+        let p1 = tc1 - padding
+        Range2i(Vector2i(p0.X, p1.Y), Vector2i(p1.X, p0.Y))
+//                    Range2i.Sized(Vector2i(t.X, t.Y), Vector2i(t.Width, t.Height))
+//                        .Expand(Vector2i.One * -t.Padding))
+
     type IStreamSource with
         member c.LoadImage(key) =
             use stream = c.Open(key)
@@ -286,50 +300,49 @@ module TextureLoaderExtensions =
             let image = c.LoadImage(key)
             device.CreateTexture(image)
 
+        member c.LoadTexture(device : GraphicsDevice, key, cache : IResourceCache) =
+            let texture = c.LoadTexture(device, key)
+            cache.AddResource(key, texture)
+
+        member c.LoadTextureAtlas(key) =
+            let atlas = c.LoadJson<JsonTextureAtlas>(key)
+            let entries = atlas.Textures |> Seq.map (fun t -> t.Name, getTexBounds t)
+            TextureAtlas(Vector2i(atlas.Width, atlas.Height), entries)
+
     type IReadOnlyFolder with
-        member c.LoadTextureAtlas(device : GraphicsDevice, path, atlasWidth, atlasHeight) =
-            if c.Contains(path) then
-                // If this is a file, expect a pairing of JSON and image files
-                let baseFile = Path.GetFileNameWithoutExtension(path)
-                let atlas = c.LoadJson<JsonTextureAtlas>(baseFile + ".json")
-                let texture = c.LoadTexture(device, baseFile + ".png")
-                let entries =
-                    atlas.Textures
-                    |> Seq.map (fun t ->
-                        t.Name,
-                        Range2i.Sized(Vector2i(t.X, t.Y), Vector2i(t.Width, t.Height)))
-                new TextureAtlas(texture, entries)
-            else
-                // If this is a folder, create atlas on the fly from images within the folder
-                let images =
-                    c.GetFiles(path)
-                    |> Seq.map (fun file ->
-                        // Make the keys relative within the atlas
-                        let key = file.Replace(path, "").TrimStart('/')
-                        key, c.LoadImage(file))
-                device.CreateTextureAtlas(atlasWidth, atlasHeight, images)
+        member c.LoadTextureAtlasFromFolder(device : GraphicsDevice, path, atlasWidth, atlasHeight) =
+            // If this is a folder, create atlas on the fly from images within the folder
+            let images =
+                c.GetFiles(path)
+                |> Seq.map (fun file ->
+                    // Make the keys relative within the atlas
+                    let key = file.Replace(path, "").TrimStart('/')
+                    key, c.LoadImage(file))
+            device.CreateTextureAtlas(atlasWidth, atlasHeight, images)
 
-type TextureCache() =
-    let cache = Dictionary<string, TextureAtlas>()
-    member c.Add(key, atlas) =
-        cache.Add(key, atlas)
-    member c.Item with get key =
-        cache.[key]
-    member c.Dispose() =
-        for item in cache.Values do
-            item.Dispose()
-    interface IDisposable with
-        member c.Dispose() = c.Dispose()
+        member c.LoadTextureAtlasFromFolder(device, key, atlasWidth, atlasHeight, cache : IResourceCache) =
+            let atlas, texture = c.LoadTextureAtlasFromFolder(device, key, atlasWidth, atlasHeight)
+            cache.AddResource<TextureAtlas>(key, atlas)
+            cache.AddResource<Texture>(key, texture)
 
-type TextureCache with
-    member c.Add(key, texture) =
-        let atlas = new TextureAtlas(texture, Seq.empty)
-        c.Add(key, atlas)
+type TextureAtlasLoader() =
+    interface IResourceLoader with
+        member c.Load(folder, cache, key) =
+            let atlas = folder.LoadTextureAtlas(key)
+            cache.AddResource<TextureAtlas>(key, atlas)
 
-    member c.Load(device, fs : IReadOnlyFolder, key) =
-        let texture = fs.LoadTexture(device, key)
-        c.Add(key, texture)
+type TextureLoader(device) =
+    interface IResourceLoader with
+        member c.Load(folder, cache, key) =
+            let texture = folder.LoadTexture(device, key)
+            cache.AddResource<Texture>(key, texture)
 
-    member c.Load(device, fs : IReadOnlyFolder, key, atlasWidth, atlasHeight) =
-        let atlas = fs.LoadTextureAtlas(device, key, atlasWidth, atlasHeight)
-        c.Add(key, atlas)
+[<AutoOpen>]
+module TextureLoaderExtensions =
+    type ResourceCache with
+        member c.AddTextureAtlasLoaders() =
+            c.AddLoader(".atlas.json", TextureAtlasLoader())
+            
+        member c.AddTextureLoaders(device) =
+            c.AddLoader(".jpg", TextureLoader(device))
+            c.AddLoader(".png", TextureLoader(device))

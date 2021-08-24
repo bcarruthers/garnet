@@ -104,6 +104,4 @@ module SteeringTypes =
 
 [<AutoOpen>]
 module Events =
-    type Start = struct end
-    type Draw = struct end
     type Reset = struct end

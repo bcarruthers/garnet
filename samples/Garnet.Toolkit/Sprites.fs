@@ -24,7 +24,6 @@ type SpriteFlushMode =
     | NoFlush
     | FlushOnDraw
 
-[<Struct>]
 type SpriteLayerDescriptor = {
     LayerId : int
     CameraId : int
@@ -41,6 +40,14 @@ type Camera() =
     member c.GetNormalizedToWorld() =
         let projView = c.ViewTransform * c.ProjectionTransform 
         projView.GetInverseOrIdentity()
+    member c.NormalizedToWorld(normPos : Vector2) =
+        let xf = c.GetNormalizedToWorld()
+        Vector2.Transform(normPos, xf)
+    member c.NormalizedToWorld(rect : Range2) =
+        let xf = c.GetNormalizedToWorld()
+        let p0 = Vector2.Transform(rect.Min, xf)
+        let p1 = Vector2.Transform(rect.Max, xf)
+        Range2.Union(Range2.Point(p0), Range2.Point(p1))
     
 type CameraSet() =
     let cameras = List<Camera>()
@@ -48,40 +55,56 @@ type CameraSet() =
         while cameras.Count <= i do
             cameras.Add(Camera())
         cameras.[i]
+        
+[<Struct>]
+type private SpriteLayer = {
+    Descriptor : SpriteLayerDescriptor
+    Vertices : IVertexBuffer
+    }
 
-type SpriteRenderer(device, shaders, texture) =
+type SpriteRenderer(device, shaders, cache) =
     let indexes = new QuadIndexBuffer(device)
-    let pipelines = new TexturePipelineCache(device, shaders, texture)
-    let layers = List<SpriteLayerDescriptor>()
-    let meshes = List<IVertexBuffer>()
+    let pipelines = new TexturePipelineCache(device, shaders, cache)
+    let layers = List<SpriteLayer voption>()
     member c.GetVertices<'v
                 when 'v : struct 
                 and 'v : (new : unit -> 'v) 
                 and 'v :> ValueType> desc =
-        while meshes.Count <= desc.LayerId do
-            layers.Add { Unchecked.defaultof<_> with LayerId = -1 }
-            meshes.Add(new VertexBuffer<'v>(device))
-        layers.[desc.LayerId] <- desc
-        meshes.[desc.LayerId] :?> VertexBuffer<'v>
+        while layers.Count <= desc.LayerId do
+            layers.Add(ValueNone)
+        match layers.[desc.LayerId] with
+        | ValueNone ->
+            let vertices = new VertexBuffer<'v>(device)
+            let layer = {
+                Descriptor = desc
+                Vertices = vertices
+                }
+            layers.[desc.LayerId] <- ValueSome layer
+            vertices
+        | ValueSome layer -> layer.Vertices :?> VertexBuffer<'v>
     member c.Draw(context : RenderContext, cameras : CameraSet) =
-        for i = 0 to layers.Count - 1 do
-            let layer = layers.[i]
-            if layer.LayerId >= 0 then
-                let pipeline = pipelines.GetPipeline(layer.Pipeline, context.OutputDescription)
-                // Set shader params
-                let camera = cameras.[layer.CameraId]
-                pipeline.SetPipeline(context.Commands)
-                pipeline.SetProjectionView(camera.ProjectionTransform, camera.ViewTransform, context.Commands)
-                pipeline.SetWorldTexture(camera.WorldTransform, camera.TextureTransform, context.Commands)
+        for layer in layers do
+            match layer with
+            | ValueNone -> ()
+            | ValueSome layer ->
+                let desc = layer.Descriptor
+                let vertices = layer.Vertices
                 // Flush if needed
-                let vertices = meshes.[i]
-                match layer.FlushMode with
+                match desc.FlushMode with
                 | NoFlush -> ()
                 | FlushOnDraw -> vertices.Flush()
-                // Draw primitives
-                let vertexCount = vertices.SetVertexBuffer(context.Commands)
+                // Proceed if not empty
+                let vertexCount = vertices.VertexCount
                 if vertexCount > 0 then
-                    match layers.[i].Primitive with
+                    // Set shader params
+                    let camera = cameras.[desc.CameraId]
+                    let pipeline = pipelines.GetPipeline(desc.Pipeline, context.OutputDescription)
+                    pipeline.SetPipeline(context.Commands)
+                    pipeline.SetProjectionView(camera.ProjectionTransform, camera.ViewTransform, context.Commands)
+                    pipeline.SetWorldTexture(camera.WorldTransform, camera.TextureTransform, context.Commands)
+                    // Draw primitives
+                    vertices.SetVertexBuffer(context.Commands)
+                    match desc.Primitive with
                     | Quad -> indexes.Draw(context.Commands, vertexCount / 4)
                     | Triangle ->
                         context.Commands.Draw(
@@ -90,8 +113,11 @@ type SpriteRenderer(device, shaders, texture) =
                             vertexStart = 0u,
                             instanceStart = 0u)
     member c.Dispose() =
-        for mesh in meshes do
-            mesh.Dispose()
+        for layer in layers do
+            match layer with
+            | ValueNone -> ()
+            | ValueSome layer ->            
+                layer.Vertices.Dispose()
         pipelines.Dispose()
         indexes.Dispose()
     interface IDisposable with
@@ -132,33 +158,33 @@ type SpriteVertexSpanExtensions =
         let dyDir = dxDir.GetPerpendicular()
         let dx = dxDir * size.X
         let dy = dyDir * size.Y
-        let p0 = center - (dx + dy) * 0.5f
-        let p1 = p0 + dx
-        let p2 = p1 + dy
-        let p3 = p2 - dx
-        let t0 = texBounds.Min
-        let t2 = texBounds.Max
+        let p00 = center - (dx + dy) * 0.5f
+        let p10 = p00 + dx
+        let p11 = p10 + dy
+        let p01 = p11 - dx
+        let t00 = texBounds.Min
+        let t11 = texBounds.Max
         span.[0] <- {
-            Position = Vector3(p0.X, p0.Y, 0.0f)
-            TexCoord = Vector2(t0.X, t0.Y)
+            Position = Vector3(p00.X, p00.Y, 0.0f)
+            TexCoord = Vector2(t00.X, t00.Y)
             Foreground = fg
             Background = bg
             }
         span.[1] <- {
-            Position = Vector3(p1.X, p1.Y, 0.0f)
-            TexCoord = Vector2(t2.X, t0.Y)
+            Position = Vector3(p10.X, p10.Y, 0.0f)
+            TexCoord = Vector2(t11.X, t00.Y)
             Foreground = fg
             Background = bg
             }
         span.[2] <- {
-            Position = Vector3(p2.X, p2.Y, 0.0f)
-            TexCoord = Vector2(t2.X, t2.Y)
+            Position = Vector3(p11.X, p11.Y, 0.0f)
+            TexCoord = Vector2(t11.X, t11.Y)
             Foreground = fg
             Background = bg
             }
         span.[3] <- {
-            Position = Vector3(p3.X, p3.Y, 0.0f)
-            TexCoord = Vector2(t0.X, t2.Y)
+            Position = Vector3(p01.X, p01.Y, 0.0f)
+            TexCoord = Vector2(t00.X, t11.Y)
             Foreground = fg
             Background = bg
             }

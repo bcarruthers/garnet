@@ -122,7 +122,8 @@ type QuadIndexBuffer(device : GraphicsDevice) =
 
 type IVertexBuffer =
     inherit IDisposable
-    abstract SetVertexBuffer : CommandList -> int
+    abstract VertexCount : int
+    abstract SetVertexBuffer : CommandList -> unit
     abstract Flush : unit -> unit
 
 type VertexBuffer<'v
@@ -132,6 +133,7 @@ type VertexBuffer<'v
     let vertices = ArrayBufferWriter<'v>()
     let vb = new ResizableDeviceBuffer(device, sizeof<'v>, BufferUsage.Dynamic ||| BufferUsage.VertexBuffer)
     let mutable vertexCount = 0
+    member c.VertexCount = vertexCount
     member c.WrittenSpan = vertices.WrittenSpan
     member c.GetMemory(count) =
         vertices.GetMemory(count)
@@ -147,14 +149,13 @@ type VertexBuffer<'v
         member c.GetSpan(count) = c.GetSpan(count)
         member c.GetMemory(count) = c.GetMemory(count)
         member c.Advance(count) = c.Advance(count)        
-    member c.SetVertexBuffer(cmds : CommandList) =
-        if vertexCount > 0 then
-            cmds.SetVertexBuffer(0u, vb.Buffer)
-        vertexCount
+    member c.SetVertexBuffer(commands : CommandList) =
+        commands.SetVertexBuffer(0u, vb.Buffer)
     member c.Dispose() =
         vb.Dispose()
     interface IVertexBuffer with
-        member c.SetVertexBuffer(cmds) = c.SetVertexBuffer(cmds)
+        member c.VertexCount = vertexCount
+        member c.SetVertexBuffer(commands) = c.SetVertexBuffer(commands)
         member c.Flush() = c.Flush()
     interface IDisposable with
         member c.Dispose() = c.Dispose()        

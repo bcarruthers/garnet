@@ -57,7 +57,7 @@ module SimulationSystems =
 
         member c.AddLifespan() =
             c.On<Update> <| fun e ->
-                let dt = float32 e.deltaTime / 1000.0f
+                let dt = float32 e.DeltaTime / 1000.0f
                 for r in c.Query<Lifespan, Eid>() do
                     let ls = r.Value1
                     let newLifespan = { Lifespan = ls.Lifespan - dt }
@@ -68,13 +68,13 @@ module SimulationSystems =
 
         member c.AddUpdatePosition() =
             c.On<Update> <| fun e ->
-                let dt = float32 e.deltaTime / 1000.0f
+                let dt = float32 e.DeltaTime / 1000.0f
                 for r in c.Query<Position, Heading>() do
                     r.Value1 <- { Pos = Heading.getNextPosition dt r.Value2 r.Value1.Pos }
 
         member c.AddUpdateRotation() =
             c.On<Update> <| fun e ->
-                let dt = float32 e.deltaTime / 1000.0f
+                let dt = float32 e.DeltaTime / 1000.0f
                 for r in c.Query<Rotation, AngularVelocity>() do
                     r.Value1 <- { Radians = r.Value1.Radians + dt * r.Value2.RotationSpeed }
             

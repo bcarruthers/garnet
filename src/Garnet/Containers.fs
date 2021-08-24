@@ -25,6 +25,7 @@ type Container() =
     let segments = reg.GetValue<SegmentStore<int>>()
     let outbox = reg.GetValue<Outbox>()
     let eidPools = reg.GetValue<EidPools>()
+    let resources = reg.GetValue<ResourceCache>()
     let components = ComponentStore(segments)
     let eids = segments.GetSegments<Eid>()
     member c.Get<'a>() = components.Get<'a>()
@@ -35,6 +36,12 @@ type Container() =
     member c.GetValue() = &reg.GetValue()
     member c.TryGetValue<'a>([<Out>] value : byref<'a>) =
         reg.TryGetValue<'a>(&value)
+    member c.AddResource<'a>(key, resource) =
+        resources.AddResource<'a>(key, resource)
+    member c.TryGetResource<'a>(key, [<Out>] value : byref<'a>) =
+        resources.TryGetResource(key, &value)
+    member c.LoadResource<'a> key =
+        resources.LoadResource<'a>(key)
     member c.IterValues(param, handler) =
         reg.IterValues(param, handler)
     member c.GetAddresses() =
@@ -112,6 +119,11 @@ type Container() =
         member c.TryGetValue<'a>([<Out>] value) = c.TryGetValue<'a>(&value)
         member c.IterValues(param, handler) =
             c.IterValues(param, handler)
+    interface IResourceCache with
+        member c.TryGetResource<'a>(key, [<Out>] value : byref<'a>) =
+            c.TryGetResource<'a>(key, &value)
+        member c.LoadResource<'a> key = c.LoadResource<'a>(key)
+        member c.AddResource(key, resource) = c.AddResource(key, resource)
     interface IChannels with
         member c.GetChannel<'a>() = channels.GetChannel<'a>()
     interface IComponentStore<int, Eid, EidSegmentKeyMapper> with
@@ -141,7 +153,7 @@ type Container() =
     override c.ToString() = 
         reg.ToString()
 
-type PluginRegistry() =
+type SystemRegistry() =
     let dict = Dictionary<string, DisposableReference<IDisposable>>()
     member private c.GetSubscription(name) =
         Disposable.Create(fun () -> 
@@ -197,11 +209,16 @@ type Container with
     member c.Respond(msg) =
         c.Send(c.GetAddresses().SourceId, msg)
 
-    member c.Register(name : string, register : Container -> IDisposable) =
-        let reg = c.GetValue<PluginRegistry>()
+    member c.AddSystems(systems) =
+        systems
+        |> Seq.map (fun sys -> sys c)
+        |> Disposable.Create 
+
+    member c.AddSystem(name : string, register : Container -> IDisposable) =
+        let reg = c.GetValue<SystemRegistry>()
         reg.Add(name, fun () -> register c)
 
-    member c.Register(actorId, actorOutbox, register : Container -> IDisposable) =
+    member c.AddSystem(actorId, actorOutbox, register : Container -> IDisposable) =
         let outbox = c.GetValue<Outbox>()
         use s = outbox.Push {
             Outbox = actorOutbox
@@ -216,7 +233,7 @@ type Container with
     /// Stores a state value in registry and calls registration when state events occur.
     /// This is useful for allowing a container to have multiple states with their own
     /// subscriptions and transition logic.
-    member c.RegisterStateMachine<'a>(initState, registerState) =
+    member c.AddStateMachine<'a>(initState, registerState) =
         let state = new DisposableReference<IDisposable>(Disposable.Null)
         let setState e =
             c.SetValue<'a>(e)
@@ -243,11 +260,9 @@ type LazyContainerInbox(actorId, register) =
     interface IInbox with
         member c.Receive(e) =
             if not isCreated then                
-                sub <- container.Register(actorId, e.Outbox, register)
+                sub <- container.AddSystem(actorId, e.Outbox, register)
                 isCreated <- true
             container.Receive(e)
-    member c.Dispose() =
-        sub.Dispose()
+    member c.Dispose() = sub.Dispose()
     interface IDisposable with
-        member c.Dispose() =
-            c.Dispose()
+        member c.Dispose() = c.Dispose()

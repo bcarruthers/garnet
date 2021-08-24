@@ -4,7 +4,7 @@
 
 [[Code](Garnet.Toolkit)]
 
-Shared code used by samples, including sprite drawing, particles, noise, audio playback, and more. Depends on [Veldrid](https://veldrid.dev/) for graphics and [OpenTK.OpenAL](https://opentk.net/) for audio. No dependency on Garnet ECS.
+Shared code used by samples, including sprite drawing, particles, noise, audio playback, and more. Depends on [Veldrid](https://veldrid.dev/) for graphics and [OpenTK.OpenAL](https://opentk.net/) for audio.
 
 ## Flocking
 

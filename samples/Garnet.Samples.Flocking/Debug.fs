@@ -4,7 +4,7 @@ open System
 open System.Numerics
 open System.Diagnostics
 open ImGuiNET
-open Garnet.Numerics
+open Garnet.Composition
 
 type FpsHud() =
     let fps = FpsGauge(1.0f)

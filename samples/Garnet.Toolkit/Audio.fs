@@ -7,7 +7,7 @@ open System.IO
 open System.Runtime.InteropServices
 open OpenTK.Audio.OpenAL
 open OpenTK.Audio.OpenAL.Extensions
-open Garnet.Resources
+open Garnet.Composition
 open Garnet.Collections
 
 [<Struct>]
@@ -156,7 +156,7 @@ type AudioDevice with
         c.CreateSound(desc, ReadOnlyMemory(data))
 
 [<AutoOpen>]
-module AudioLoaderExtensions =
+module AudioLoadingExtensions =
     type IStreamSource with
         member c.LoadWave(device : AudioDevice, key) =
             use stream = c.Open(key)
@@ -199,15 +199,19 @@ module AudioLoaderExtensions =
                 }
             device.CreateSound(desc, ReadOnlyMemory(data))
 
-type AudioCache() =
-    let sounds = Dictionary<string, SoundId>()
-    member c.Item with get name = sounds.[name]
-    member c.Add(name, soundId) =
-        sounds.Add(name, soundId)
+    type IReadOnlyFolder with
+        member c.LoadAudioFromFolder(path, device, cache : IResourceCache) =
+            for file in c.GetFiles(path, "*.wav") do
+                let soundId = c.LoadWave(device, file)
+                cache.AddResource(file, soundId)
 
-type AudioCache with
-    member c.Load(device, fs : IReadOnlyFolder, path) =
-        for file in fs.GetFiles(path) do
-            let soundId = fs.LoadWave(device, file)
-            c.Add(file, soundId)
-    
+type WaveFileLoader(device : AudioDevice) =
+    interface IResourceLoader with
+        member c.Load(folder, cache, key) =
+            cache.AddResource<SoundId>(key, folder.LoadWave(device, key))
+
+[<AutoOpen>]
+module AudioLoaderExtensions =
+    type ResourceCache with
+        member c.AddAudioLoaders(device) =
+            c.AddLoader(".wav", WaveFileLoader(device))

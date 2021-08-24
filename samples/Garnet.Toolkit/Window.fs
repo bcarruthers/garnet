@@ -47,10 +47,22 @@ type WindowRenderer([<Optional; DefaultParameterValue("Garnet")>] title : string
             window.Width, window.Height)
     let renderer = new Renderer(device, redraw)
     let mutable isDrawn = false
+    member c.Title 
+        with get() = window.Title
+        and set value = window.Title <- value
+    member c.Position 
+        with get() = Vector2i(window.X, window.Y) 
+        and set(value : Vector2i) =
+            window.X <- value.X
+            window.Y <- value.Y
+    member c.Size 
+        with get() = Vector2i(window.Width, window.Height) 
+        and set(value : Vector2i) =
+            window.Width <- value.X
+            window.Height <- value.Y
     member val Background = RgbaFloat.Black with get, set
     member c.ImGui = imGui
     member c.Device = device
-    member c.WindowSize = Vector2i(window.Width, window.Height)
     member c.RenderContext = renderer.Context
     member c.IsShown =
         match window.WindowState with
@@ -92,7 +104,7 @@ type WindowRenderer([<Optional; DefaultParameterValue("Garnet")>] title : string
             if not (ImGui.GetIO().WantCaptureKeyboard) then
                 inputs.UpdateKeysFromSnapshot(snapshot)
             if not (ImGui.GetIO().WantCaptureMouse) then
-                inputs.UpdateMouseFromSnapshot(snapshot, c.WindowSize)                                
+                inputs.UpdateMouseFromSnapshot(snapshot, c.Size)                                
             true
     member c.Dispose() =
         renderer.Dispose()

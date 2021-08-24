@@ -2,14 +2,13 @@
 
 open System
 open System.Buffers
-open System.Collections.Generic
 open System.Runtime.CompilerServices
 open System.IO
 open System.Numerics
 open System.Runtime.InteropServices
 open Veldrid
 open Garnet.Numerics
-open Garnet.Resources
+open Garnet.Composition
 
 /// JSON-serializable
 [<Struct>]
@@ -177,7 +176,7 @@ module private FontRun =
         | TextWrapping.WordWrap -> int (size / pixelToViewport)
         | x -> failwith $"Invalid wrapping {x}"
 
-module private FontCharInfoModule =
+module private FontCharInfo =
     let getTexBounds (charRect : Range2i) (mapSize : Vector2i) texBounds =
         let scale = Vector2.One / (mapSize.ToVector2())
         let t0 = charRect.Min.ToVector2() * scale
@@ -222,7 +221,7 @@ type Font(height, charLookup : FontCharInfo[]) =
                         Width = charSize.X + xSpacing
                         Offset = Vector2i.Zero 
                         Size = charSize
-                        Rect = FontCharInfoModule.getTexBounds charRect charSheetSize texBounds
+                        Rect = FontCharInfo.getTexBounds charRect charSheetSize texBounds
                     }    
             |]
         Font(charSize.Y, lookup)
@@ -231,36 +230,41 @@ type Font(height, charLookup : FontCharInfo[]) =
         for ch in desc.Chars do
             let code = int ch.Code
             if code < table.Length then
-                let coords = FontCharInfoModule.fromCharDescriptor mapSize ch texBounds
+                let coords = FontCharInfo.fromCharDescriptor mapSize ch texBounds
                 table.[code] <- coords
         Font(desc.Height, table)
         
 [<AutoOpen>]
 module FontLoadingExtensions =
-    type IStreamSource with
+    type IReadOnlyFolder with
         /// Loads a JSON font paired with a PNG with matching name
-        member c.LoadJsonFont(fontName : string, texCache : TextureCache) =
+        member c.LoadJsonFont(fontName : string, cache : IResourceCache) =
             let desc = c.LoadJson<FontDescriptor>(fontName)
-            let textureName = Path.GetFileNameWithoutExtension(fontName) + ".png"
-            let size = texCache.[textureName].Size
-            Font.FromDescriptor(desc, size, Range2.ZeroToOne)
+            desc
+//            let textureName = Path.GetFileNameWithoutExtension(fontName) + ".png"
+//            let texture = cache.LoadResource<Texture>(textureName)
+//            let size = Vector2i(int texture.Width, int texture.Height)
+//            Font.FromDescriptor(desc, size, Range2.ZeroToOne)
+
+        /// Loads a monospace font stored in a texture atlas
+        member c.LoadMonospacedFont(atlasName, fontName, xSpacing, cache : ResourceCache) =
+            let atlas = cache.LoadResource<TextureAtlas>(atlasName)
+            let tex = atlas.[fontName]
+            let font = Font.CreateMonospaced(tex.Bounds.Size, tex.NormalizedBounds, xSpacing)
+            cache.AddResource(fontName, font)
         
-type FontCache() =
-    let fonts = Dictionary<string, Font>()
-    member c.Item with get name = fonts.[name]
-    member c.Add(name, font) =
-        fonts.Add(name, font)
+type FontLoader() =
+    interface IResourceLoader with
+        member c.Load(folder, cache, key) =
+            let font = folder.LoadJsonFont(key, cache)
+            //cache.AddResource<Font>(key, font)
+            cache.AddResource<FontDescriptor>(key, font)
 
-type FontCache with
-    member c.Load(name, texCache : TextureCache, fs : IStreamSource) =
-        let font = fs.LoadJsonFont(name, texCache)
-        c.Add(name, font)
-
-    /// Loads a monospace font stored in a texture atlas
-    member c.Load(name, atlas : TextureAtlas, xSpacing) =
-        let tex = atlas.[name]
-        let font = Font.CreateMonospaced(tex.Bounds.Size, tex.NormalizedBounds, xSpacing)
-        c.Add(name, font)
+[<AutoOpen>]
+module FontLoaderExtensions =
+    type ResourceCache with
+        member c.AddFontLoaders() =
+            c.AddLoader(".font.json", FontLoader())
         
 [<Extension>]
 type FontVertexSpanExtensions =

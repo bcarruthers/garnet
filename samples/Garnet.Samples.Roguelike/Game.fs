@@ -5,7 +5,7 @@ open System.Numerics
 open System.Threading
 open Veldrid
 open Garnet.Numerics
-open Garnet.Resources
+open Garnet.Composition
 open Garnet.Graphics
 open Garnet.Input
 
@@ -81,11 +81,12 @@ type Game(fs : IReadOnlyFolder) =
             Background = RgbaFloat.Black)
     // Initialize rendering
     let shaders = new ShaderSetCache()
-    let textures = new TextureCache()
-    let sprites = new SpriteRenderer(ren.Device, shaders, textures)
+    let cache = new ResourceCache()
+    let sprites = new SpriteRenderer(ren.Device, shaders, cache)
     do 
-        shaders.Load(ren.Device, fs, Resources.shaderSet)
-        textures.Add(Resources.tileTexture, ren.Device.CreateTexture(image))
+        cache.AddShaderLoaders(ren.Device)
+        fs.LoadShadersFromFolder(".", ren.Device.BackendType, cache)
+        cache.AddResource(Resources.tileTexture, ren.Device.CreateTexture(image))
     member c.Run() =
         // Set transforms so drawing code can use tile coords for source (16x16 tileset) 
         // and destination (80x25 display tiles)
@@ -115,7 +116,7 @@ type Game(fs : IReadOnlyFolder) =
                 // Update transforms according to window size so we can draw using pixel coords
                 // with origin in upper left of view
                 let displayScale = float32 tileScale
-                let size = ren.WindowSize.ToVector2() / displayScale
+                let size = ren.Size.ToVector2() / displayScale
                 camera.ProjectionTransform <- Matrix4x4.CreateOrthographic(size.X, -size.Y, -100.0f, 100.0f)
                 camera.ViewTransform <- Matrix4x4.CreateTranslation(-size.X * 0.5f, -size.Y * 0.5f, 0.0f)
                 sprites.Draw(ren.RenderContext, cameras)
@@ -124,7 +125,7 @@ type Game(fs : IReadOnlyFolder) =
             Thread.Sleep(1)
     interface IDisposable with
         member c.Dispose() =
-            textures.Dispose()
+            cache.Dispose()
             shaders.Dispose()
             sprites.Dispose()
             ren.Dispose()

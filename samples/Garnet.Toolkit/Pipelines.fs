@@ -4,6 +4,7 @@ open System
 open System.Collections.Generic
 open System.Numerics
 open Veldrid
+open Garnet.Composition
 
 [<Struct>]
 type Blend =
@@ -153,7 +154,7 @@ type TextureTrianglePipeline(device, shaders : ShaderSet, texture : Texture, sam
 
 type TexturePipelineCache(device : GraphicsDevice,
         shaderCache : ShaderSetCache,
-        textureCache : TextureCache) =
+        cache : IResourceCache) =
     let pipelines = Dictionary<_, TextureTrianglePipeline>()
     member c.GetPipeline(desc, outputDesc) =
         let key = struct(desc, outputDesc)
@@ -167,8 +168,8 @@ type TexturePipelineCache(device : GraphicsDevice,
                 | Blend.Alpha -> BlendStateDescription.SingleAlphaBlend
                 | Blend.Override -> BlendStateDescription.SingleOverrideBlend
                 | x -> failwith $"Invalid blend {x}"
-            let shaders = shaderCache.[desc.ShaderSet]
-            let texture = textureCache.[desc.Texture].Texture
+            let shaders = shaderCache.GetOrCreate(device, desc.ShaderSet, cache)
+            let texture = cache.LoadResource<Texture>(desc.Texture)
             let pipeline = new TextureTrianglePipeline(device, shaders, texture, sampler, blend, outputDesc)
             pipelines.Add(key, pipeline)
             pipeline

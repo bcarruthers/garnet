@@ -1,24 +1,7 @@
-﻿namespace Garnet.Numerics
+﻿namespace Garnet.Composition
 
 open System.Diagnostics
 
-[<Struct>]
-type Update = {
-    frameNumber : int64
-    fixedTime : int64
-    fixedDeltaTime : int64
-    time : int64
-    deltaTime : int64
-    }
-
-[<Struct>]
-type FixedUpdate = {
-    fixedFrameNumber : int64
-    fixedTime : int64
-    fixedDeltaTime : int64
-    time : int64
-    }
-    
 type FpsGauge(updateInterval) =
     let mutable count = 0
     let mutable maxValue = 0.0f
@@ -84,6 +67,7 @@ type FixedUpdateTimer(fixedDeltaTime, maxDeltaTime) =
     let mutable frameCount = 0L
     new(fixedDeltaTime) =
         FixedUpdateTimer(fixedDeltaTime, 250L)
+    new() = FixedUpdateTimer(16L)
     member val IsRunning = false with get, set
     member c.HasFixedUpdate =
         accumulatedTime >= fixedDeltaTime && c.IsRunning 
@@ -96,10 +80,10 @@ type FixedUpdateTimer(fixedDeltaTime, maxDeltaTime) =
             variableDeltaTime <- frameTime
     member c.TakeFixedUpdate() =
         let e = {
-            fixedFrameNumber = fixedTime / fixedDeltaTime
-            fixedTime = fixedTime
-            fixedDeltaTime = fixedDeltaTime
-            time = lastTime
+            FixedFrameNumber = fixedTime / fixedDeltaTime
+            FixedTime = fixedTime
+            FixedDeltaTime = fixedDeltaTime
+            Time = lastTime
             }
         fixedTime <- fixedTime + fixedDeltaTime
         accumulatedTime <- accumulatedTime - fixedDeltaTime
@@ -107,11 +91,11 @@ type FixedUpdateTimer(fixedDeltaTime, maxDeltaTime) =
     /// Should be called after fixed update
     member c.TakeUpdate() =
         let e = {
-            frameNumber = frameCount
-            fixedTime = fixedTime - fixedDeltaTime
-            fixedDeltaTime = fixedDeltaTime
-            time = variableTime
-            deltaTime = variableDeltaTime
+            FrameNumber = frameCount
+            FixedTime = fixedTime - fixedDeltaTime
+            FixedDeltaTime = fixedDeltaTime
+            Time = variableTime
+            DeltaTime = variableDeltaTime
             }
         frameCount <- frameCount + 1L
         e

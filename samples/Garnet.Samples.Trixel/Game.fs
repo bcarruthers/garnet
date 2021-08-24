@@ -7,7 +7,7 @@ open System.IO
 open Veldrid
 open SixLabors.ImageSharp
 open Garnet.Numerics
-open Garnet.Resources
+open Garnet.Composition
 open Garnet.Graphics
 open Garnet.Input
 
@@ -61,12 +61,13 @@ type Game(fs : IReadOnlyFolder) =
             Background = RgbaFloat(0.0f, 0.1f, 0.2f, 1.0f))
     // Initialize rendering
     let shaders = new ShaderSetCache()
-    let textures = new TextureCache()
-    let sprites = new SpriteRenderer(ren.Device, shaders, textures)
+    let cache = new ResourceCache()
+    let sprites = new SpriteRenderer(ren.Device, shaders, cache)
     let gui = new Gui(ren.Device, ren.ImGui)
     do
-        shaders.Load(ren.Device, fs, Resources.shaderSet)
-        textures.Load(ren.Device, fs, Resources.squareTex)
+        cache.AddShaderLoaders(ren.Device)
+        fs.LoadShadersFromFolder(".", ren.Device.BackendType, cache)
+        fs.LoadTexture(ren.Device, Resources.squareTex, cache)
     member c.Run() =
         let mutable state = UndoState.init GridState.empty
         sprites.DrawGrid(state)
@@ -83,7 +84,7 @@ type Game(fs : IReadOnlyFolder) =
         let cameras = CameraSet()
         while ren.Update(0.0f, inputs) do
             // Calculate transforms
-            let sizeInTiles = Viewport.getViewSize 0 ren.WindowSize.X ren.WindowSize.Y
+            let sizeInTiles = Viewport.getViewSize 0 ren.Size.X ren.Size.Y
             let proj = Matrix4x4.CreateOrthographic(sizeInTiles.X, sizeInTiles.Y, -100.0f, 100.0f)
             let view = Matrix4x4.Identity
             let camera = cameras.[0]
@@ -126,7 +127,7 @@ type Game(fs : IReadOnlyFolder) =
             Thread.Sleep(1)
     interface IDisposable with
         member c.Dispose() =
-            textures.Dispose()
+            cache.Dispose()
             shaders.Dispose()
             sprites.Dispose()
             gui.Dispose()
