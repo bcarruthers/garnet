@@ -160,4 +160,8 @@ module Registry =
 
         member c.GetValueOrDefault<'a>() =
             c.GetValueOrDefault(Unchecked.defaultof<'a>)
-        
+
+        member c.GetValueOrSetDefault<'a>(fallback : 'a) =
+            match c.TryGetValue<'a>() with
+            | true, value -> value 
+            | false, _ -> c.SetValue(fallback); fallback

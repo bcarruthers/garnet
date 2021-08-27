@@ -15,9 +15,9 @@ module Resources =
     let squareTex = "square.png"
 
     let shaderSet = {
-        VertexShader = "texture-dual-color.vert"
-        FragmentShader = "texture-dual-color.frag"
-        Layout = PositionTextureDualColorVertex.Description
+        VertexShader = "texture-color.vert"
+        FragmentShader = "texture-color.frag"
+        Layout = PositionTextureColorVertex.Description
         }
 
     let pipeline = {
@@ -54,11 +54,13 @@ module DrawingExtensions =
 type Game(fs : IReadOnlyFolder) =
     // Create window and graphics device
     let ren =
-        new WindowRenderer( 
-            title = "Trixel", 
-            width = 800,
-            height = 600,
-            Background = RgbaFloat(0.0f, 0.1f, 0.2f, 1.0f))
+        new WindowRenderer {
+            WindowSettings.Default with
+                Title = "Trixel" 
+                Width = 800
+                Height = 600
+                Background = RgbaFloat(0.0f, 0.1f, 0.2f, 1.0f)
+            }
     // Initialize rendering
     let shaders = new ShaderSetCache()
     let cache = new ResourceCache()

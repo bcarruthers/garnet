@@ -57,45 +57,68 @@ type ScalarGauge(updateInterval) =
             current <- total / float32 count
             count <- 0
             total <- 0.0f
-        
-type FixedUpdateTimer(fixedDeltaTime, maxDeltaTime) =
+
+[<Struct>]
+type TimingSettings = {
+    MinDeltaTime : int64
+    MaxDeltaTime : int64
+    FixedDeltaTime : int64
+    IsRunning : bool
+    ClockActorId : ActorId
+    } with
+    static member Default = {
+        MinDeltaTime = 0L
+        MaxDeltaTime = 250L
+        FixedDeltaTime = 16L
+        IsRunning = false
+        ClockActorId = ActorId.Undefined
+        }
+
+type FixedUpdateTimer(settings) =
+    let mutable settings = settings
     let mutable lastTime = 0L
     let mutable accumulatedTime = 0L
+    let mutable accumulatedFixedTime = 0L
     let mutable variableTime = 0L
     let mutable variableDeltaTime = 0L
     let mutable fixedTime = 0L
     let mutable frameCount = 0L
-    new(fixedDeltaTime) =
-        FixedUpdateTimer(fixedDeltaTime, 250L)
-    new() = FixedUpdateTimer(16L)
-    member val IsRunning = false with get, set
+    member c.HasUpdate =
+        accumulatedTime >= settings.MinDeltaTime 
     member c.HasFixedUpdate =
-        accumulatedTime >= fixedDeltaTime && c.IsRunning 
+        accumulatedFixedTime >= settings.FixedDeltaTime && settings.IsRunning
+    member c.SetSettings(newSettings) =
+        settings <- newSettings
     member c.SetTime(time) =
-        let frameTime = min (time - lastTime) maxDeltaTime
+        let frameTime = min (time - lastTime) settings.MaxDeltaTime
         lastTime <- time
-        if c.IsRunning then
+        if settings.IsRunning then
             accumulatedTime <- accumulatedTime + frameTime
+            accumulatedFixedTime <- accumulatedFixedTime + frameTime
             variableTime <- variableTime + frameTime
             variableDeltaTime <- frameTime
     member c.TakeFixedUpdate() =
         let e = {
-            FixedFrameNumber = fixedTime / fixedDeltaTime
+            FixedFrameNumber = fixedTime / settings.FixedDeltaTime
             FixedTime = fixedTime
-            FixedDeltaTime = fixedDeltaTime
+            FixedDeltaTime = settings.FixedDeltaTime
             Time = lastTime
             }
-        fixedTime <- fixedTime + fixedDeltaTime
-        accumulatedTime <- accumulatedTime - fixedDeltaTime
+        fixedTime <- fixedTime + settings.FixedDeltaTime
+        accumulatedFixedTime <- accumulatedFixedTime - settings.FixedDeltaTime
         e
     /// Should be called after fixed update
     member c.TakeUpdate() =
         let e = {
             FrameNumber = frameCount
-            FixedTime = fixedTime - fixedDeltaTime
-            FixedDeltaTime = fixedDeltaTime
+            FixedTime = fixedTime - settings.FixedDeltaTime
+            FixedDeltaTime = settings.FixedDeltaTime
             Time = variableTime
             DeltaTime = variableDeltaTime
             }
+        // Reset variable time rather than reducing by delta
+        accumulatedTime <- 0L
         frameCount <- frameCount + 1L
         e
+    member c.TryTakeUpdate() =
+        if c.HasUpdate then ValueSome (c.TakeUpdate()) else ValueNone

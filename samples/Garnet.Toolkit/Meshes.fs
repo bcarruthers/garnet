@@ -2,33 +2,9 @@
 
 open System
 open System.Buffers
-open System.Numerics
 open Veldrid
 open Garnet.Collections
 
-[<Struct>]
-type PositionTextureDualColorVertex = {
-    Position : Vector3
-    TexCoord : Vector2
-    Foreground : RgbaFloat
-    Background : RgbaFloat
-    } with
-    static member Description = 
-        VertexLayoutDescription([|
-            VertexElementDescription("Position",
-                VertexElementFormat.Float3,
-                VertexElementSemantic.TextureCoordinate)
-            VertexElementDescription("TexCoord",
-                VertexElementFormat.Float2,
-                VertexElementSemantic.TextureCoordinate)
-            VertexElementDescription("Foreground",
-                VertexElementFormat.Float4,
-                VertexElementSemantic.TextureCoordinate)
-            VertexElementDescription("Background",
-                VertexElementFormat.Float4,
-                VertexElementSemantic.TextureCoordinate)
-            |])
-        
 type ResizableDeviceBuffer(device : GraphicsDevice, elementSize, usage) =
     let mutable buffer = device.ResourceFactory.CreateBuffer(BufferDescription(uint32 (elementSize * 8), usage))
     member c.Buffer = buffer

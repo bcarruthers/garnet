@@ -14,30 +14,28 @@ module DrawingSystems =
                 let atlas = c.GetValue<TextureAtlas>()
                 let layers = c.GetValue<SpriteRenderer>()
                 let texBounds = atlas.[Resources.triangleTexture].NormalizedBounds
-                let mesh = layers.GetVertices(Resources.vehicleLayer)
+                let mesh = layers.GetVertices<PositionTextureColorVertex>(Resources.vehicleLayer)
                 for r in c.Query<Vehicle, Position, Faction, Heading>() do
-                    mesh.DrawSprite(
+                    mesh.DrawQuad(
                         center = r.Value2.Pos, 
                         rotation = r.Value4.Direction,
                         size = 0.1f * Vector2(1.0f, 1.0f) * 140.0f,
                         texBounds = texBounds,
-                        fg = Faction.toColor r.Value3,
-                        bg = RgbaFloat.Clear)
+                        color = Faction.toColor r.Value3)
 
         member c.AddTrailSprites() =
             c.On<Draw> <| fun _ ->
                 let atlas = c.GetValue<TextureAtlas>()
                 let layers = c.GetValue<SpriteRenderer>()
                 let texBounds = atlas.[Resources.hexTexture].NormalizedBounds
-                let mesh = layers.GetVertices(Resources.trailLayer)
+                let mesh = layers.GetVertices<PositionTextureColorVertex>(Resources.trailLayer)
                 for r in c.Query<Trail, Position, Faction, Lifespan, Rotation>() do
-                    mesh.DrawSprite(
+                    mesh.DrawQuad(
                         center = r.Value2.Pos, 
                         rotation = Vector2.FromRadians(r.Value5.Radians),
                         size = r.Value4.Lifespan * 0.3f * Vector2.One * 60.0f,
                         texBounds = texBounds,
-                        fg = (Faction.toColor r.Value3).MultiplyAlpha(r.Value4.Lifespan * 0.3f),
-                        bg = RgbaFloat.Clear)
+                        color = (Faction.toColor r.Value3).MultiplyAlpha(r.Value4.Lifespan * 0.3f))
 
     let register (c : Container) =
         Disposable.Create [

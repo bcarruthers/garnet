@@ -15,16 +15,16 @@
     <None Include="assets\textures\triangle.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="assets\texture-dual-color.frag">
+    <None Include="assets\texture-color.frag">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="assets\texture-dual-color.frag.hlsl.bytes">
+    <None Include="assets\texture-color.frag.hlsl.bytes">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="assets\texture-dual-color.vert">
+    <None Include="assets\texture-color.vert">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="assets\texture-dual-color.vert.hlsl.bytes">
+    <None Include="assets\texture-color.vert.hlsl.bytes">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <Compile Include="Types.fs" />

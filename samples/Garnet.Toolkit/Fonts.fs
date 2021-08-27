@@ -270,7 +270,7 @@ module FontLoaderExtensions =
 type FontVertexSpanExtensions =
     /// Draws monospace text
     [<Extension>]
-    static member DrawText(w : IBufferWriter<PositionTextureDualColorVertex>,
+    static member DrawText(w : IBufferWriter<PositionTextureColorVertex>,
             text : string,
             pos : Vector2i,
             atlasSize : Vector2i,
@@ -281,7 +281,7 @@ type FontVertexSpanExtensions =
         let charSize = charSetSize / Vector2i(16, 16)
         let displayCharSize = charSize + charMargin
         let atlasScale = Vector2.One / atlasSize.ToVector2()
-        let span = w.GetSpriteSpan(text.Length)
+        let span = w.GetQuadSpan(text.Length)
         for i = 0 to text.Length - 1 do
             let ch = text.[i]
             let tileId = int ch
@@ -292,13 +292,13 @@ type FontVertexSpanExtensions =
             let tb = Range2(t0.ToVector2() * atlasScale, t1.ToVector2() * atlasScale)
             let b = Range2i.Sized(pos + Vector2i(i * displayCharSize.X, 0), charSize)
             let span = span.Slice(i * 4)
-            span.DrawRect(b.ToRange2(), tb, color, RgbaFloat.Clear)
+            span.DrawQuad(b.ToRange2(), tb, color)
         w.Advance(span.Length)
 
     [<Extension>]
-    static member DrawText(w : IBufferWriter<PositionTextureDualColorVertex>, font : Font, block : TextBlock) =
+    static member DrawText(w : IBufferWriter<PositionTextureColorVertex>, font : Font, block : TextBlock) =
         let textBounds = font.Measure(block)
-        let span = w.GetSpriteSpan(block.Text.Length)
+        let span = w.GetQuadSpan(block.Text.Length)
         let mutable runOpt = font.TryGetNextRun(block.Text, 0, block.Bounds.Size.X)
         let mutable row = 0
         let mutable vi = 0
@@ -317,7 +317,7 @@ type FontVertexSpanExtensions =
                         let p1 = block.PixelToViewport * (tp1.ToVector2())
                         Range2(p0, p1)
                     let span = span.Slice(vi)
-                    span.DrawRect(b, desc.Rect, block.Color, RgbaFloat.Clear)
+                    span.DrawQuad(b, desc.Rect, block.Color)
                     vi <- vi + 4
                 x <- x + desc.Width
             runOpt <- font.TryGetNextRun(block.Text, run.Max, block.Bounds.Size.X)
@@ -325,7 +325,7 @@ type FontVertexSpanExtensions =
         w.Advance(vi)
 
     [<Extension>]
-    static member DrawText(w : IBufferWriter<PositionTextureDualColorVertex>, font,
+    static member DrawText(w : IBufferWriter<PositionTextureColorVertex>, font,
             text,
             pos : Vector2i,
             color : RgbaFloat,

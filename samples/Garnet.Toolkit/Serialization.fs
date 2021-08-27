@@ -8,13 +8,13 @@ open Veldrid
 open Garnet.Numerics
 
 module private JsonSerialization =
-    type RgbaFloatConverter() =
-        inherit JsonConverter<RgbaFloat>()
-        override _.WriteJson(writer : JsonWriter, value : RgbaFloat, _ : JsonSerializer) =
-            writer.WriteValue(value.ToRgbaByte().ToString())
-        override _.ReadJson(reader, objectType, existingValue, hasExistingValue, serializer) =
-            let s = string reader.Value
-            RgbaFloat.Parse s
+//    type RgbaFloatConverter() =
+//        inherit JsonConverter<RgbaFloat>()
+//        override _.WriteJson(writer : JsonWriter, value : RgbaFloat, _ : JsonSerializer) =
+//            writer.WriteValue(value.ToRgbaByte().ToString())
+//        override _.ReadJson(reader, objectType, existingValue, hasExistingValue, serializer) =
+//            let s = string reader.Value
+//            RgbaFloat.Parse s
             
     // http://gorodinski.com/blog/2013/01/05/json-dot-net-type-converters-for-f-option-list-tuple/
     type OptionConverter() =
@@ -44,7 +44,7 @@ module private JsonSerialization =
                 Formatting = Formatting.Indented,
                 NullValueHandling = NullValueHandling.Ignore)
         settings.Converters.Add(OptionConverter())
-        settings.Converters.Add(RgbaFloatConverter())
+        //settings.Converters.Add(RgbaFloatConverter())
         settings
         
 [<AutoOpen>]

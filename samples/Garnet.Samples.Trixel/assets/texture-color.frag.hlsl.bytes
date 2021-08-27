@@ -2,36 +2,31 @@ Texture2D<float4> _12 : register(t0);
 SamplerState _16 : register(s0);
 
 static float2 _22;
-static float4 _27;
-static float4 _38;
-static float4 _39;
+static float4 _26;
+static float4 _29;
 
 struct SPIRV_Cross_Input
 {
     float2 _22 : TEXCOORD0;
-    float4 _27 : TEXCOORD1;
-    float4 _39 : TEXCOORD2;
+    float4 _29 : TEXCOORD1;
 };
 
 struct SPIRV_Cross_Output
 {
-    float4 _38 : SV_Target0;
+    float4 _26 : SV_Target0;
 };
 
 void frag_main()
 {
-    float4 _24 = _12.Sample(_16, _22);
-    float3 _34 = _27.xyz * _24.xyz;
-    _38 = lerp(_39, float4(_34.x, _34.y, _34.z, _27.w), _24.w.xxxx);
+    _26 = _12.Sample(_16, _22) * _29;
 }
 
 SPIRV_Cross_Output main(SPIRV_Cross_Input stage_input)
 {
     _22 = stage_input._22;
-    _27 = stage_input._27;
-    _39 = stage_input._39;
+    _29 = stage_input._29;
     frag_main();
     SPIRV_Cross_Output stage_output;
-    stage_output._38 = _38;
+    stage_output._26 = _26;
     return stage_output;
 }

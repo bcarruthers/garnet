@@ -3,12 +3,16 @@
 open Garnet.Numerics
 
 type Start = struct end    
-type Close = struct end
 type Closing = struct end
 
 [<Struct>]
 type HandleInput = {
     Time : int64
+    }
+
+[<Struct>]
+type Schedule = {
+    DueTime : int64
     }
 
 [<Struct>]

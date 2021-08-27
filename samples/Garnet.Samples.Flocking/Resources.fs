@@ -4,9 +4,9 @@ open Garnet.Graphics
 
 module Resources =
     let shaderSet = {
-        VertexShader = "texture-dual-color.vert"
-        FragmentShader = "texture-dual-color.frag"
-        Layout = PositionTextureDualColorVertex.Description
+        VertexShader = "texture-color.vert"
+        FragmentShader = "texture-color.frag"
+        Layout = PositionTextureColorVertex.Description
         }
     
     let atlas = "textures"

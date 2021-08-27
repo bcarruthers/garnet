@@ -11,7 +11,7 @@ open Garnet.Graphics
 [<Extension>]
 type VertexSpanExtensions =
     [<Extension>]
-    static member DrawLine(span : Span<PositionTextureDualColorVertex>, 
+    static member DrawLine(span : Span<PositionTextureColorVertex>, 
             p0 : Vector2, 
             p1 : Vector2, 
             thickness : float32, 
@@ -21,10 +21,10 @@ type VertexSpanExtensions =
         let dir = if length < 1e-5f then Vector2.Zero else delta / length
         let rotation = dir.GetPerpendicular()
         let center = (p0 + p1) * 0.5f
-        span.DrawSprite(center, rotation, Vector2(thickness, length), Range2.ZeroToOne, color, color)
+        span.DrawQuad(center, rotation, Vector2(thickness, length), Range2.ZeroToOne, color)
 
     [<Extension>]
-    static member DrawAxialLine(span : Span<PositionTextureDualColorVertex>, 
+    static member DrawAxialLine(span : Span<PositionTextureColorVertex>, 
             p0 : Vector2i, 
             p1 : Vector2i, 
             thickness, 
@@ -36,10 +36,10 @@ type VertexSpanExtensions =
 [<Extension>]
 type VertexBufferWriterExtensions =
     [<Extension>]
-    static member DrawGridLines(w : IBufferWriter<PositionTextureDualColorVertex>, spacing, thickness, color, r) = 
+    static member DrawGridLines(w : IBufferWriter<PositionTextureColorVertex>, spacing, thickness, color, r) = 
         let extent = r / spacing
         let count = extent * 2 + 1
-        let span = w.GetSpriteSpan(count * 3)
+        let span = w.GetQuadSpan(count * 3)
         for i = -extent to extent do
             let p = i * spacing
             let di = (i + extent) * 3 * 4
@@ -55,7 +55,7 @@ type VertexBufferWriterExtensions =
         w.Advance(span.Length)
 
     [<Extension>]
-    static member DrawGridLines(w : IBufferWriter<PositionTextureDualColorVertex>,
+    static member DrawGridLines(w : IBufferWriter<PositionTextureColorVertex>,
             majorSpacing,
             majorThickness,
             majorColor,
@@ -66,7 +66,7 @@ type VertexBufferWriterExtensions =
         w.DrawGridLines(1, minorThickness, minorColor, r)
 
     [<Extension>]
-    static member DrawGridLines(w : IBufferWriter<PositionTextureDualColorVertex>) =
+    static member DrawGridLines(w : IBufferWriter<PositionTextureColorVertex>) =
         let minorColor = RgbaFloat(0.8f, 0.6f, 0.1f, 0.2f)
         let majorColor = RgbaFloat(0.8f, 0.6f, 0.1f, 0.3f)
         let majorSpacing = 6
@@ -75,7 +75,7 @@ type VertexBufferWriterExtensions =
         w.DrawGridLines(majorSpacing, majorThickness, majorColor, minorThickness, minorColor, 100)
     
     [<Extension>]
-    static member DrawGridCells(w : IBufferWriter<PositionTextureDualColorVertex>, state) =
+    static member DrawGridCells(w : IBufferWriter<PositionTextureColorVertex>, state) =
         let cellMargin = 0.1f
         let vertexCount = state.Cells.Count * 3
         let span = w.GetSpan(vertexCount)
@@ -92,20 +92,17 @@ type VertexBufferWriterExtensions =
             verts.[0] <- {
                 Position = Vector3(p0.X, p0.Y, 0.0f)
                 TexCoord = Vector2(0.0f, 0.0f)
-                Foreground = color
-                Background = color
+                Color = color
                 }
             verts.[1] <- {
                 Position = Vector3(p1.X, p1.Y, 0.0f)
                 TexCoord = Vector2(1.0f, 0.0f)
-                Foreground = color
-                Background = color
+                Color = color
                 }
             verts.[2] <- {
                 Position = Vector3(p2.X, p2.Y, 0.0f)
                 TexCoord = Vector2(0.0f, 1.0f)
-                Foreground = color
-                Background = color
+                Color = color
                 }
             i <- i + 1
         w.Advance(vertexCount)

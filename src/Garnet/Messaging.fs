@@ -12,6 +12,8 @@ type ActorId =
     val Value : int
     new(value) = { Value = value }
     override e.ToString() = "0x" + e.Value.ToString("x")
+    member e.IsDefined = e.Value <> 0
+    member e.IsUndefined = e.Value = 0
     static member inline Undefined = ActorId 0
 
 [<Struct>]

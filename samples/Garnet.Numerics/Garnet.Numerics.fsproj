@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Numerics.fs" />
+    <Compile Include="Vectors.fs" />
+    <Compile Include="Ranges.fs" />
+    <Compile Include="Random.fs" />
+    <Compile Include="Hashing.fs" />
+    <Compile Include="Noise.fs" />
+  </ItemGroup>
+</Project>

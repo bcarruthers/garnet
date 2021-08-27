@@ -73,12 +73,14 @@ type Game(fs : IReadOnlyFolder) =
     let mapExtent = mapRadius * 2 + 1
     // Create window and graphics device
     let ren =
-        new WindowRenderer( 
-            title = "Roguelike",
-            width = mapExtent * tileWidth * tileScale,
-            height = mapExtent * tileHeight * tileScale,
-            redraw = Redraw.Manual,
-            Background = RgbaFloat.Black)
+        new WindowRenderer {
+            WindowSettings.Default with
+                Title = "Roguelike"
+                Width = mapExtent * tileWidth * tileScale
+                Height = mapExtent * tileHeight * tileScale
+                Redraw = Redraw.Manual
+                Background = RgbaFloat.Black
+                }
     // Initialize rendering
     let shaders = new ShaderSetCache()
     let cache = new ResourceCache()

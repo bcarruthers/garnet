@@ -227,12 +227,11 @@ type ParticleSet(anim : ParticleAnimation) =
     member c.Draw(layers : SpriteRenderer, atlas : TextureAtlas) =
         // Update tex bounds lookup
         for i = 0 to texBounds.Length - 1 do
-            texBounds.[i] <- atlas.[anim.Textures.[i]].NormalizedBounds
+            texBounds.[i] <- atlas.GetNormalizedBounds(anim.Textures.[i])
         // Draw sprites
-        let w = layers.GetVertices<PositionTextureDualColorVertex>(anim.Layer)
-        let bg = RgbaFloat.Clear
+        let w = layers.GetVertices<PositionTextureColorVertex>(anim.Layer)
         let baseSize = Vector2(anim.Width, anim.Height) * 0.5f
-        let span = w.GetSpriteSpan(pc)
+        let span = w.GetQuadSpan(pc)
         for i = 0 to pc - 1 do
             let p = b.positions.[i]
             let dir = b.rotations.[i]
@@ -257,26 +256,22 @@ type ParticleSet(anim : ParticleAnimation) =
             span.[0] <- {
                 Position = Vector3(p0.X, p0.Y, 0.0f)
                 TexCoord = Vector2(t0.X, t0.Y)
-                Foreground = fg
-                Background = bg
+                Color = fg
                 }
             span.[1] <- {
                 Position = Vector3(p1.X, p1.Y, 0.0f)
                 TexCoord = Vector2(t2.X, t0.Y)
-                Foreground = fg
-                Background = bg
+                Color = fg
                 }
             span.[2] <- {
                 Position = Vector3(p2.X, p2.Y, 0.0f)
                 TexCoord = Vector2(t2.X, t2.Y)
-                Foreground = fg
-                Background = bg
+                Color = fg
                 }
             span.[3] <- {
                 Position = Vector3(p3.X, p3.Y, 0.0f)
                 TexCoord = Vector2(t0.X, t2.Y)
-                Foreground = fg
-                Background = bg
+                Color = fg
                 }
         w.Advance(span.Length)        
 
@@ -322,7 +317,7 @@ type ParticleSystem() =
         // anything previously flushed to the same buffer
         for desc in layerDescriptors do
             match desc.FlushMode with
-            | NoFlush -> canvas.GetVertices<PositionTextureDualColorVertex>(desc).Flush()
+            | NoFlush -> canvas.Flush(desc.LayerId)
             | FlushOnDraw -> ()
 
 type ParticleSystem with

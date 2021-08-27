@@ -13,30 +13,28 @@
   <ItemGroup>
     <Compile Include="Comparisons.fs" />
     <Compile Include="Collections.fs" />
-    <Compile Include="Numerics.fs" />
-    <Compile Include="Vectors.fs" />
-    <Compile Include="Ranges.fs" />
     <Compile Include="Colors.fs" />
-    <Compile Include="Hashing.fs" />
-    <Compile Include="Random.fs" />
-    <Compile Include="Noise.fs" />
     <Compile Include="Serialization.fs" />
     <Compile Include="Input.fs" />
     <Compile Include="Rendering.fs" />
     <Compile Include="Shaders.fs" />
     <Compile Include="Meshes.fs" />
+    <Compile Include="Vertices.fs" />
     <Compile Include="Textures.fs" />
     <Compile Include="Pipelines.fs" />
     <Compile Include="Offscreen.fs" />
     <Compile Include="Window.fs" />
     <Compile Include="Tiling.fs" />
     <Compile Include="Sprites.fs" />
+    <Compile Include="Picking.fs" />
     <Compile Include="Fonts.fs" />
     <Compile Include="Particles.fs" />
     <Compile Include="Audio.fs" />
     <Compile Include="Events.fs" />
     <Compile Include="Timing.fs" />
-    <Compile Include="Composition.fs" />
+    <Compile Include="Requests.fs" />
+    <Compile Include="Systems.fs" />
+    <Compile Include="Looping.fs" />
     <Content Condition="'$(IsWindows)' == 'true' And '$(Is64Bit)' == 'false'" Include="..\..\dependencies\win-x86\openal32.dll" Link="openal32.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -46,7 +44,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="Veldrid" Version="4.8.0" />
     <PackageReference Include="Veldrid.ImGui" Version="5.72.0" />
     <PackageReference Include="Veldrid.SDL2" Version="4.8.0" />
@@ -58,6 +55,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Garnet\Garnet.fsproj" />
+    <ProjectReference Include="..\Garnet.Numerics\Garnet.Numerics.fsproj" />
   </ItemGroup>
 
 </Project>

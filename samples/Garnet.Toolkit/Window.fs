@@ -2,12 +2,30 @@
 
 open System
 open System.IO
-open System.Runtime.InteropServices
 open Veldrid
 open Veldrid.StartupUtilities
 open ImGuiNET
 open Garnet.Numerics
 open Garnet.Input
+
+type WindowSettings = {
+    X : int
+    Y : int
+    Width : int
+    Height : int
+    Title : string
+    Background : RgbaFloat
+    Redraw : Redraw
+    } with
+    static member Default = {
+        X = 100
+        Y = 100
+        Width = 640
+        Height = 360
+        Title = "Garnet"
+        Background = RgbaFloat.Clear
+        Redraw = Redraw.Auto
+        }
 
 module private Environment =
     let addPathVariables() =
@@ -18,24 +36,18 @@ module private Environment =
         if not (ev.Contains(nativePath)) then
             Environment.SetEnvironmentVariable("Path", $"{ev};{nativePath}")
 
-type WindowRenderer([<Optional; DefaultParameterValue("Garnet")>] title : string,
-        [<Optional; DefaultParameterValue(100)>] x : int,
-        [<Optional; DefaultParameterValue(100)>] y : int,
-        [<Optional; DefaultParameterValue(640)>] width : int,
-        [<Optional; DefaultParameterValue(360)>] height : int,
-        [<Optional; DefaultParameterValue(Redraw.Auto)>] redraw : Redraw
-        ) =
+type WindowRenderer(settings) =
     let window = 
         Environment.addPathVariables()
         // Create window initially hidden until background can be drawn
         let windowCI = 
             WindowCreateInfo(
-                X = x,
-                Y = y,
-                WindowWidth = width,
-                WindowHeight = height,
+                X = settings.X,
+                Y = settings.Y,
+                WindowWidth = settings.Width,
+                WindowHeight = settings.Height,
                 WindowInitialState = WindowState.Hidden,
-                WindowTitle = title
+                WindowTitle = settings.Title
             )
         VeldridStartup.CreateWindow(windowCI)
     let device = 
@@ -45,7 +57,7 @@ type WindowRenderer([<Optional; DefaultParameterValue("Garnet")>] title : string
         new ImGuiRenderer(device,
             device.MainSwapchain.Framebuffer.OutputDescription,
             window.Width, window.Height)
-    let renderer = new Renderer(device, redraw)
+    let renderer = new Renderer(device, settings.Redraw)
     let mutable isDrawn = false
     member c.Title 
         with get() = window.Title
@@ -60,7 +72,7 @@ type WindowRenderer([<Optional; DefaultParameterValue("Garnet")>] title : string
         and set(value : Vector2i) =
             window.Width <- value.X
             window.Height <- value.Y
-    member val Background = RgbaFloat.Black with get, set
+    member val Background = settings.Background with get, set
     member c.ImGui = imGui
     member c.Device = device
     member c.RenderContext = renderer.Context

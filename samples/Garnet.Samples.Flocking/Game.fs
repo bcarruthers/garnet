@@ -30,11 +30,13 @@ type UpdateTimer(fixedDeltaTime) =
 type Game(fs : IReadOnlyFolder) =
     // Create window and graphics device
     let ren =
-        new WindowRenderer( 
-            title = "Flocking",
-            width = 800,
-            height = 600,
-            Background = RgbaFloat(0.0f, 0.1f, 0.2f, 1.0f))
+        new WindowRenderer {
+            WindowSettings.Default with
+                Title = "Flocking"
+                Width = 800
+                Height = 600
+                Background = RgbaFloat(0.0f, 0.1f, 0.2f, 1.0f)
+                }
     // Initialize rendering
     let shaders = new ShaderSetCache()
     let cache = new ResourceCache()
