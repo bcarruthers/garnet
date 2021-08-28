@@ -53,7 +53,8 @@ type QuadIndexBuffer(device : GraphicsDevice) =
     let verticesPer = 4
     let elementSize = sizeof<uint32>
     let usage = BufferUsage.Dynamic ||| BufferUsage.IndexBuffer
-    let mutable buffer = device.ResourceFactory.CreateBuffer(BufferDescription(uint32 (elementSize * 8), usage))
+    // Initially allocate just 1 to force creation on first request
+    let mutable buffer = device.ResourceFactory.CreateBuffer(BufferDescription(1u, usage))
     member private c.Update(requestedCount) =
         let bytesPer = elementSize * indexesPer
         let bufferedCount = int buffer.SizeInBytes / bytesPer

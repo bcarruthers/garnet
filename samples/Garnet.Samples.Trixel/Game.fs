@@ -14,10 +14,9 @@ open Garnet.Input
 module Resources =
     let squareTex = "square.png"
 
-    let shaderSet = {
+    let shaderSet : ShaderSetDescriptor<PositionTextureColorVertex> = {
         VertexShader = "texture-color.vert"
         FragmentShader = "texture-color.frag"
-        Layout = PositionTextureColorVertex.Description
         }
 
     let pipeline = {

@@ -3,7 +3,6 @@
 open System
 open System.Buffers
 open System.Runtime.CompilerServices
-open System.IO
 open System.Numerics
 open System.Runtime.InteropServices
 open Veldrid
@@ -11,7 +10,6 @@ open Garnet.Numerics
 open Garnet.Composition
 
 /// JSON-serializable
-[<Struct>]
 type FontCharDescriptor = {
     Code : char
     Width : int
@@ -51,13 +49,22 @@ type TextBlock = {
     Text : string
     Color : RgbaFloat
     Bounds : Range2i
-    Scale : float32
+    Scale : int
     Align : Align
     Valign : Valign
     Wrapping : TextWrapping
     Spacing : Vector2i
-    PixelToViewport : Vector2
-    }
+    } with
+    static member Default = {
+        Text = ""
+        Color = RgbaFloat.White
+        Bounds = Range2i.Zero
+        Scale = 1
+        Align = Align.Left
+        Valign = Valign.Top
+        Wrapping = TextWrapping.NoWrap
+        Spacing = Vector2i.Zero
+        }
 
 [<Struct>]
 type FontCharInfo = {
@@ -80,20 +87,20 @@ module private FontRun =
         while stop > run.Min && Char.IsWhiteSpace str.[stop - 1] do
             stop <- stop - 1
         Rangei(start, stop)
+        
+    let isWhitespace ch =
+        Char.IsWhiteSpace ch ||
+        ch = '\n'
 
     let getWordStart (str : string) start =
         let mutable i = start
-        let mutable word = false
-        while not word && i < str.Length do            
-            word <- not (Char.IsWhiteSpace str.[i])            
+        while i < str.Length && isWhitespace str.[i] do
             i <- i + 1
         i
 
     let getWordEnd (str : string) start =
         let mutable i = start
-        let mutable whitespace = false
-        while not whitespace && i < str.Length do            
-            whitespace <- Char.IsWhiteSpace str.[i]            
+        while i < str.Length && not (isWhitespace str.[i]) do
             i <- i + 1
         i
 
@@ -105,39 +112,37 @@ module private FontRun =
         
     let tryGetNextRun (str : string) charWidths start maxAllowedWidth =
         let mutable runWidth = 0
-        let mutable runStart = start
         let mutable i = start
         let mutable result = ValueNone
         while result.IsNone && i < str.Length do
             let ch = str.[i]
-            if ch = '\n' then
-                // Newline, return run
-                result <- ValueSome (Rangei(runStart, i))
-                i <- i + 1
-            elif Char.IsWhiteSpace(ch) then
+            if isWhitespace ch then
                 // Whitespace, accumulate width but don't check for limit
                 let width = getCharWidth ch charWidths
                 runWidth <- runWidth + width
                 i <- i + 1
             else
                 // Word, scan until whitespace
-                let start = i
                 let stop = getWordEnd str i
-                let wordWidth = getRunWidth str charWidths (Rangei(start, stop))
-                let newRunWidth = runWidth + wordWidth
-                if newRunWidth > maxAllowedWidth then
-                    // If the word doesn't fit on line, return line without word
-                    result <- ValueSome (Rangei(runStart, start))
-                    runWidth <- wordWidth
-                    // Scan to the start of next word to eat any whitespace that
-                    // would otherwise appear at the start of next line
-                    i <- getWordStart str stop
+                if stop < str.Length && str.[stop] = '\n' then
+                    // Newline, return a run including newline
+                    result <- ValueSome (Rangei(start, stop + 1))
                 else
-                    runWidth <- newRunWidth
-                    i <- stop
-        let remaining = str.Length - runStart
-        if remaining > 0 then
-            result <- ValueSome (Rangei(runStart, str.Length))
+                    let wordWidth = getRunWidth str charWidths (Rangei(start, stop))
+                    let newRunWidth = runWidth + wordWidth
+                    if newRunWidth > maxAllowedWidth then
+                        // Scan to the start of next word to eat any whitespace that
+                        // would otherwise appear at the start of next line
+                        let nextWord = getWordStart str stop
+                        // If the word doesn't fit on line, return line without word
+                        result <- ValueSome (Rangei(start, nextWord))
+                    else
+                        runWidth <- newRunWidth
+                        i <- stop
+        if result.IsNone then
+            let remaining = str.Length - start
+            if remaining > 0 then
+                result <- ValueSome (Rangei(start, str.Length))
         result
 
     let measure (str : string) (charWidths : int[]) charHeight maxAllowedWidth =
@@ -149,12 +154,12 @@ module private FontRun =
             let width = getRunWidth str charWidths run
             maxWidth <- max maxWidth width
             count <- count + 1
-            runOpt <- tryGetNextRun str charWidths maxAllowedWidth run.Max
+            runOpt <- tryGetNextRun str charWidths run.Max maxAllowedWidth
         Vector2i(maxWidth, count * charHeight)    
 
-    let getBounds (size : Vector2i) (bounds : Range2) align valign (pixelToViewport : Vector2) =
-        let p0 = Vector2i.FromVector2(bounds.Min / pixelToViewport)
-        let p1 = Vector2i.FromVector2(bounds.Max / pixelToViewport)
+    let getBounds (size : Vector2i) (bounds : Range2i) align valign =
+        let p0 = bounds.Min
+        let p1 = bounds.Max
         let boxSize = p1 - p0
         let x0 =
             match align with
@@ -166,14 +171,14 @@ module private FontRun =
             match valign with
             | Valign.Top -> p0.Y
             | Valign.Bottom -> p1.Y - size.Y
-            | Valign.Center -> p0.Y + (boxSize.Y - size.X) / 2
+            | Valign.Center -> p0.Y + (boxSize.Y - size.Y) / 2
             | x -> failwith $"Invalid valign {x}"
         Range2i.Sized(Vector2i(x0, y0), size)
 
-    let getMaxAllowedWidth wrapping (size : float32) (pixelToViewport : float32) =
+    let getMaxAllowedWidth wrapping size =
         match wrapping with
         | TextWrapping.NoWrap -> Int32.MaxValue
-        | TextWrapping.WordWrap -> int (size / pixelToViewport)
+        | TextWrapping.WordWrap -> size
         | x -> failwith $"Invalid wrapping {x}"
 
 module private FontCharInfo =
@@ -205,10 +210,10 @@ type Font(height, charLookup : FontCharInfo[]) =
     member c.Measure(text) =
         FontRun.measure text widths height Int32.MaxValue
     member c.Measure(block) =
-        let bounds = block.Bounds.ToRange2()
-        let maxAllowedWidth = FontRun.getMaxAllowedWidth block.Wrapping bounds.Size.X block.PixelToViewport.X
-        let size = FontRun.measure block.Text widths height maxAllowedWidth
-        FontRun.getBounds size bounds block.Align block.Valign block.PixelToViewport
+        let bounds = block.Bounds
+        let maxAllowedWidth = FontRun.getMaxAllowedWidth block.Wrapping (bounds.Size.X * block.Scale)
+        let size = FontRun.measure block.Text widths height maxAllowedWidth * block.Scale
+        FontRun.getBounds size bounds block.Align block.Valign
     static member CreateMonospaced(charSheetSize : Vector2i, texBounds, xSpacing) =
         // Assume this is a 16x16 char tile sheet
         let charSize = charSheetSize / 16
@@ -237,27 +242,46 @@ type Font(height, charLookup : FontCharInfo[]) =
 [<AutoOpen>]
 module FontLoadingExtensions =
     type IReadOnlyFolder with
-        /// Loads a JSON font paired with a PNG with matching name
-        member c.LoadJsonFont(fontName : string, cache : IResourceCache) =
-            let desc = c.LoadJson<FontDescriptor>(fontName)
-            desc
-//            let textureName = Path.GetFileNameWithoutExtension(fontName) + ".png"
-//            let texture = cache.LoadResource<Texture>(textureName)
-//            let size = Vector2i(int texture.Width, int texture.Height)
-//            Font.FromDescriptor(desc, size, Range2.ZeroToOne)
+        member c.LoadJsonFontDescriptor(fontName : string) =
+            c.LoadJson<FontDescriptor>(fontName)
 
+    type IResourceCache with
         /// Loads a monospace font stored in a texture atlas
-        member c.LoadMonospacedFont(atlasName, fontName, xSpacing, cache : ResourceCache) =
-            let atlas = cache.LoadResource<TextureAtlas>(atlasName)
-            let tex = atlas.[fontName]
-            let font = Font.CreateMonospaced(tex.Bounds.Size, tex.NormalizedBounds, xSpacing)
-            cache.AddResource(fontName, font)
+        member c.LoadMonospacedFont(atlasName, fontName, xSpacing) =
+            match c.TryGetResource<Font>(fontName) with
+            | true, font -> font
+            | false, _ ->
+                let atlas = c.LoadResource<TextureAtlas>(atlasName)
+                let tex = atlas.[fontName]
+                let font = Font.CreateMonospaced(tex.Bounds.Size, tex.NormalizedBounds, xSpacing)
+                c.AddResource(fontName, font)
+                font
+
+        /// Loads a JSON font paired with a PNG with matching name
+        member c.LoadJsonFont(fontName,
+                fontTextureName,
+                [<Optional; DefaultParameterValue("")>] atlasName : string) =
+            match c.TryGetResource<Font>(fontName) with
+            | true, font -> font
+            | false, _ ->
+                let desc = c.LoadResource<FontDescriptor>(fontName)
+                let font =
+                    if String.IsNullOrEmpty(atlasName) then
+                        let tex = c.LoadResource<Texture>(fontTextureName)
+                        Font.FromDescriptor(desc, Vector2i(int tex.Width, int tex.Height), Range2.ZeroToOne)
+                    else
+                        let atlas = c.LoadResource<TextureAtlas>(atlasName)
+                        let tex = atlas.[fontTextureName]
+                        let size = tex.Bounds.Size //- Vector2i.One * tex.Padding * 2
+                        let texBounds = tex.NormalizedBounds
+                        Font.FromDescriptor(desc, Vector2i(abs size.X, abs size.Y), texBounds)
+                c.AddResource(fontName, font)
+                font
         
 type FontLoader() =
     interface IResourceLoader with
         member c.Load(folder, cache, key) =
-            let font = folder.LoadJsonFont(key, cache)
-            //cache.AddResource<Font>(key, font)
+            let font = folder.LoadJsonFontDescriptor(key)
             cache.AddResource<FontDescriptor>(key, font)
 
 [<AutoOpen>]
@@ -304,22 +328,21 @@ type FontVertexSpanExtensions =
         let mutable vi = 0
         while runOpt.IsSome do
             let run = runOpt.Value
-            let y = textBounds.Y.Min + row * font.Height
+            let y = textBounds.Y.Min + row * font.Height * block.Scale
             let mutable x = textBounds.X.Min
             for i = run.Min to run.Max - 1 do
                 let ch = block.Text.[i]
                 let desc = font.GetCharInfo(ch)
                 if desc.Size.X > 0 then
                     let b =
-                        let tp0 = Vector2i(x + desc.Offset.X, y + desc.Offset.Y)
-                        let tp1 = tp0 + desc.Size
-                        let p0 = block.PixelToViewport * (tp0.ToVector2())
-                        let p1 = block.PixelToViewport * (tp1.ToVector2())
-                        Range2(p0, p1)
+                        let offset = desc.Offset * block.Scale
+                        let p0 = Vector2i(x + offset.X, y + offset.Y)
+                        let p1 = p0 + desc.Size * block.Scale
+                        Range2i(p0, p1)
                     let span = span.Slice(vi)
-                    span.DrawQuad(b, desc.Rect, block.Color)
+                    span.DrawQuad(b.ToRange2(), desc.Rect, block.Color)
                     vi <- vi + 4
-                x <- x + desc.Width
+                x <- x + desc.Width * block.Scale
             runOpt <- font.TryGetNextRun(block.Text, run.Max, block.Bounds.Size.X)
             row <- row + 1
         w.Advance(vi)
@@ -334,7 +357,7 @@ type FontVertexSpanExtensions =
             [<Optional; DefaultParameterValue(Align.Left)>] align : Align,
             [<Optional; DefaultParameterValue(Valign.Top)>] valign : Valign,
             [<Optional; DefaultParameterValue(TextWrapping.NoWrap)>] wrapping : TextWrapping,
-            [<Optional; DefaultParameterValue(1.0f)>] scale : float32,
+            [<Optional; DefaultParameterValue(1)>] scale : int,
             [<Optional; DefaultParameterValue(0)>] xSpacing : int,
             [<Optional; DefaultParameterValue(0)>] ySpacing : int
             ) =
@@ -347,6 +370,5 @@ type FontVertexSpanExtensions =
             Valign = valign
             Wrapping = wrapping
             Spacing = Vector2i(xSpacing, ySpacing)
-            PixelToViewport = Vector2.One
         })
     

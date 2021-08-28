@@ -9,7 +9,7 @@ open Garnet.Collections
 type ParticleAnimation = {
     RandomSeed : uint64
     AnimationId : int
-    Layer : SpriteLayerDescriptor
+    Layer : SpriteLayerDescriptor<PositionTextureColorVertex>
     Duration : float32
     Width : float32
     Height : float32
@@ -229,7 +229,7 @@ type ParticleSet(anim : ParticleAnimation) =
         for i = 0 to texBounds.Length - 1 do
             texBounds.[i] <- atlas.GetNormalizedBounds(anim.Textures.[i])
         // Draw sprites
-        let w = layers.GetVertices<PositionTextureColorVertex>(anim.Layer)
+        let w = layers.GetVertices(anim.Layer)
         let baseSize = Vector2(anim.Width, anim.Height) * 0.5f
         let span = w.GetQuadSpan(pc)
         for i = 0 to pc - 1 do
@@ -300,7 +300,7 @@ type ParticleSystem() =
         groups.[groupId] <- group
         // Track the set of layers we're using
         for anim in anims do
-            layerDescriptors.Add(anim.Layer) |> ignore
+            layerDescriptors.Add(anim.Layer.Untyped) |> ignore
     member c.Emit(emission : ParticleEmission) =
         if emission.GroupId < groups.Count then
             let group = groups.[emission.GroupId]

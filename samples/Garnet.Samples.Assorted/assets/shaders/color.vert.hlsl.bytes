@@ -1,0 +1,49 @@
+cbuffer _11_13 : register(b2)
+{
+    row_major float4x4 _13_m0 : packoffset(c0);
+};
+
+cbuffer _30_32 : register(b1)
+{
+    row_major float4x4 _32_m0 : packoffset(c0);
+};
+
+cbuffer _38_40 : register(b0)
+{
+    row_major float4x4 _40_m0 : packoffset(c0);
+};
+
+
+static float4 gl_Position;
+static float3 _21;
+static float4 _54;
+static float4 _56;
+
+struct SPIRV_Cross_Input
+{
+    float3 _21 : TEXCOORD0;
+    float4 _56 : TEXCOORD1;
+};
+
+struct SPIRV_Cross_Output
+{
+    float4 _54 : TEXCOORD0;
+    float4 gl_Position : SV_Position;
+};
+
+void vert_main()
+{
+    gl_Position = mul(mul(mul(float4(_21, 1.0f), _13_m0), _32_m0), _40_m0);
+    _54 = _56;
+}
+
+SPIRV_Cross_Output main(SPIRV_Cross_Input stage_input)
+{
+    _21 = stage_input._21;
+    _56 = stage_input._56;
+    vert_main();
+    SPIRV_Cross_Output stage_output;
+    stage_output.gl_Position = gl_Position;
+    stage_output._54 = _54;
+    return stage_output;
+}

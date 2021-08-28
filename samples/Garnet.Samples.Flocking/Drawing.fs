@@ -14,7 +14,7 @@ module DrawingSystems =
                 let atlas = c.GetValue<TextureAtlas>()
                 let layers = c.GetValue<SpriteRenderer>()
                 let texBounds = atlas.[Resources.triangleTexture].NormalizedBounds
-                let mesh = layers.GetVertices<PositionTextureColorVertex>(Resources.vehicleLayer)
+                let mesh = layers.GetVertices(Resources.vehicleLayer)
                 for r in c.Query<Vehicle, Position, Faction, Heading>() do
                     mesh.DrawQuad(
                         center = r.Value2.Pos, 
@@ -28,7 +28,7 @@ module DrawingSystems =
                 let atlas = c.GetValue<TextureAtlas>()
                 let layers = c.GetValue<SpriteRenderer>()
                 let texBounds = atlas.[Resources.hexTexture].NormalizedBounds
-                let mesh = layers.GetVertices<PositionTextureColorVertex>(Resources.trailLayer)
+                let mesh = layers.GetVertices(Resources.trailLayer)
                 for r in c.Query<Trail, Position, Faction, Lifespan, Rotation>() do
                     mesh.DrawQuad(
                         center = r.Value2.Pos, 

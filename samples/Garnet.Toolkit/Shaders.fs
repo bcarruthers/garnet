@@ -8,12 +8,33 @@ open Veldrid
 open Garnet.Composition
 open Veldrid.SPIRV
 
+type IVertex = 
+    abstract Layout : VertexLayoutDescription
+
+type Vertex<'v when 'v : struct and 'v :> IVertex> =
+    static member Layout = Unchecked.defaultof<'v>.Layout
+
 [<Struct>]
 type ShaderSetDescriptor = {
     VertexShader : string
     FragmentShader : string
     Layout : VertexLayoutDescription
     }
+
+[<Struct>]
+type ShaderSetDescriptor<'v
+                when 'v : struct 
+                and 'v : (new : unit -> 'v) 
+                and 'v :> ValueType
+                and 'v :> IVertex> = {
+    VertexShader : string
+    FragmentShader : string
+    } with
+    member c.Untyped = {
+        VertexShader = c.VertexShader
+        FragmentShader = c.FragmentShader
+        Layout = Vertex<'v>.Layout
+        } 
 
 type ShaderSet(device : GraphicsDevice, 
                 vert : ShaderDescription, 

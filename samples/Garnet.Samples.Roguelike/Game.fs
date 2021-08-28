@@ -12,10 +12,9 @@ open Garnet.Input
 module Resources =
     let tileTexture = "drake-10x10-transparent.png"
 
-    let shaderSet = {
+    let shaderSet : ShaderSetDescriptor<PositionTextureDualColorVertex> = {
         VertexShader = "texture-dual-color.vert"
         FragmentShader = "texture-dual-color.frag"
-        Layout = PositionTextureDualColorVertex.Description
         }
 
     // Use point sampling for pixelated appearance

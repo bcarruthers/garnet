@@ -24,13 +24,34 @@ type SpriteFlushMode =
     | NoFlush
     | FlushOnDraw
 
+[<Struct>]
 type SpriteLayerDescriptor = {
     LayerId : int
     CameraId : int
     Primitive : Primitive
     Pipeline : TexturePipelineDescriptor
     FlushMode : SpriteFlushMode
-    }
+    } 
+
+[<Struct>]
+type SpriteLayerDescriptor<'v
+                    when 'v : struct 
+                    and 'v : (new : unit -> 'v) 
+                    and 'v :> ValueType
+                    and 'v :> IVertex> = {
+    LayerId : int
+    CameraId : int
+    Primitive : Primitive
+    Pipeline : TexturePipelineDescriptor<'v>
+    FlushMode : SpriteFlushMode
+    } with
+    member c.Untyped : SpriteLayerDescriptor = {
+        LayerId = c.LayerId
+        CameraId = c.CameraId
+        Primitive = c.Primitive
+        Pipeline = c.Pipeline.Untyped
+        FlushMode = c.FlushMode
+        }
 
 type Camera() =
     member val WorldTransform = Matrix4x4.Identity with get, set
@@ -69,14 +90,15 @@ type SpriteRenderer(device, shaders, cache) =
     member c.GetVertices<'v
                 when 'v : struct 
                 and 'v : (new : unit -> 'v) 
-                and 'v :> ValueType> desc =
+                and 'v :> ValueType
+                and 'v :> IVertex>(desc : SpriteLayerDescriptor<'v>) =
         while layers.Count <= desc.LayerId do
             layers.Add(ValueNone)
         match layers.[desc.LayerId] with
         | ValueNone ->
             let vertices = new VertexBuffer<'v>(device)
             let layer = {
-                Descriptor = desc
+                Descriptor = desc.Untyped
                 Vertices = vertices
                 }
             layers.[desc.LayerId] <- ValueSome layer

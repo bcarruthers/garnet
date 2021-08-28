@@ -25,6 +25,24 @@ type TexturePipelineDescriptor = {
     Texture : string
     }
 
+[<Struct>]
+type TexturePipelineDescriptor<'v
+                        when 'v : struct 
+                        and 'v : (new : unit -> 'v) 
+                        and 'v :> ValueType
+                        and 'v :> IVertex> = {
+    Blend : Blend
+    Filtering : Filtering
+    ShaderSet : ShaderSetDescriptor<'v>
+    Texture : string
+    } with
+    member c.Untyped : TexturePipelineDescriptor = {
+        Blend = c.Blend
+        Filtering = c.Filtering
+        ShaderSet = c.ShaderSet.Untyped
+        Texture = c.Texture
+        }
+
 [<AutoOpen>]
 module internal GraphicsDeviceExtensions =
     type GraphicsDevice with
@@ -155,8 +173,9 @@ type TextureTrianglePipeline(device, shaders : ShaderSet, texture : Texture, sam
 type TexturePipelineCache(device : GraphicsDevice,
         shaderCache : ShaderSetCache,
         cache : IResourceCache) =
+    let solidTexture = device.CreateTextureRgba(1, 1, ReadOnlyMemory(Array.create 4 255uy))
     let pipelines = Dictionary<_, TextureTrianglePipeline>()
-    member c.GetPipeline(desc, outputDesc) =
+    member c.GetPipeline(desc : TexturePipelineDescriptor, outputDesc) =
         let key = struct(desc, outputDesc)
         match pipelines.TryGetValue(key) with
         | true, pipeline -> pipeline
@@ -169,11 +188,15 @@ type TexturePipelineCache(device : GraphicsDevice,
                 | Blend.Override -> BlendStateDescription.SingleOverrideBlend
                 | x -> failwith $"Invalid blend {x}"
             let shaders = shaderCache.GetOrCreate(device, desc.ShaderSet, cache)
-            let texture = cache.LoadResource<Texture>(desc.Texture)
+            let texture =
+                // Use a solid white texture as a fallback when none specified
+                if String.IsNullOrEmpty(desc.Texture) then solidTexture
+                else cache.LoadResource<Texture>(desc.Texture)
             let pipeline = new TextureTrianglePipeline(device, shaders, texture, sampler, blend, outputDesc)
             pipelines.Add(key, pipeline)
             pipeline
     member c.Dispose() =
+        solidTexture.Dispose()
         for pipeline in pipelines.Values do
             pipeline.Dispose()
     interface IDisposable with
