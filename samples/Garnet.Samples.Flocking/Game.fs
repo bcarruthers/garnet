@@ -52,9 +52,9 @@ type Game(fs : IReadOnlyFolder) =
                 SimulationSystems.register c
                 DrawingSystems.register c
                 ]
-        c.SetValue<TextureAtlas>(cache.LoadResource(Resources.atlas))
-        c.SetValue<SpriteRenderer>(sprites)
-        c.SetValue<WorldSettings>(WorldSettings.defaults)
+        c.Set<TextureAtlas>(cache.LoadResource(Resources.atlas))
+        c.Set<SpriteRenderer>(sprites)
+        c.Set<WorldSettings>(WorldSettings.defaults)
         // Initialize systems
         c.Run(Start())
         // Start timers

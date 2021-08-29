@@ -16,13 +16,13 @@ type IRegistry =
     /// Registers a factory for creating values of a specific type
     abstract member SetFactory<'a> : (unit -> 'a) -> unit
     /// Adds or replaces a specific instance of a type
-    abstract member SetValue<'a> : 'a -> unit
+    abstract member Set<'a> : 'a -> unit
     /// Gets or creates a reference to a typed value
-    abstract member GetValue<'a> : unit -> 'a byref
+    abstract member Get<'a> : unit -> 'a byref
     /// Attempts to resolve a type, returning true if successful
-    abstract member TryGetValue<'a> : [<Out>] value : byref<'a> -> bool
+    abstract member TryGet<'a> : [<Out>] value : byref<'a> -> bool
     /// Iterates over all instances, calling handler for each
-    abstract member IterValues<'p> : 'p * IRegistryHandler<'p> -> unit
+    abstract member Iter<'p> : 'p * IRegistryHandler<'p> -> unit
     
 type private IRegistryEntryHandler =
     abstract member Handle<'p> : 'p * int * IRegistryHandler<'p> -> unit
@@ -92,7 +92,7 @@ type Registry() =
                     // Restore factory
                     factories.[id] <- factory
                     entry)    
-    member c.SetValue<'a>(newValue : 'a) =
+    member c.Set<'a>(newValue : 'a) =
         let id = RegistryTypeId<'a>.Id
         if id >= lookup.Length then
             Buffer.resizeArray (id + 1) &lookup
@@ -102,7 +102,7 @@ type Registry() =
             instances.Add(RegistryEntry.Create(cell))
         let cell = lookup.[id] :?> 'a ref
         cell.Value <- newValue        
-    member c.GetValue<'a>() =
+    member c.Get<'a>() =
         let mutable cell = Unchecked.defaultof<_>
         if c.TryGetReference(&cell) then &cell.contents
         else
@@ -113,23 +113,23 @@ type Registry() =
             lookup.[id] <- cell :> obj
             instances.Add(RegistryEntry.Create(cell))
             &cell.contents
-    member c.TryGetValue<'a>([<Out>] value : byref<'a>) =
+    member c.TryGet<'a>([<Out>] value : byref<'a>) =
         let mutable cell = Unchecked.defaultof<_>
         let result = c.TryGetReference(&cell)
         if result then value <- cell.contents
         result
-    member c.IterValues(param, handler) =
-        c.IterValues(param, handler, 0)
-    member c.IterValues(param, handler : IRegistryHandler<'p>, offset) =
+    member c.Iter(param, handler) =
+        c.Iter(param, handler, 0)
+    member c.Iter(param, handler : IRegistryHandler<'p>, offset) =
         for i = 0 to instances.Count - 1 do
             instances.[i].Handler.Handle(param, offset + i, handler)
     interface IRegistry with
         member c.SetFactory(x) = c.SetFactory(x)
-        member c.SetValue(x) = c.SetValue(x)
-        member c.GetValue<'a>() = &c.GetValue<'a>()
-        member c.TryGetValue<'a>([<Out>] value) = c.TryGetValue<'a>(&value)
-        member c.IterValues(param, handler) =
-            c.IterValues(param, handler)
+        member c.Set(x) = c.Set(x)
+        member c.Get<'a>() = &c.Get<'a>()
+        member c.TryGet<'a>([<Out>] value) = c.TryGet<'a>(&value)
+        member c.Iter(param, handler) =
+            c.Iter(param, handler)
     member c.ToString(writer : IStringBlockWriter) =
         if writer.BeginList("Types", instances.Count) then
             let sorted = 
@@ -144,24 +144,24 @@ type Registry() =
 type private CopyRegistryHandler() =
     interface IRegistryHandler<IRegistry> with
         member c.Handle<'a>(registry, _, instance : 'a byref) =
-            registry.SetValue<'a>(instance)
+            registry.Set<'a>(instance)
 
 [<AutoOpen>]
 module Registry =
     type IRegistry with
         member c.CopyTo(dest : IRegistry) =
             let handler = CopyRegistryHandler()
-            c.IterValues(dest, handler)
+            c.Iter(dest, handler)
             
-        member c.GetValueOrDefault<'a>(fallback : 'a) =
-            match c.TryGetValue<'a>() with
+        member c.GetOrDefault<'a>(fallback : 'a) =
+            match c.TryGet<'a>() with
             | true, x -> x
             | false, _ -> fallback
 
-        member c.GetValueOrDefault<'a>() =
-            c.GetValueOrDefault(Unchecked.defaultof<'a>)
+        member c.GetOrDefault<'a>() =
+            c.GetOrDefault(Unchecked.defaultof<'a>)
 
-        member c.GetValueOrSetDefault<'a>(fallback : 'a) =
-            match c.TryGetValue<'a>() with
+        member c.GetOrSetDefault<'a>(fallback : 'a) =
+            match c.TryGet<'a>() with
             | true, value -> value 
-            | false, _ -> c.SetValue(fallback); fallback
+            | false, _ -> c.Set(fallback); fallback

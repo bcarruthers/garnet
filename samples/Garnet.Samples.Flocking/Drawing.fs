@@ -11,8 +11,8 @@ module DrawingSystems =
     type Container with
         member c.AddVehicleSprites() =
             c.On<Draw> <| fun _ ->
-                let atlas = c.GetValue<TextureAtlas>()
-                let layers = c.GetValue<SpriteRenderer>()
+                let atlas = c.Get<TextureAtlas>()
+                let layers = c.Get<SpriteRenderer>()
                 let texBounds = atlas.[Resources.triangleTexture].NormalizedBounds
                 let mesh = layers.GetVertices(Resources.vehicleLayer)
                 for r in c.Query<Vehicle, Position, Faction, Heading>() do
@@ -26,8 +26,8 @@ module DrawingSystems =
 
         member c.AddTrailSprites() =
             c.On<Draw> <| fun _ ->
-                let atlas = c.GetValue<TextureAtlas>()
-                let layers = c.GetValue<SpriteRenderer>()
+                let atlas = c.Get<TextureAtlas>()
+                let layers = c.Get<SpriteRenderer>()
                 let texBounds = atlas.[Resources.hexTexture].NormalizedBounds
                 let mesh = layers.GetVertices(Resources.trailLayer)
                 for r in c.Query<Trail, Position, Faction, Lifespan, Rotation>() do

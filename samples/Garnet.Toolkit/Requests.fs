@@ -38,10 +38,10 @@ module RequestTrackingExtensions =
         
     type Container with
         member c.CreateRequest(waitingCount) =
-            c.GetValue<RequestTracker>().Create(waitingCount)
+            c.Get<RequestTracker>().Create(waitingCount)
 
         member c.ClearRequests() =
-            c.GetValue<RequestTracker>().Clear()
+            c.Get<RequestTracker>().Clear()
 
         member c.CompleteRequest(requestId) =
-            c.GetValue<RequestTracker>().Complete(requestId)
+            c.Get<RequestTracker>().Complete(requestId)

@@ -109,7 +109,7 @@ type WorldGrid() =
 // systems
 module MapSystem =
     let register (c : Container) =
-        let map = c.GetValue<WorldGrid>()
+        let map = c.Get<WorldGrid>()
         Disposable.Create [
             c.On<CommitMap> <| fun _ ->
                 map.Commit()
@@ -192,7 +192,7 @@ let run() =
     // print a single unit
     printfn "%s" <| c.Get(Eid 64).ToString()
     // print a single grid cell
-    let cell = c.GetValue<WorldGrid>().Get({ x = 10; y = 15 })
+    let cell = c.Get<WorldGrid>().Get({ x = 10; y = 15 })
     printfn "%s" <| cell.ToString()
     // destroy cell
     cell.Destroy()

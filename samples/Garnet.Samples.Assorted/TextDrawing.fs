@@ -57,7 +57,7 @@ let run() =
         c.AddEscapeToClose()
         c.On<Draw> <| fun e ->
             let font = c.LoadJsonFont(Resources.font, Resources.fontTexture)
-            let sprites = c.GetValue<SpriteRenderer>()
+            let sprites = c.Get<SpriteRenderer>()
             let textVerts = sprites.GetVertices(Resources.textLayer)
             let panelVerts = sprites.GetVertices(Resources.panelLayer)
             let baseBlock = {

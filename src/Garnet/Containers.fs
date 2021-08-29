@@ -20,30 +20,30 @@ type DisposableReference<'a when 'a :> IDisposable>(init : 'a) =
 /// Wrapper over resource lookup with default types for ECS
 type Container() =
     let reg = Registry()
-    let channels = reg.GetValue<Channels>()
-    let scheduler = reg.GetValue<CoroutineScheduler>()
-    let segments = reg.GetValue<SegmentStore<int>>()
-    let outbox = reg.GetValue<Outbox>()
-    let eidPools = reg.GetValue<EidPools>()
-    let resources = reg.GetValue<ResourceCache>()
+    let channels = reg.Get<Channels>()
+    let scheduler = reg.Get<CoroutineScheduler>()
+    let segments = reg.Get<SegmentStore<int>>()
+    let outbox = reg.Get<Outbox>()
+    let eidPools = reg.Get<EidPools>()
+    let resources = reg.Get<ResourceCache>()
     let components = ComponentStore(segments)
     let eids = segments.GetSegments<Eid>()
     member c.GetComponents<'a>() = components.GetComponents<'a>()
     member c.GetSegments<'a>() = segments.GetSegments<'a>()
     member c.GetChannel<'a>() = channels.GetChannel<'a>()
     member c.SetFactory(x) = reg.SetFactory(x)
-    member c.SetValue(x) = reg.SetValue(x)
-    member c.GetValue() = &reg.GetValue()
-    member c.TryGetValue<'a>([<Out>] value : byref<'a>) =
-        reg.TryGetValue<'a>(&value)
+    member c.Set(x) = reg.Set(x)
+    member c.Get() = &reg.Get()
+    member c.TryGet<'a>([<Out>] value : byref<'a>) =
+        reg.TryGet<'a>(&value)
     member c.AddResource<'a>(key, resource) =
         resources.AddResource<'a>(key, resource)
     member c.TryGetResource<'a>(key, [<Out>] value : byref<'a>) =
         resources.TryGetResource(key, &value)
     member c.LoadResource<'a> key =
         resources.LoadResource<'a>(key)
-    member c.IterValues(param, handler) =
-        reg.IterValues(param, handler)
+    member c.Iter(param, handler) =
+        reg.Iter(param, handler)
     member c.GetAddresses() =
         outbox.Current.Addresses
     member internal c.Clear() =
@@ -111,11 +111,11 @@ type Container() =
         channels.Clear()
     interface IRegistry with
         member c.SetFactory(x) = c.SetFactory(x)
-        member c.SetValue(x) = c.SetValue(x)
-        member c.GetValue() = &c.GetValue()
-        member c.TryGetValue<'a>([<Out>] value) = c.TryGetValue<'a>(&value)
-        member c.IterValues(param, handler) =
-            c.IterValues(param, handler)
+        member c.Set(x) = c.Set(x)
+        member c.Get() = &c.Get()
+        member c.TryGet<'a>([<Out>] value) = c.TryGet<'a>(&value)
+        member c.Iter(param, handler) =
+            c.Iter(param, handler)
     interface IResourceCache with
         member c.TryGetResource<'a>(key, [<Out>] value : byref<'a>) =
             c.TryGetResource<'a>(key, &value)
@@ -212,11 +212,11 @@ type Container with
         |> Disposable.Create 
 
     member c.AddSystem(name : string, register : Container -> IDisposable) =
-        let reg = c.GetValue<SystemRegistry>()
+        let reg = c.Get<SystemRegistry>()
         reg.Add(name, fun () -> register c)
 
     member c.AddSystem(actorId, actorOutbox, register : Container -> IDisposable) =
-        let outbox = c.GetValue<Outbox>()
+        let outbox = c.Get<Outbox>()
         use s = outbox.Push {
             Outbox = actorOutbox
             SourceId = ActorId.Undefined
@@ -233,7 +233,7 @@ type Container with
     member c.AddStateMachine<'a>(initState, registerState) =
         let state = new DisposableReference<IDisposable>(Disposable.Null)
         let setState e =
-            c.SetValue<'a>(e)
+            c.Set<'a>(e)
             // Register subscriptions specific to new state, replacing prior
             state.Set(fun () -> registerState e c)
         setState initState

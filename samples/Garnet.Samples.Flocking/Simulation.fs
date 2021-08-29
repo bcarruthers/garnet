@@ -11,7 +11,7 @@ module SimulationSystems =
         member c.AddReset() =
             c.On<Start> <| fun _ ->
                 c.DestroyAll()
-                let settings = c.GetValue<WorldSettings>()
+                let settings = c.Get<WorldSettings>()
                 let rand = Random(settings.Seed)
                 let nextCoord() = float32 (rand.NextDouble() - 0.5) * settings.SpawnRange
                 for i = 1 to settings.VehicleCount do
@@ -25,7 +25,7 @@ module SimulationSystems =
         member c.AddSteering() =
             let neighbors = List<Neighbor>()
             c.On<Update> <| fun _ ->
-                let settings = c.GetValue<WorldSettings>().Steering
+                let settings = c.Get<WorldSettings>().Steering
                 for r in c.Query<Eid, Position, Heading, Faction, Vehicle>() do
                     let h = &r.Value3
                     let current = {

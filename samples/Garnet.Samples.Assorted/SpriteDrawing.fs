@@ -30,7 +30,7 @@ module Resources =
 
 let run() =
     Container.Run <| fun c ->
-        c.SetValue {
+        c.Set {
             WindowSettings.Default with
                 Background = RgbaFloat.Blue.MultiplyRgb(0.1f)
             }
@@ -39,7 +39,7 @@ let run() =
             c.AddPixelCoordinateCamera(0)
             c.AddEscapeToClose()
             c.On<Draw> <| fun _ ->
-                let sprites = c.GetValue<SpriteRenderer>()
+                let sprites = c.Get<SpriteRenderer>()
                 let verts = sprites.GetVertices(Resources.spriteLayer)
                 let size = Vector2(80.0f, 40.0f)
                 // Identical quads
