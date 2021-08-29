@@ -91,10 +91,7 @@ type WorldGrid() =
     member c.Reset newSize =
         size <- newSize
         store.Clear()
-    member c.Get p = { 
-        Id = p
-        Components = store 
-        }
+    member c.Get(p) = Entity<_,_,_>(p, store)
     member c.Commit() =
         let locs = store.GetSegments<Loc>()
         store.Segments.ApplyRemovalsFrom(locs)   

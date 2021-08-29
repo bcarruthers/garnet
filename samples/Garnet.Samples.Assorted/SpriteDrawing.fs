@@ -13,16 +13,11 @@ module Resources =
         FragmentShader = "shaders/texture-color.frag"
         }
 
-    let colorShaderSet : ShaderSetDescriptor<PositionColorVertex> = {
-        VertexShader = "shaders/color.vert"
-        FragmentShader = "shaders/color.frag"
-        }
-
     let spritePipeline = {
         Blend = Blend.Alpha
-        Filtering = Filtering.Linear
-        ShaderSet = colorShaderSet
-        Texture = ""
+        Filtering = Filtering.Point
+        ShaderSet = colorTextureShaderSet
+        Texture = "textures/multicolor-square.png"
         }
 
     let spriteLayer = {
@@ -46,7 +41,23 @@ let run() =
             c.On<Draw> <| fun _ ->
                 let sprites = c.GetValue<SpriteRenderer>()
                 let verts = sprites.GetVertices(Resources.spriteLayer)
-                let rect = Range2.Centered(Vector2(150.0f, 80.0f), Vector2(200.0f, 100.0f))
-                verts.DrawQuad(rect, RgbaFloat.White)
+                let size = Vector2(80.0f, 40.0f)
+                // Identical quads
+                verts.DrawQuad(
+                    Range2.Centered(Vector2(50.0f, 50.0f), size),
+                    Range2.ZeroToOne,
+                    RgbaFloat.White)
+                verts.DrawQuad {
+                    ColorTextureSprite.Default with
+                        Center = Vector2(150.0f, 50.0f)
+                        Size = size
+                        }
+                // Rotated - Since we're using pixel coords, positive rotation is clockwise
+                verts.DrawQuad {
+                    ColorTextureSprite.Default with
+                        Center = Vector2(250.0f, 50.0f)
+                        Size = size
+                        Rotation = Vector2.FromDegrees(90.0f)
+                        }
             ]
 

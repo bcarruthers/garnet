@@ -74,7 +74,7 @@ let runAddRemoveComponentDirect count iterations =
     for i = 1 to count do
         let e = c.Create()
         eids.Add(e.Id)
-    let cmp = c.Get<int>()
+    let cmp = c.GetComponents<int>()
     for i = 1 to iterations do
         for eid in eids do
             cmp.Add(eid, 1)

@@ -58,7 +58,7 @@ let tests =
             let c = Container()
             let sub = WorldSystems.register c
             c.Run(Update())
-            c.Get<int>().Count |> shouldEqual 0
+            c.GetComponents<int>().Count |> shouldEqual 0
             c.Run(CreateWorld())
-            c.Get<int>().Count |> shouldEqual 1
+            c.GetComponents<int>().Count |> shouldEqual 1
     ]

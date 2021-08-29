@@ -19,9 +19,13 @@ type VertexSpanExtensions =
         let delta = p1 - p0
         let length = delta.Length()
         let dir = if length < 1e-5f then Vector2.Zero else delta / length
-        let rotation = dir.GetPerpendicular()
-        let center = (p0 + p1) * 0.5f
-        span.DrawQuad(center, rotation, Vector2(thickness, length), Range2.ZeroToOne, color)
+        span.DrawQuad {
+            Center = (p0 + p1) * 0.5f
+            Size = Vector2(thickness, length)
+            Rotation = dir.GetPerpendicular()
+            TexBounds = Range2.ZeroToOne
+            Color = color
+            }
 
     [<Extension>]
     static member DrawAxialLine(span : Span<PositionTextureColorVertex>, 

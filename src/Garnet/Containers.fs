@@ -28,7 +28,7 @@ type Container() =
     let resources = reg.GetValue<ResourceCache>()
     let components = ComponentStore(segments)
     let eids = segments.GetSegments<Eid>()
-    member c.Get<'a>() = components.Get<'a>()
+    member c.GetComponents<'a>() = components.GetComponents<'a>()
     member c.GetSegments<'a>() = segments.GetSegments<'a>()
     member c.GetChannel<'a>() = channels.GetChannel<'a>()
     member c.SetFactory(x) = reg.SetFactory(x)
@@ -79,10 +79,7 @@ type Container() =
         let ci = eid.ComponentIndex
         let mask = eids.GetMask sid
         (mask &&& (1UL <<< ci)) <> 0UL
-    member c.Get(eid) = { 
-        Id = eid
-        Components = components 
-        }
+    member c.Get(eid) = Entity(eid, components)
     member internal c.CreateEid(partition) =
         let eid = eidPools.Next(partition)
         let sid = eid.SegmentIndex
@@ -127,8 +124,8 @@ type Container() =
     interface IChannels with
         member c.GetChannel<'a>() = channels.GetChannel<'a>()
     interface IComponentStore<int, Eid, EidSegmentKeyMapper> with
-        member c.Get<'a>() = 
-            components.Get<'a>()
+        member c.GetComponents<'a>() = 
+            components.GetComponents<'a>()
     interface ISegmentStore<int> with
         member c.Handle(param, handler) =      
             c.Handle(param, handler)

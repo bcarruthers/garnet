@@ -49,7 +49,7 @@ let tests =
             let e = c.Create()
             e.Destroy()
             c.Commit()
-            c.Get<Eid>().Count |> shouldEqual 0
+            c.GetComponents<Eid>().Count |> shouldEqual 0
 
         testCase "create and destroy before commit with pooled" <| fun () ->
             let c = Container()
@@ -58,7 +58,7 @@ let tests =
             let e2 = c.Create()
             e2.Destroy()
             c.Commit()
-            c.Get<Eid>().Count |> shouldEqual 1
+            c.GetComponents<Eid>().Count |> shouldEqual 1
 
         testCase "recycle ID to pool" <| fun () ->
             let segmentSize = 64
@@ -156,7 +156,7 @@ let tests =
                 | _ -> 
                     // commit and validate
                     c.Commit()
-                    let eidStore = c.Get<Eid>()
+                    let eidStore = c.GetComponents<Eid>()
                     if print then 
                         printfn "Commit %s" <| c.ToString()
                         getComponents eidStore.Segments

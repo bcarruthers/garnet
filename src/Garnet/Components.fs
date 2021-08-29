@@ -99,7 +99,7 @@ type IComponentStore<'k, 'c, 'm
     and 'k : equality
     and 'c :> IComparable<'c>
     and 'm : struct and 'm :> ISegmentKeyMapper<'k, 'c>> =
-    abstract member Get<'b> : unit -> Components<'k, 'c, 'm, 'b>
+    abstract member GetComponents<'b> : unit -> Components<'k, 'c, 'm, 'b>
 
 type ComponentStore<'k, 'c, 'm 
         when 'k :> IComparable<'k> 
@@ -112,7 +112,7 @@ type ComponentStore<'k, 'c, 'm
     member c.Segments = segments
     member c.GetSegments<'a>() = 
         segments.GetSegments<'a>()
-    member c.Get<'a>() =
+    member c.GetComponents<'a>() =
         Components(segments.GetSegments<'a>())
     member c.Clear() =
         segments.Clear()
@@ -134,8 +134,8 @@ type ComponentStore<'k, 'c, 'm
     member c.Commit() =
         segments.Commit()
     interface IComponentStore<'k, 'c, 'm> with
-        member c.Get<'a>() = 
-            c.Get<'a>()
+        member c.GetComponents<'a>() = 
+            c.GetComponents<'a>()
     interface ISegmentStore<'k> with
         member c.Handle(param, handler) =      
             c.Handle(param, handler)
@@ -148,24 +148,24 @@ type ComponentStore<'k, 'c, 'm
 
 [<Struct>]
 type Entity<'k, 'c, 'm
-    when 'k :> IComparable<'k> 
-    and 'k :> IEquatable<'k> 
-    and 'k : equality
-    and 'c :> IComparable<'c>
-    and 'm : struct and 'm :> ISegmentKeyMapper<'k, 'c>> = {
-    Id : 'c
-    Components : ComponentStore<'k, 'c, 'm>
-    } with
-    member c.Add x = c.Components.Get<_>().Add(c.Id, x)
-    member c.Set x = c.Components.Get<_>().Set(c.Id, x)
-    member c.Remove<'a>() = c.Components.Get<'a>().Remove(c.Id)
-    member c.Get<'a>() = &c.Components.Get<'a>().Get(c.Id)    
-    member c.CopyTo<'a> destId = c.Components.Get<'a>().Copy(c.Id, destId)    
-    member c.TryGet<'a>([<Out>] value : byref<_>) = c.Components.Get<'a>().TryGet(c.Id, &value)
-    member c.GetOrDefault<'a> fallback = c.Components.Get<'a>().GetOrDefault(c.Id, fallback)
-    member c.Contains<'a>() = c.Components.Get<'a>().Contains(c.Id)
+        when 'k :> IComparable<'k> 
+        and 'k :> IEquatable<'k> 
+        and 'k : equality
+        and 'c :> IComparable<'c>
+        and 'm : struct and 'm :> ISegmentKeyMapper<'k, 'c>> =
+    val Id : 'c
+    val Components : ComponentStore<'k, 'c, 'm>
+    new(id, components) = { Id = id; Components = components }
+    member c.Add x = c.Components.GetComponents<_>().Add(c.Id, x)
+    member c.Set x = c.Components.GetComponents<_>().Set(c.Id, x)
+    member c.Remove<'a>() = c.Components.GetComponents<'a>().Remove(c.Id)
+    member c.Get<'a>() = &c.Components.GetComponents<'a>().Get(c.Id)    
+    member c.CopyTo<'a> destId = c.Components.GetComponents<'a>().Copy(c.Id, destId)    
+    member c.TryGet<'a>([<Out>] value : byref<_>) = c.Components.GetComponents<'a>().TryGet(c.Id, &value)
+    member c.GetOrDefault<'a> fallback = c.Components.GetComponents<'a>().GetOrDefault(c.Id, fallback)
+    member c.Contains<'a>() = c.Components.GetComponents<'a>().Contains(c.Id)
     member c.Destroy() = c.Components.Destroy(c.Id)
-    member c.With x = c.Add x; c
+    member c.With(x) = c.Add(x); c
     member c.Without<'a>() = c.Remove<'a>(); c
     override c.ToString() = 
         let printer = PrintHandler<'k>(UInt64.MaxValue)
@@ -178,7 +178,4 @@ type ComponentStore<'k, 'c, 'm
     and 'k : equality
     and 'c :> IComparable<'c>
     and 'm : struct and 'm :> ISegmentKeyMapper<'k, 'c>> with
-    member c.Get(id) = {
-        Id = id
-        Components = c 
-        }
+    member c.Get(id) = Entity(id, c)

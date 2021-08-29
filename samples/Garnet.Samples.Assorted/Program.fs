@@ -3,6 +3,6 @@ open Garnet.Samples.Assorted
 
 [<EntryPoint>]
 let main argv =
-    SpriteDrawing.run()
+    //SpriteDrawing.run()
     TextDrawing.run()
     0

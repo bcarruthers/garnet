@@ -104,6 +104,22 @@ type internal ReadOnlyArray4<'a> = {
         Value3 = v3
         }
 
+[<Struct>]
+type ColorTextureSprite = {
+    Center : Vector2 
+    Size : Vector2
+    Rotation : Vector2 
+    TexBounds : Range2 
+    Color : RgbaFloat
+    } with
+    static member Default = {
+        Center = Vector2.Zero 
+        Size = Vector2.One
+        Rotation = Vector2.UnitX 
+        TexBounds = Range2.ZeroToOne 
+        Color = RgbaFloat.White
+        }
+
 [<Extension>]
 type VertexSpanExtensions =        
     [<Extension>]
@@ -198,41 +214,36 @@ type VertexSpanExtensions =
         span.[3] <- { Position = Vector3(rect.Min.X, rect.Max.Y, 0.0f); TexCoord = Vector2(texBounds.X.Min, texBounds.Y.Max); Color = color }
     
     [<Extension>]
-    static member DrawQuad(span : Span<PositionTextureColorVertex>, 
-            center : Vector2, 
-            rotation : Vector2, 
-            size : Vector2, 
-            texBounds : Range2, 
-            color : RgbaFloat) = 
-        let dxDir = rotation
+    static member DrawQuad(span : Span<PositionTextureColorVertex>, sprite : ColorTextureSprite) = 
+        let dxDir = sprite.Rotation
         let dyDir = dxDir.GetPerpendicular()
-        let dx = dxDir * size.X
-        let dy = dyDir * size.Y
-        let p00 = center - (dx + dy) * 0.5f
+        let dx = dxDir * sprite.Size.X
+        let dy = dyDir * sprite.Size.Y
+        let p00 = sprite.Center - (dx + dy) * 0.5f
         let p10 = p00 + dx
         let p11 = p10 + dy
         let p01 = p11 - dx
-        let t00 = texBounds.Min
-        let t11 = texBounds.Max
+        let t00 = sprite.TexBounds.Min
+        let t11 = sprite.TexBounds.Max
         span.[0] <- {
             Position = Vector3(p00.X, p00.Y, 0.0f)
             TexCoord = Vector2(t00.X, t00.Y)
-            Color = color
+            Color = sprite.Color
             }
         span.[1] <- {
             Position = Vector3(p10.X, p10.Y, 0.0f)
             TexCoord = Vector2(t11.X, t00.Y)
-            Color = color
+            Color = sprite.Color
             }
         span.[2] <- {
             Position = Vector3(p11.X, p11.Y, 0.0f)
             TexCoord = Vector2(t11.X, t11.Y)
-            Color = color
+            Color = sprite.Color
             }
         span.[3] <- {
             Position = Vector3(p01.X, p01.Y, 0.0f)
             TexCoord = Vector2(t00.X, t11.Y)
-            Color = color
+            Color = sprite.Color
             }
 
     [<Extension>]
@@ -242,14 +253,9 @@ type VertexSpanExtensions =
         w.Advance(span.Length)
 
     [<Extension>]
-    static member DrawQuad(w : IBufferWriter<PositionTextureColorVertex>, 
-            center : Vector2, 
-            rotation : Vector2, 
-            size : Vector2, 
-            texBounds : Range2, 
-            color : RgbaFloat) = 
+    static member DrawQuad(w : IBufferWriter<PositionTextureColorVertex>, sprite : ColorTextureSprite) = 
         let span = w.GetQuadSpan(1)
-        span.DrawQuad(center, rotation, size, texBounds, color)
+        span.DrawQuad(sprite)
         w.Advance(span.Length)
 
     [<Extension>]
