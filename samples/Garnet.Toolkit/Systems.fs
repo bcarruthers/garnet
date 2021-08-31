@@ -13,7 +13,7 @@ type AssetSettings = {
     }
 
 [<Extension>]
-type DefaultSystem =
+type Systems =
     [<Extension>]
     static member AddAssetsFolder(c : Container) =
         let folder = new FileFolder("assets")
@@ -189,7 +189,7 @@ type DefaultSystem =
             ]
 
     [<Extension>]
-    static member AddGraphicsSystems(c : Container) =
+    static member AddGraphics(c : Container) =
         Disposable.Create [
             c.AddGraphicsDevice()
             c.AddGraphicsLoaders()
@@ -203,7 +203,7 @@ type DefaultSystem =
         Disposable.Create [
             c.AddAssetsFolder()
             c.AddTextLoaders()
-            c.AddGraphicsSystems()
+            c.AddGraphics()
             c.AddAudioDevice()
             c.AddAudioLoaders()
             c.AddTickUpdate()

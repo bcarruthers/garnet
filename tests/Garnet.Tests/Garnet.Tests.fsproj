@@ -24,6 +24,7 @@
     <Compile Include="ComponentTests.fs" />
     <Compile Include="ChannelTests.fs" />
     <Compile Include="IterationTests.fs" />
+    <Compile Include="QueryTests.fs" />
     <Compile Include="EntityTests.fs" />
     <Compile Include="CollectionTests.fs" />
     <Compile Include="ActorTests.fs" />

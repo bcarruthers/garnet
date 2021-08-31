@@ -70,7 +70,7 @@ type TimingSettings = {
         MinDeltaTime = 0L
         MaxDeltaTime = 250L
         FixedDeltaTime = 16L
-        IsRunning = false
+        IsRunning = true
         ClockActorId = ActorId.Undefined
         }
 

@@ -29,7 +29,8 @@ type MaskEnumerator =
             c.mask <- c.mask >>> 1
             c.i <- c.i + 1
             true
-    member c.Reset() = c.i <- 0
+    member c.Reset() =
+        raise (NotSupportedException())
     member c.Dispose() = ()
     interface IEnumerator<int> with
         member c.Current = c.Current

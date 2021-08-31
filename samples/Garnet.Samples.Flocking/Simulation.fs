@@ -6,11 +6,13 @@ open System.Numerics
 open Garnet.Numerics
 open Garnet.Composition
 
+// Not we're using Update instead of FixedUpdate here, mainly because this demo
+// is intended to measure performance. Normally it would be preferable to use
+// FixedUpdate for simulation logic.
 module SimulationSystems =
     type Container with
-        member c.AddReset() =
+        member c.AddSpawning() =
             c.On<Start> <| fun _ ->
-                c.DestroyAll()
                 let settings = c.Get<WorldSettings>()
                 let rand = Random(settings.Seed)
                 let nextCoord() = float32 (rand.NextDouble() - 0.5) * settings.SpawnRange
@@ -88,9 +90,9 @@ module SimulationSystems =
                         .With({ Lifespan = 0.6f })
                         .Add(Trail())
 
-    let register (c : Container) =
+    let add (c : Container) =
         Disposable.Create [
-            c.AddReset()
+            c.AddSpawning()
             c.AddLifespan()
             c.AddUpdatePosition()
             c.AddUpdateRotation()

@@ -29,11 +29,11 @@
     </None>
     <Compile Include="Types.fs" />
     <Compile Include="Functions.fs" />
-    <Compile Include="Debug.fs" />
     <Compile Include="Resources.fs" />
     <Compile Include="Simulation.fs" />
     <Compile Include="Drawing.fs" />
-    <Compile Include="Game.fs" />
+    <Compile Include="Startup.fs" />
+    <Compile Include="Debug.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

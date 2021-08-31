@@ -32,3 +32,15 @@ type FpsHud() =
             ImGui.Text $"FPS: %d{int fps.FramesPerSec}, mean: %d{int fps.MeanFrameMs} ms, max: %d{int fps.MaxFrameMs} ms, fixed FPS: %d{int fixedFps.FramesPerSec}"
             ImGui.Text $"GC pause: {info.PauseTimePercentage}%%%%, heap size: {info.HeapSizeBytes / 1024L} Kb"
             ImGui.End()
+
+module DebugSystem =
+    let add (c : Container) =
+        let hud = c.Get<FpsHud>()
+        Disposable.Create [
+            c.On<FixedUpdate> <| fun _ ->
+                hud.OnFixedUpdate()
+            c.On<Update> <| fun _ ->
+                hud.OnUpdate()
+            c.On<Draw> <| fun _ ->
+                hud.Draw()
+            ]               
