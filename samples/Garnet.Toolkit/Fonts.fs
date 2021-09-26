@@ -116,29 +116,19 @@ module private FontRun =
         let mutable result = ValueNone
         while result.IsNone && i < str.Length do
             let ch = str.[i]
-            if isWhitespace ch then
-                // Whitespace, accumulate width but don't check for limit
-                let width = getCharWidth ch charWidths
-                runWidth <- runWidth + width
-                i <- i + 1
+            if ch = '\n' then
+                // Newline
+                result <- ValueSome (Rangei(start, i + 1))
             else
-                // Word, scan until whitespace
-                let stop = getWordEnd str i
-                if stop < str.Length && str.[stop] = '\n' then
-                    // Newline, return a run including newline
+                runWidth <- runWidth + getCharWidth str.[i] charWidths
+                if runWidth > maxAllowedWidth then
+                    // Backtrack to start of word
+                    let mutable stop = i
+                    while stop > start + 1 && not (Char.IsWhiteSpace(str.[stop])) do
+                        stop <- stop - 1
                     result <- ValueSome (Rangei(start, stop + 1))
-                else
-                    let wordWidth = getRunWidth str charWidths (Rangei(start, stop))
-                    let newRunWidth = runWidth + wordWidth
-                    if newRunWidth > maxAllowedWidth then
-                        // Scan to the start of next word to eat any whitespace that
-                        // would otherwise appear at the start of next line
-                        let nextWord = getWordStart str stop
-                        // If the word doesn't fit on line, return line without word
-                        result <- ValueSome (Rangei(start, nextWord))
-                    else
-                        runWidth <- newRunWidth
-                        i <- stop
+            i <- i + 1
+        // If no newline or limit reached, return remainder
         if result.IsNone then
             let remaining = str.Length - start
             if remaining > 0 then
@@ -323,7 +313,8 @@ type FontVertexSpanExtensions =
     static member DrawText(w : IBufferWriter<PositionTextureColorVertex>, font : Font, block : TextBlock) =
         let textBounds = font.Measure(block)
         let span = w.GetQuadSpan(block.Text.Length)
-        let mutable runOpt = font.TryGetNextRun(block.Text, 0, block.Bounds.Size.X)
+        let maxUnscaledWidth = block.Bounds.Size.X / block.Scale
+        let mutable runOpt = font.TryGetNextRun(block.Text, 0, maxUnscaledWidth)
         let mutable row = 0
         let mutable vi = 0
         while runOpt.IsSome do
@@ -343,7 +334,7 @@ type FontVertexSpanExtensions =
                     span.DrawQuad(b.ToRange2(), desc.Rect, block.Color)
                     vi <- vi + 4
                 x <- x + desc.Width * block.Scale
-            runOpt <- font.TryGetNextRun(block.Text, run.Max, block.Bounds.Size.X)
+            runOpt <- font.TryGetNextRun(block.Text, run.Max, maxUnscaledWidth)
             row <- row + 1
         w.Advance(vi)
 
