@@ -39,7 +39,7 @@ module private Packing =
         a.Y.Max <= b.Y.Min
 
 // http://wiki.unity3d.com/index.php?title=MaxRectsBinPack
-type internal MaxRectsBinPack(size : Vector2i) =
+type MaxRectsBinPack(size : Vector2i) =
     let w = max 0 size.X
     let h = max 0 size.Y
     let n = Range2i(Vector2i.Zero, Vector2i(w, h))
@@ -281,15 +281,15 @@ type JsonTextureAtlas = {
 
 [<AutoOpen>]
 module TextureLoadingExtensions =
-    let private getTexBounds (tex : JsonTextureEntry) =
-        let tc0 = Vector2i(tex.X, tex.Y)
-        let tc1 = tc0 + Vector2i(tex.Width, tex.Height)
-        let padding = Vector2i.One * tex.Padding
-        let p0 = tc0 + padding
-        let p1 = tc1 - padding
-        Range2i(Vector2i(p0.X, p1.Y), Vector2i(p1.X, p0.Y))
-//                    Range2i.Sized(Vector2i(t.X, t.Y), Vector2i(t.Width, t.Height))
-//                        .Expand(Vector2i.One * -t.Padding))
+    let private getTexBounds (t : JsonTextureEntry) =
+//        let tc0 = Vector2i(tex.X, tex.Y)
+//        let tc1 = tc0 + Vector2i(tex.Width, tex.Height)
+//        let padding = Vector2i.One * tex.Padding
+//        let p0 = tc0 + padding
+//        let p1 = tc1 - padding
+//        Range2i(Vector2i(p0.X, p1.Y), Vector2i(p1.X, p0.Y))
+                    Range2i.Sized(Vector2i(t.X, t.Y), Vector2i(t.Width, t.Height))
+                        .Expand(Vector2i.One * -t.Padding)
 
     type IStreamSource with
         member c.LoadImage(key) =

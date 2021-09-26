@@ -2,10 +2,7 @@
 
 open System
 open System.Collections.Generic
-open System.Buffers
 open System.Numerics
-open System.Runtime.CompilerServices
-open Veldrid
 open Garnet.Numerics
 
 [<Struct>]    
@@ -87,6 +84,14 @@ type SpriteRenderer(device, shaders, cache) =
     let indexes = new QuadIndexBuffer(device)
     let pipelines = new TexturePipelineCache(device, shaders, cache)
     let layers = List<SpriteLayer voption>()
+    member c.VertexCount =
+        let mutable count = 0
+        for layer in layers do
+            match layer with
+            | ValueNone -> ()
+            | ValueSome layer ->
+                count <- count + layer.Vertices.VertexCount
+        count
     member c.GetVertices<'v
                 when 'v : struct 
                 and 'v : (new : unit -> 'v) 

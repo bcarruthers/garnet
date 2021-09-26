@@ -16,6 +16,7 @@ type WindowSettings = {
     Title : string
     Background : RgbaFloat
     Redraw : Redraw
+    FullScreen : bool
     } with
     static member Default = {
         X = 100
@@ -25,6 +26,7 @@ type WindowSettings = {
         Title = "Garnet"
         Background = RgbaFloat.Clear
         Redraw = Redraw.Auto
+        FullScreen = false
         }
 
 module private Environment =
@@ -102,7 +104,10 @@ type WindowRenderer(settings) =
         // before any drawing, then there will be a brief white flicker as the window
         // is shown. If we call after all drawing, the initial render will not be
         // presented to the window, which is visible if doing manual redraw.
-        window.Visible <- true
+        if not window.Visible then
+            if settings.FullScreen then
+                window.WindowState <- WindowState.BorderlessFullScreen
+            window.Visible <- true
         isDrawn <- true
         // Complete rendering
         imGui.Render(device, renderer.Context.Commands)

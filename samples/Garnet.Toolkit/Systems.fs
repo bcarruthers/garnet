@@ -1,7 +1,9 @@
 ﻿namespace Garnet.Composition
 
 open System
+open System.IO
 open System.Runtime.CompilerServices
+open System.Reflection
 open Veldrid
 open Garnet.Input
 open Garnet.Graphics
@@ -16,7 +18,10 @@ type AssetSettings = {
 type Systems =
     [<Extension>]
     static member AddAssetsFolder(c : Container) =
-        let folder = new FileFolder("assets")
+        let folder =
+            let path = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
+            let path = if String.IsNullOrEmpty(path) then "" else path
+            new FileFolder(Path.Combine(path, "assets"))
         let cache = c.Get<ResourceCache>()
         cache.SetFolder(folder)
         Disposable.Create [
