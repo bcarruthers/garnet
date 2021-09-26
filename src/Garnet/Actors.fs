@@ -340,6 +340,7 @@ module internal Processing =
         let processSync = obj()
         let queueSync = obj()
         let queue = Queue<struct(int * int * IDeliverer * obj)>()
+        let mutable inbox = inbox
         let mutable maxQueued = 0
         let mutable total = 0
         let mutable waitDuration = 0L
@@ -362,7 +363,10 @@ module internal Processing =
                         Message = msg
                         })
                 with
-                | ex -> 
+                | ex ->
+                    // Halt any further processing of actor
+                    inbox <- NullInbox.Instance
+                    // Report exception
                     let msg = sprintf "Actor %d failed" actorId
                     let actorEx = ActorException(ActorId sourceId, ActorId destId, msg, ex)
                     dispatcher.OnException(actorEx)
