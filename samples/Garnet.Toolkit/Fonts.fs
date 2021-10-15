@@ -313,7 +313,11 @@ type FontVertexSpanExtensions =
     static member DrawText(w : IBufferWriter<PositionTextureColorVertex>, font : Font, block : TextBlock) =
         let textBounds = font.Measure(block)
         let span = w.GetQuadSpan(block.Text.Length)
-        let maxUnscaledWidth = block.Bounds.Size.X / block.Scale
+        let maxUnscaledWidth =
+            match block.Wrapping with
+            | TextWrapping.NoWrap -> Int32.MaxValue
+            | TextWrapping.WordWrap -> block.Bounds.Size.X / block.Scale
+            | x -> failwith $"Invalid wrapping: {x}"
         let mutable runOpt = font.TryGetNextRun(block.Text, 0, maxUnscaledWidth)
         let mutable row = 0
         let mutable vi = 0
@@ -355,7 +359,7 @@ type FontVertexSpanExtensions =
         w.DrawText(font, {
             Text = text
             Color = color
-            Bounds = Range2i(pos, Vector2i(width, height))
+            Bounds = Range2i.Sized(pos, Vector2i(width, height))
             Scale = scale
             Align = align
             Valign = valign

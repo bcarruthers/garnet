@@ -1,6 +1,7 @@
 ﻿namespace Garnet.Audio
 
 open System
+open System.Buffers
 open System.Collections.Generic
 open System.Numerics
 open System.IO
@@ -21,6 +22,22 @@ type SoundDescriptor = {
     SampleCount : int
     }
 
+[<Struct>]
+type SoundPlayback = {
+    LoopCount : int
+    Gain : float32
+    Pitch : float32
+    Position : Vector3
+    Relative : bool
+    } with
+    static member Default = {
+        LoopCount = 1
+        Gain = 1.0f
+        Pitch = 1.0f
+        Position = Vector3.Zero
+        Relative = false
+        } 
+
 module SoundDescriptor =
     let getALFormat desc =
         if desc.Channels = 1 && desc.BitsPerSample = 8 then ALFormat.Mono8
@@ -30,7 +47,7 @@ module SoundDescriptor =
         else failwith $"Unsupported audio format, {desc.Channels} channels, {desc.BitsPerSample} bits"
 
     let getDuration desc =
-        desc.SampleCount * 1000 / desc.Channels / desc.SampleRate
+        (desc.SampleCount * 1000 + 999) / desc.Channels / desc.SampleRate
 
 [<AutoOpen>]
 module internal OpenALInternal =
@@ -83,6 +100,7 @@ type AudioDevice() =
     let sources = new SourcePool()
     let sounds = List<Sound>()
     let activeSources = PriorityQueue<int64, int>()
+    let mutable scale = 1.0f
     let mutable time = 0L
     member c.CreateSound(desc, data : ReadOnlyMemory<byte>) =
         let buffers = AL.GenBuffers(1)
@@ -97,28 +115,42 @@ type AudioDevice() =
         let soundId = sounds.Count
         sounds.Add(sound)
         SoundId soundId
+    member c.StopSounds() =
+        while activeSources.Count > 0 do
+            let sourceId = activeSources.Dequeue()
+            AL.SourceStop(sourceId)
+            sources.RecycleSource(sourceId)            
     member c.Update(currentTime) =
         time <- currentTime
         while activeSources.Count > 0 && currentTime >= activeSources.Top.Key do
             let sourceId = activeSources.Dequeue()
+            AL.SourceStop(sourceId)
             sources.RecycleSource(sourceId)
-    member c.PlaySound(soundId, looping) =
+    member c.PlaySound(soundId, playback : SoundPlayback) =
         match sources.TryGetSource() with
         | ValueNone -> ()
         | ValueSome sourceId ->
             let soundId = SoundId.toInt soundId
             let sound = sounds.[soundId]
+            let p = playback.Position * scale
             AL.Source(sourceId, ALSourcei.Buffer, sound.buffer)
-            AL.Source(sourceId, ALSourceb.Looping, looping)
-            //AL.Source(id, ALSource3f.Position, )
+            AL.Source(sourceId, ALSourceb.Looping, playback.LoopCount > 1)
+            AL.Source(sourceId, ALSourcef.Pitch, playback.Pitch)
+            AL.Source(sourceId, ALSourcef.Gain, playback.Gain)
+            AL.Source(sourceId, ALSourceb.SourceRelative, playback.Relative)
+            AL.Source(sourceId, ALSource3f.Position, p.X, p.Y, p.Z)
             AL.SourcePlay(sourceId)
-            activeSources.Enqueue(time, sourceId)
+            let duration = SoundDescriptor.getDuration sound.descriptor * playback.LoopCount
+            activeSources.Enqueue(time + int64 duration, sourceId)
     member c.SetPosition(pos : Vector3) =
-        let mutable v = OpenTK.Mathematics.Vector3(pos.X, pos.Y, pos.Z)
+        let mutable v = OpenTK.Mathematics.Vector3(pos.X, pos.Y, pos.Z) * scale
         AL.Listener(ALListener3f.Position, &v)
     member c.SetGain(gain) =
         AL.Listener(ALListenerf.Gain, gain)
+    member c.SetScaling(newScale) =
+        scale <- newScale
     member c.Dispose() =
+        c.StopSounds()
         sources.Dispose()
         for sound in sounds do
             AL.DeleteBuffers([| sound.buffer |])            
@@ -126,8 +158,7 @@ type AudioDevice() =
         ALC.DestroyContext(context)
         ALC.CloseDevice(device) |> ignore
     interface IDisposable with
-        member c.Dispose() =
-            c.Dispose()
+        member c.Dispose() = c.Dispose()
     override c.ToString() =
         let version = AL.Get(ALGetString.Version)
         let vendor = AL.Get(ALGetString.Vendor)
@@ -180,24 +211,38 @@ module AudioLoadingExtensions =
                 // Read any extra values
                 let fmtExtraSize = int (reader.ReadInt16())
                 stream.Seek(int64 fmtExtraSize, SeekOrigin.Current) |> ignore
-            // chunk 2
-            let _ = reader.ReadInt32() // dataId
-            let length = reader.ReadInt32()
+            // Skip to data chunk
+            let dataTag = 0x61_74_61_64 // 'data'
+            let mutable tag = reader.ReadInt32()
+            let mutable length = reader.ReadInt32()
+            while tag <> dataTag do
+                // Read instead of seeking since zip stream doesn't support seek
+                let buffer = ArrayPool.Shared.Rent(length)
+                reader.BaseStream.Read(buffer, 0, length) |> ignore
+                ArrayPool.Shared.Return(buffer)
+                // Read next header
+                tag <- reader.ReadInt32()
+                length <- reader.ReadInt32()
             // Read data
             // https://stackoverflow.com/questions/10996917/openal-albufferdata-returns-al-invalid-value-even-though-input-variables-look
-            let multipleOf4Length = (length + 3) / 4 * 4
-            let data = Array.zeroCreate multipleOf4Length
+            let adjustedLength = (length + 3) / 4 * 4
+            let data = ArrayPool.Shared.Rent(adjustedLength)
             stream.Read(data, 0, length) |> ignore
             // Create descriptor
-            let bytesForSample = bitDepth / 8
-            let sampleCount = multipleOf4Length / bytesForSample
+            let bytesPerSample = bitDepth / 8
+            let sampleCount = adjustedLength / bytesPerSample
             let desc = {
                 Channels = channels
                 BitsPerSample = bitDepth
                 SampleRate = sampleRate
                 SampleCount = sampleCount
                 }
-            device.CreateSound(desc, ReadOnlyMemory(data))
+            try
+                let sound = device.CreateSound(desc, ReadOnlyMemory(data, 0, adjustedLength))
+                ArrayPool.Shared.Return(data)
+                sound
+            with ex ->
+                raise (Exception($"Could not load WAV file '{key}'", ex))
 
     type IReadOnlyFolder with
         member c.LoadAudioFromFolder(path, device, cache : IResourceCache) =

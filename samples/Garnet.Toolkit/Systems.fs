@@ -12,18 +12,30 @@ open Garnet.Composition
 
 type AssetSettings = {
     AssetPath : string
-    }
+    ArchiveExtension : string
+    } with
+    static member Default = {
+        AssetPath = "assets"
+        ArchiveExtension = ".dat"
+        }
 
 [<Extension>]
 type Systems =
     [<Extension>]
     static member AddAssetsFolder(c : Container) =
         let folder =
+            let settings = c.GetOrDefault(AssetSettings.Default)
             let path = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
             let path = if String.IsNullOrEmpty(path) then "" else path
-            new FileFolder(Path.Combine(path, "assets"))
+            // First look for asset folder, then fallback to an archive file
+            let folderPath = Path.Combine(path, settings.AssetPath)
+            let archivePath = Path.Combine(path, settings.AssetPath + settings.ArchiveExtension)
+            if Directory.Exists(folderPath) then new FileFolder(folderPath) :> IReadOnlyFolder
+            elif File.Exists(archivePath) then new ZipArchiveFolder(archivePath) :> IReadOnlyFolder
+            else new FileFolder(path) :> IReadOnlyFolder
         let cache = c.Get<ResourceCache>()
         cache.SetFolder(folder)
+        c.Set<IReadOnlyFolder>(folder)
         Disposable.Create [
             folder :> IDisposable
             ]

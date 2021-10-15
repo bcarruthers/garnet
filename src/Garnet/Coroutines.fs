@@ -60,7 +60,7 @@ type internal StackScheduler() =
             
 type internal TimeScheduler() =
     let mutable time = 0L
-    let active = PriorityQueue<int64, _>()
+    let active = Garnet.Composition.PriorityQueue<int64, _>()
     member c.Enqueue(e : IEnumerator<Wait>) =
         let delay = e.Current.Duration
         let nextTime = time + delay

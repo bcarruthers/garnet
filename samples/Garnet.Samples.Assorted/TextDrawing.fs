@@ -104,7 +104,7 @@ let run() =
                         Text = text
                         Align = Align.Left
                         Valign = Valign.Center
-                        Wrapping = TextWrapping.NoWrap
+                        Wrapping = TextWrapping.WordWrap
                         }
                 textVerts.DrawText(font, block)
                 panelVerts.DrawQuad(bounds.ToRange2(), RgbaFloat.Red.MultiplyAlpha(0.5f))

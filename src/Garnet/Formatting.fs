@@ -55,7 +55,7 @@ module StringBlockWriter =
 type StringBlockWriter() =
     let sb = StringBuilder()
     let mutable indent = 0
-    member private c.AppendLine(str) =
+    member private c.AppendLine(str : string) =
         for i = 0 to indent - 1 do
             sb.Append("  ") |> ignore
         sb.AppendLine(str) |> ignore

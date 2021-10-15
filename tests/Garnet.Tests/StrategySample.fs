@@ -167,7 +167,7 @@ module MapSystem =
                         let occupant = cell.GetOrDefault<Occupant>(Occupant.none)
                         let ch =
                             if occupant.unitEid.IsDefined then '!'
-                            elif cell.Contains<Ore>() then '$'
+                            elif cell.Has<Ore>() then '$'
                             else 
                                 match cell.Get<Terrain>() with
                                 | Grassland -> '.'

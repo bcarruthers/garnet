@@ -3,6 +3,7 @@
 open System
 open System.Collections.Generic
 open System.IO
+open System.IO.Compression
 open System.Runtime.InteropServices
 open System.Threading
 
@@ -11,6 +12,7 @@ type IStreamSource =
 
 type IReadOnlyFolder =
     inherit IStreamSource
+    inherit IDisposable
     abstract GetFiles : string * string -> string seq
     abstract Contains : string -> bool
     abstract FlushChanged : Action<string> -> unit
@@ -61,6 +63,33 @@ type private ResourceInvalidationSet() =
             changedSet.Remove key |> ignore
         flushed.Clear()
         Monitor.Exit sync
+
+type ZipArchiveFolder(archive : ZipArchive) =
+    let lookup =
+        let d = Dictionary<string, ZipArchiveEntry>()
+        for entry in archive.Entries do
+            d.Add(ResourcePath.getCanonical entry.FullName, entry)
+        d
+    new(file : string) =
+        new ZipArchiveFolder(ZipFile.OpenRead(file))
+    member c.GetFiles(dir : string, _) =
+        lookup.Keys
+        |> Seq.filter (fun name -> name.StartsWith(dir))
+    member c.Contains(file) = 
+        lookup.ContainsKey(file)
+    member c.TryOpen(file) =
+        match lookup.TryGetValue(file) with
+        | true, entry -> ValueSome (entry.Open())
+        | false, _ -> ValueNone
+    member c.Dispose() =
+        archive.Dispose()
+    interface IReadOnlyFolder with
+        member c.GetFiles(dir, searchPattern) = c.GetFiles(dir, searchPattern)
+        member c.Contains(file) = c.Contains(file)
+        member c.TryOpen(file) = c.TryOpen(file)
+        member c.FlushChanged _ = ()
+    interface IDisposable with
+        member c.Dispose() = c.Dispose()
 
 /// Thread-safe
 type FileFolder(rootDir, delay) =
@@ -132,11 +161,8 @@ type FileFolder(rootDir, delay) =
         member c.TryOpen(file) = c.TryOpen(file)
         member c.OpenWrite(file) = c.OpenWrite(file)
         member c.FlushChanged(action) = c.FlushChanged(action)
-    interface IDisposable with
-        member c.Dispose() =
-            c.Dispose()
-    override c.ToString() =
-        rootDir
+        member c.Dispose() = c.Dispose()
+    override c.ToString() = rootDir
 
 /// Note Dispose() is absent
 type NonDisposingStream(stream : Stream, onClose) =
@@ -213,6 +239,7 @@ type MemoryFolder() =
         member c.OpenWrite(file) =
             lookup.OpenWrite(file)
         member c.FlushChanged _ = ()
+        member c.Dispose() = ()
     override c.ToString() =
         lookup.ToString()
 
@@ -252,7 +279,7 @@ type ResourceCache(folder : IReadOnlyFolder) =
     let mutable folder = folder
     let disposables = List<IDisposable>()
     let loaders = Dictionary<string, IResourceLoader>()
-    new() = new ResourceCache(MemoryFolder())
+    new() = new ResourceCache(new MemoryFolder())
     member private c.GetResources<'a>() =
         let id = ResourceTypeId<'a>.Id
         if id >= caches.Length then

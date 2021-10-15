@@ -156,14 +156,14 @@ type Entity<'k, 'c, 'm
     val Id : 'c
     val Components : ComponentStore<'k, 'c, 'm>
     new(id, components) = { Id = id; Components = components }
-    member c.Add x = c.Components.GetComponents<_>().Add(c.Id, x)
-    member c.Set x = c.Components.GetComponents<_>().Set(c.Id, x)
+    member c.Add(x) = c.Components.GetComponents<_>().Add(c.Id, x)
+    member c.Set(x) = c.Components.GetComponents<_>().Set(c.Id, x)
     member c.Remove<'a>() = c.Components.GetComponents<'a>().Remove(c.Id)
     member c.Get<'a>() = &c.Components.GetComponents<'a>().Get(c.Id)    
     member c.CopyTo<'a> destId = c.Components.GetComponents<'a>().Copy(c.Id, destId)    
     member c.TryGet<'a>([<Out>] value : byref<_>) = c.Components.GetComponents<'a>().TryGet(c.Id, &value)
     member c.GetOrDefault<'a> fallback = c.Components.GetComponents<'a>().GetOrDefault(c.Id, fallback)
-    member c.Contains<'a>() = c.Components.GetComponents<'a>().Contains(c.Id)
+    member c.Has<'a>() = c.Components.GetComponents<'a>().Contains(c.Id)
     member c.Destroy() = c.Components.Destroy(c.Id)
     member c.With(x) = c.Add(x); c
     member c.Without<'a>() = c.Remove<'a>(); c
