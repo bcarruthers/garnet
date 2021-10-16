@@ -12,6 +12,38 @@ type EnemyMarker = struct end
 [<Struct>] type Position = { x : float32; y : float32 }
 [<Struct>] type Velocity = { vx : float32; vy : float32 }
 
+// create a world
+let world = Container()
+
+module Example1a =
+    // events
+    [<Struct>] type Update = { dt : float32 }
+
+    // register a system that updates position
+    let system =
+        world.On<Update> (
+            fun e struct(p : Position, v : Velocity) -> {
+                x = p.x + v.vx * e.dt
+                y = p.y + v.vy * e.dt
+                }
+            |> Join.update2
+            |> Join.over world)
+
+module Example1b =
+    // events
+    [<Struct>] type Update = { dt : float32 }
+
+    // register a system that updates position
+    let system =
+        world.On<Update> <| fun e ->
+            for r in world.Query<Position, Velocity>() do
+                let p = &r.Value1
+                let v = r.Value2
+                p <- {
+                    x = p.x + v.vx * e.dt
+                    y = p.y + v.vy * e.dt
+                    }
+
 [<Struct>]
 type Health = {
     hp : int

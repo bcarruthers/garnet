@@ -3,6 +3,10 @@
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
   </PropertyGroup>
+  <PropertyGroup>
+    <Description>Numeric primitives and operations suitable for games. Supplements System.Numerics.</Description>
+    <PackageTags>math vectors bounds game</PackageTags>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="Numerics.fs" />
     <Compile Include="Vectors.fs" />

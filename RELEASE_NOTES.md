@@ -1,3 +1,17 @@
+## 0.5.0 – 2021-10-16
+
+- Revised registry implementation
+- Renamed Get() to GetComponents()
+- Renamed GetInstance() registry methods to Get()
+- Renamed Entity.Contains() to Has()
+- Added more toolkit functionality
+
+## 0.4.0 – 2021-08-28
+
+- Added new querying code
+- Renamed various members for consistent PascalCase
+- Added toolkit project and samples
+
 ## 0.3.0 – 2021-04-24
 
 - Performance: Implemented static type ID lookup for components

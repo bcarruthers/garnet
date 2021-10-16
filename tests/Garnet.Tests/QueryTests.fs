@@ -44,4 +44,14 @@ let tests =
             for row in c.Query<int, char>() do
                 r.Add(row.Values)
             r.Count |> shouldEqual 16
+
+        testCase "update2" <| fun () ->
+            let c = Container()
+            let e = c.Create().With(1L).With(5)
+            c.Commit()
+            for r in c.Query<int64, int>() do
+                let p = &r.Value1
+                let v = r.Value2
+                p <- p + int64 v
+            e.Get<int64>() |> shouldEqual 6L 
     ]

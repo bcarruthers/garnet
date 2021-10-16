@@ -20,6 +20,10 @@
     <Compile Include="Containers.fs" />
     <Compile Include="Actors.fs" />
   </ItemGroup>
+  <PropertyGroup>
+    <Description>F# game composition library, including ECS and actor-like messaging.</Description>
+    <PackageTags>fsharp ecs actor entity component game</PackageTags>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.Memory" Version="4.5.4" />
   </ItemGroup>

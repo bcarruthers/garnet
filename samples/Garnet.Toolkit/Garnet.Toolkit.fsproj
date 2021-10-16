@@ -9,6 +9,10 @@
     <Is64Bit Condition="'$(Prefer32Bit)' == 'false' Or '$(PlatformTarget)' == 'x64'">true</Is64Bit>
     <RootNamespace>Garnet.Toolkit</RootNamespace>
   </PropertyGroup>
+  <PropertyGroup>
+    <Description>Utility code for games, including graphics, audio, and integration with Garnet.</Description>
+    <PackageTags>graphics audio game</PackageTags>
+  </PropertyGroup>
   <ItemGroup>
     <Content Condition="'$(IsWindows)' == 'true' And '$(Is64Bit)' == 'false'" Include="Native\win-x86\openal32.dll" Link="openal32.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

@@ -8,6 +8,11 @@
     <ToolCommandName>garnet</ToolCommandName>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <Description>Asset processor for games.</Description>
+    <PackageTags>asset game</PackageTags>
+  </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="Args.fs" />
     <Compile Include="PackUtility.fs" />

@@ -21,13 +21,14 @@ let world = Container()
 
 // register a system that updates position
 let system =
-    world.On<Update> (
-        fun e struct(p : Position, v : Velocity) -> {
-            x = p.x + v.vx * e.dt
-            y = p.y + v.vy * e.dt
-            }
-        |> Join.update2
-        |> Join.over world)
+    world.On<Update> <| fun e ->
+        for r in world.Query<Position, Velocity>() do
+            let p = &r.Value1
+            let v = r.Value2
+            p <- {
+                x = p.x + v.vx * e.dt
+                y = p.y + v.vy * e.dt
+                }
 
 // add an entity to world
 let entity = 
@@ -76,8 +77,6 @@ While ECS focuses on managing shared state, the actor model isolates state into 
 - **Fast**: Garbage collection spikes can cause dropped frames and inconsistent performance, so Garnet minimizes allocations and helps library users do so too. Component storage is data-oriented for fast iteration.
 
 - **Minimal**: The core library focuses on events, scheduling, and storage, and anything game-specific like physics, rendering, or update loops should be implemented separately.
-
-- **Complete**: In addition to traditional ECS, Garnet provides actor-like messaging for scenarios where multiple ECS worlds are beneficial, such as AI agents or networking.
 
 ## Containers
 
@@ -192,29 +191,7 @@ Only a single component of a type is allowed per entity, but there is no hard li
 
 ### Iteration
 
-You can iterate over entities with specific combinations of components using joins. In this way you could define a system that updates all entities with a position and velocity, and iteration would skip over any entities with only a position and not velocity. Currently only a fixed set of predefined joins are provided rather than allowing arbitrary queries.
-
-```fsharp
-let runIter =
-    // first define an iteration callback:
-    // (1) param can be any type or just ignored
-    // (2) use struct record for component types
-    fun param struct(eid : Eid, p : Position, h : Health) ->
-        if h.hp <= 0 then 
-            // [start animation at position]
-            // destroy entity
-            c.Destroy(eid)
-    // iterate over all entities with all components
-    // present (inner join)
-    |> Join.iter3
-    // iterate over container
-    |> Join.over c
-let healthSub =
-    c.On<DestroyZeroHealth> <| fun e ->
-        runIter()
-```
-
-Alternately, you can use the query API to iterate with a for-loop. The advantages are that it's faster and allows arbitrary writes to component values, but it requires accessing component values by numbered fields.
+You can iterate over entities with specific combinations of components using queries. In this way you could define a system that updates all entities with a position and velocity, and iteration would skip over any entities with only a position and not velocity.
 
 ```fsharp
 let healthSub =
@@ -489,7 +466,9 @@ You can designate actors to run on either the main thread (for UI if needed) or 
 
 ## Integration
 
-How does Garnet integrate with frameworks or engines like Unity, MonoGame, or UrhoSharp? You have a few options depending on how much you want to depend on Garnet, your chosen framework, and your own code. This approach also works for integrating narrower libraries like physics or networking.
+How does Garnet integrate with frameworks or engines like Unity, MonoGame, or Veldrid? You have a few options depending on how much you want to depend on Garnet, your chosen framework, and your own code. This approach also works for integrating narrower libraries like physics or networking.
+
+See [sample projects](https://github.com/bcarruthers/garnet/tree/master/samples) for integration with Veldrid and OpenAL.
 
 ### Abstracting framework calls
 
@@ -506,6 +485,8 @@ When you need to call the framework (e.g. MonoGame) from your code, you can choo
 For the reverse direction, when you want the framework to call your code, you can simply send interface event types and run the container or actors.
 
 ```fsharp
+type Game() =
+    // ...
     let world = Container()
     // [configure container here]
     override c.Update gt = 

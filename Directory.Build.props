@@ -1,10 +1,9 @@
 <Project>
 
   <PropertyGroup>
-    <Version>0.5.0</Version>
+    <Version>0.5.1</Version>
     <Authors>Ben Carruthers</Authors>
     <Copyright>Copyright © 2021 Ben Carruthers</Copyright>
-    <Description>F# game composition library</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <RepositoryUrl>https://github.com/bcarruthers/garnet</RepositoryUrl>
