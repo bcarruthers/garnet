@@ -1,11 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
+    <OutputType>Exe</OutputType>
     <TargetFramework>net5.0</TargetFramework>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <PublishTrimmed>true</PublishTrimmed>
-    <TrimMode>Link</TrimMode>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>garnet</ToolCommandName>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,12 +15,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Garnet.Toolkit\Garnet.Toolkit.fsproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="SixLabors.ImageSharp" Version="1.0.3" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="Argu" Version="6.1.1" />
   </ItemGroup>
 

@@ -1,9 +1,13 @@
 version: 1.0.{build}
 image: Visual Studio 2019
-
 build_script:
-  - cmd: build.cmd
-
+- cmd: build.cmd
 artifacts:
-  - path: src\Garnet\bin\Release\*.nupkg
-    name: packages
+- path: publish\*.nupkg
+  name: packages
+deploy:
+- provider: GitHub
+  auth_token:
+    secure: qG7eOszX+IfotPE1mnKIg13cJTR1/t4aiI5coav1zcp71CZBXw4BZ6PfAU7jWZ4D
+  artifact: packages
+  draft: true
