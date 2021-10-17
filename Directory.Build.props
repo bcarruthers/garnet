@@ -1,7 +1,7 @@
 <Project>
 
   <PropertyGroup>
-    <Version>0.5.1</Version>
+    <Version>0.5.2</Version>
     <Authors>Ben Carruthers</Authors>
     <Copyright>Copyright © 2021 Ben Carruthers</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

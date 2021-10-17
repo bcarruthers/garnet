@@ -3,10 +3,6 @@
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <IsWindows Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Windows)))' == 'true'">true</IsWindows>
-    <IsOSX Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX)))' == 'true'">true</IsOSX>
-    <IsLinux Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))' == 'true'">true</IsLinux>
-    <Is64Bit Condition="'$(Prefer32Bit)' == 'false' Or '$(PlatformTarget)' == 'x64'">true</Is64Bit>
     <RootNamespace>Garnet.Toolkit</RootNamespace>
   </PropertyGroup>
   <PropertyGroup>
@@ -14,11 +10,15 @@
     <PackageTags>graphics audio game</PackageTags>
   </PropertyGroup>
   <ItemGroup>
-    <Content Condition="'$(IsWindows)' == 'true' And '$(Is64Bit)' == 'false'" Include="Native\win-x86\openal32.dll" Link="openal32.dll">
+    <Content Include="runtimes\win-x64\native\openal32.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <PackagePath>runtimes/win-x64/native</PackagePath>
+      <Pack>true</Pack>
     </Content>
-    <Content Condition="'$(IsWindows)' == 'true' And '$(Is64Bit)' == 'true'" Include="Native\win-x64\openal32.dll" Link="openal32.dll">
+    <Content Include="runtimes\win-x86\native\openal32.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <PackagePath>runtimes/win-x86/native</PackagePath>
+      <Pack>true</Pack>
     </Content>
     <Compile Include="Comparisons.fs" />
     <Compile Include="Collections.fs" />
@@ -47,6 +47,7 @@
     <Compile Include="Logging.fs" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.DotNet.PlatformAbstractions" Version="3.1.6" />
     <PackageReference Include="Veldrid" Version="4.8.0" />
     <PackageReference Include="Veldrid.ImGui" Version="5.72.0" />
     <PackageReference Include="Veldrid.SDL2" Version="4.8.0" />
