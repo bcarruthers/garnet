@@ -39,21 +39,24 @@ type ShaderSetDescriptor<'v
 type ShaderSet(device : GraphicsDevice, 
                 vert : ShaderDescription, 
                 frag : ShaderDescription,
-                layout : VertexLayoutDescription) =
+                layout : VertexLayoutDescription,
+                isCompiled) =
     let shaders =
         try
-            //device.ResourceFactory.CreateFromSpirv(vert, frag)
-            //let (vsCode, fsCode) = Shaders.compile vert.ShaderBytes frag.ShaderBytes device.BackendType
-            let vsCode = vert.ShaderBytes
-            let fsCode = frag.ShaderBytes
-            let vertexShader = device.ResourceFactory.CreateShader(ShaderDescription(vert.Stage, vsCode, vert.EntryPoint))
-            let fragmentShader = device.ResourceFactory.CreateShader(ShaderDescription(frag.Stage, fsCode, frag.EntryPoint))
-            [| vertexShader; fragmentShader |]
+            if not isCompiled then device.ResourceFactory.CreateFromSpirv(vert, frag)
+            else
+                let vsCode = vert.ShaderBytes
+                let fsCode = frag.ShaderBytes
+                let vertexShader = device.ResourceFactory.CreateShader(ShaderDescription(vert.Stage, vsCode, vert.EntryPoint))
+                let fragmentShader = device.ResourceFactory.CreateShader(ShaderDescription(frag.Stage, fsCode, frag.EntryPoint))
+                [| vertexShader; fragmentShader |]
         with ex ->
-            let msg = 
-                sprintf "Could not create shaders: %s\nVertex:\n%s\nFragment" 
-                    (Encoding.UTF8.GetString(vert.ShaderBytes)) 
-                    (Encoding.UTF8.GetString(frag.ShaderBytes))
+            let msg =
+                let vertStr = Encoding.UTF8.GetString(vert.ShaderBytes)
+                let fragStr = Encoding.UTF8.GetString(frag.ShaderBytes) 
+                "Could not create shaders:\n" +
+                $"Vertex ({vert.ShaderBytes.Length} bytes):\n{vertStr}\n" +
+                $"Fragment ({frag.ShaderBytes.Length} bytes):\n{fragStr}"
             raise (Exception(msg, ex))
     member c.Description =
         ShaderSetDescription(
@@ -139,44 +142,51 @@ type ShaderSetCache() =
             set.Dispose()
     interface IDisposable with
         member c.Dispose() = c.Dispose()
+    
+type ShaderResource = {
+    Description : ShaderDescription
+    IsCompiled : bool
+    } with
+    static member FromStream(stage, isCompiled, stream : Stream) =
+        let ms = new MemoryStream()
+        stream.CopyTo(ms)
+        {
+            Description = ShaderDescription(stage, ms.ToArray(), "main")
+            IsCompiled = isCompiled
+        }
 
+type ShaderLoader(backend : GraphicsBackend, stage) =
+    interface IResourceLoader with
+        /// Key should be the base shader without backend-specific extension, e.g. shader.vert
+        member c.Load(folder, cache, key) =
+            // First look for a compiled shader with the backend-specific extension
+            let extension = Shader.GetBytecodeExtension(backend)
+            let bytecodePath = key + extension
+            let result = folder.TryOpen(bytecodePath)
+            use stream = 
+                match result with
+                | ValueSome x -> x
+                | ValueNone ->
+                    // If backend-specific file was not found, fallback to original file
+                    folder.Open(key)
+            let resource = ShaderResource.FromStream(stage, result.IsSome, stream)
+            cache.AddResource<ShaderResource>(key, resource)
+    
 [<AutoOpen>]
 module ShaderLoadingExtensions =
     type IReadOnlyFolder with
+        /// Key should be the base shader without backend-specific extension, e.g. shader.vert
         member c.LoadShader(key : string, backend : GraphicsBackend, cache : IResourceCache) =
             let extension = Path.GetExtension(key)
             match Shader.TryGetStage(extension) with
             | ValueNone -> ()
             | ValueSome stage ->
-                let bytecodePath = 
-                    let extension = Shader.GetBytecodeExtension(backend)
-                    key + extension
-                use stream =
-                    match c.TryOpen(bytecodePath) with
-                    | ValueNone -> c.Open(key)
-                    | ValueSome x -> x
-                let ms = new MemoryStream()
-                stream.CopyTo(ms)
-                let desc = ShaderDescription(stage, ms.ToArray(), "main")
-                cache.AddResource(key, desc)
+                let loader = ShaderLoader(backend, stage) :> IResourceLoader
+                loader.Load(c, cache, key)
             
         member c.LoadShadersFromFolder(path, backend, cache : IResourceCache) =
             for key in c.GetFiles(path) do
                 c.LoadShader(key, backend, cache)
-    
-type ShaderLoader(backend : GraphicsBackend, stage) =
-    let extension = Shader.GetBytecodeExtension(backend)
-    interface IResourceLoader with
-        member c.Load(folder, cache, key) =
-            let bytecodePath = key + extension
-            use stream =
-                match folder.TryOpen(bytecodePath) with
-                | ValueNone -> folder.Open(key)
-                | ValueSome x -> x
-            let ms = new MemoryStream()
-            stream.CopyTo(ms)
-            let desc = ShaderDescription(stage, ms.ToArray(), "main")
-            cache.AddResource(key, desc)
 
 [<AutoOpen>]
 module ShaderLoaderExtensions =
@@ -190,9 +200,11 @@ module ShaderLoaderExtensions =
             match c.TryGet(desc) with
             | ValueSome x -> x
             | ValueNone ->
-                let vert = cache.LoadResource<ShaderDescription>(desc.VertexShader)
-                let frag = cache.LoadResource<ShaderDescription>(desc.FragmentShader)
-                let set = new ShaderSet(device, vert, frag, desc.Layout)
+                let vert = cache.LoadResource<ShaderResource>(desc.VertexShader)
+                let frag = cache.LoadResource<ShaderResource>(desc.FragmentShader)
+                if vert.IsCompiled <> frag.IsCompiled then
+                    failwith $"Shaders must both be GLSL or compiled for the same backend: {desc.VertexShader}, {desc.FragmentShader}"
+                let set = new ShaderSet(device, vert.Description, frag.Description, desc.Layout, vert.IsCompiled)
                 c.Add(desc, set)
                 set
 

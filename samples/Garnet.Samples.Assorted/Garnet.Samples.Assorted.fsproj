@@ -51,6 +51,7 @@
     <Compile Include="Extensions.fs" />
     <Compile Include="SpriteDrawing.fs" />
     <Compile Include="TextDrawing.fs" />
+    <Compile Include="OffscreenDrawing.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

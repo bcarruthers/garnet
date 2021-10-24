@@ -7,14 +7,14 @@ open Veldrid
 
 type PositionTextureColorQuadMesh(device : GraphicsDevice) =
     let vb =
-        let size = uint32 (sizeof<PositionTextureDualColorVertex> * 4)
+        let size = uint32 (sizeof<PositionTextureColorVertex> * 4)
         let b = device.ResourceFactory.CreateBuffer(BufferDescription(size, BufferUsage.VertexBuffer))
         device.UpdateBuffer(b, 0u, [| 
             // flip Y tex coords
-            { Position = Vector3(-1.0f, -1.0f, 0.0f); TexCoord = Vector2(0.0f, 1.0f); Foreground = RgbaFloat.White; Background = RgbaFloat.Clear }
-            { Position = Vector3(+1.0f, -1.0f, 0.0f); TexCoord = Vector2(1.0f, 1.0f); Foreground = RgbaFloat.White; Background = RgbaFloat.Clear }
-            { Position = Vector3(+1.0f, +1.0f, 0.0f); TexCoord = Vector2(1.0f, 0.0f); Foreground = RgbaFloat.White; Background = RgbaFloat.Clear }
-            { Position = Vector3(-1.0f, +1.0f, 0.0f); TexCoord = Vector2(0.0f, 0.0f); Foreground = RgbaFloat.White; Background = RgbaFloat.Clear }
+            { Position = Vector3(-1.0f, -1.0f, 0.0f); TexCoord = Vector2(0.0f, 1.0f); Color = RgbaFloat.White }
+            { Position = Vector3(+1.0f, -1.0f, 0.0f); TexCoord = Vector2(1.0f, 1.0f); Color = RgbaFloat.White }
+            { Position = Vector3(+1.0f, +1.0f, 0.0f); TexCoord = Vector2(1.0f, 0.0f); Color = RgbaFloat.White }
+            { Position = Vector3(-1.0f, +1.0f, 0.0f); TexCoord = Vector2(0.0f, 0.0f); Color = RgbaFloat.White }
             |])
         b
     let ib = 
@@ -164,4 +164,3 @@ type RenderTarget(device : GraphicsDevice, shaders, filtering, blend) =
         mesh.Dispose()
     interface IDisposable with
         member c.Dispose() = c.Dispose()
-
