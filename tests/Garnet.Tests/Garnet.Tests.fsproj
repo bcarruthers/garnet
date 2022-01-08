@@ -8,6 +8,7 @@
     <ProjectReference Include="..\..\src\Garnet\Garnet.fsproj" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Iteration.fs" />
     <Compile Include="Benchmarks\ActorBenchmarks.fs" />
     <Compile Include="Benchmarks\ChannelBenchmarks.fs" />
     <Compile Include="Benchmarks\ContainerBenchmarks.fs" />

@@ -11,7 +11,6 @@
     <Compile Include="Registry.fs" />
     <Compile Include="Resources.fs" />
     <Compile Include="Segments.fs" />
-    <Compile Include="Iteration.fs" />
     <Compile Include="Queries.fs" />
     <Compile Include="Components.fs" />
     <Compile Include="Coroutines.fs" />
