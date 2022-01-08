@@ -29,7 +29,8 @@ type Looping =
         use sub = c.RegisterExceptionHandler(fun ex -> exceptions.Add(ex))
         // Send start message to all root actors
         let destIds = ReadOnlySpan(destIds |> Seq.toArray)
-        c.SendToAll<Start>(destIds, Start(), loopActorId)        
+        for destId in destIds do
+            c.Send(destId, loopActorId, Start())
         // Wait for all threads to complete
         c.ProcessAll()
         if exceptions.Count > 0 then
@@ -52,7 +53,7 @@ type Looping =
             // Send tick to destination actor with source as loop actor to indicate
             // where closing messages should be sent.
             let e = { Time = sw.ElapsedMilliseconds }
-            c.Send<Tick>(destActorId, e, loopActorId)
+            c.Send<Tick>(destActorId, loopActorId, e)
             c.Process()
             // Sleep to avoid spinning CPU
             if sleepDuration >= 0 then

@@ -18,11 +18,7 @@ module PingPong =
 
     module RecordedMessage =
         let formatPair (s, r) =
-            sprintf "%d from [%d] a%d (d%s) to [%d] a%d (d%s) in %d" 
-                r.payload 
-                s.sequence s.sourceId.Value s.dispatcher 
-                r.sequence r.destId.Value r.dispatcher 
-                (r.timestamp - s.timestamp)
+            $"%d{r.payload} from [%d{s.sequence}] a%d{s.sourceId.Value} (d%s{s.dispatcher}) to [%d{r.sequence}] a%d{r.destId.Value} (d%s{r.dispatcher}) in %d{r.timestamp - s.timestamp}"
         
     type SynchronizedQueue<'a>() =
         let incoming = Queue<'a>()
@@ -50,15 +46,17 @@ module PingPong =
             let sentCount = ref 0
             let config = {
                 Dispatchers = [|
-                    for _ = 1 to poolCount do
+                    for i = 1 to poolCount do
                         yield {
                             // workers
+                            Name = $"Worker{i}"
                             ThreadCount = workerCount
                             Throughput = 100
                             DispatcherType = DispatcherType.Background
                         }
                     yield {
                         // main
+                        Name = "Main"
                         DispatcherType = DispatcherType.Foreground
                         ThreadCount = 0
                         Throughput = 100
@@ -67,8 +65,9 @@ module PingPong =
                 }
             use a = new ActorSystem(config)
             a.Register(fun (actorId : ActorId) ->
-                let inbox = Mailbox()
-                inbox.OnAll<int64> <| fun e ->
+                let writer = new MessageWriter<_>()
+                let mailbox = Mailbox()
+                mailbox.OnAll<int64> <| fun e ->
                     let span = e.Span
                     let c = Interlocked.Increment receivedCount
                     if log then
@@ -78,7 +77,7 @@ module PingPong =
                             sequence = c
                             payload = span.[0]
                             timestamp = Stopwatch.GetTimestamp()
-                            dispatcher = inbox.ToString()
+                            dispatcher = mailbox.ToString()
                             }
                     if c <= maxCount then
                         let _ = Interlocked.Increment sentCount
@@ -94,20 +93,22 @@ module PingPong =
                                 sequence = c
                                 payload = nextItem
                                 timestamp = Stopwatch.GetTimestamp()
-                                dispatcher = inbox.ToString()
+                                dispatcher = mailbox.ToString()
                                 }
-                        use batch = inbox.BeginSend(destId)
                         for i = 0 to span.Length - 1 do
-                            batch.WriteValue(span.[i] + 1L)
+                            writer.WriteValue(span.[i] + 1L)
+                        writer.DestinationId <- destId
+                        writer.Outbox <- mailbox
+                        writer.Send()
                 let dispatcherId = (actorId.Value - 1) / actorsPerPool
-                Actor(inbox, dispatcherId))
+                Actor(mailbox, dispatcherId))
+            let writer = new MessageWriter<_>()
             for i = 0 to initCount - 1 do
                 let destId = (i % actorCount) + 1 |> ActorId
                 let payload = (i + 1) * 10000000
-                use batch = a.BeginSend(destId)
                 for i = 0 to batchSize - 1 do
-                    batch.WriteValue (payload + i * 10000 |> int64)
-                if log  then
+                    writer.WriteValue (payload + i * 10000 |> int64)
+                if log then
                     onSend { 
                         sourceId = ActorId.Undefined
                         destId = destId
@@ -116,18 +117,21 @@ module PingPong =
                         timestamp = Stopwatch.GetTimestamp()
                         dispatcher = ""
                         }
+                writer.Outbox <- a
+                writer.DestinationId <- destId
+                writer.Send()
             a.ProcessAll()
             let expected = maxCount + initCount
             let actual = receivedCount.Value
             if actual <> expected then
-                printfn "Expected received count: %d, actual: %d" expected actual
+                printfn $"Expected received count: %d{expected}, actual: %d{actual}"
                 printfn "%s" <| a.ToString()
             let expected = maxCount
             let actual = sentCount.Value
             if actual <> expected then
-                printfn "Expected sent count: %d, actual: %d" expected actual
+                printfn $"Expected sent count: %d{expected}, actual: %d{actual}"
             if log then
-                printfn "%s" (a.ToString())
+                printfn $"%s{a.ToString()}"
 
         let run = runLogging false ignore ignore
 
@@ -144,22 +148,25 @@ module PingPong =
             let maxActorCount = maxCount * 2 - initCount
             let count = ref 0
             let createInbox _ =
-                let inbox = Mailbox()
-                inbox.OnAll<int64> <| fun e ->
+                let writer = new MessageWriter<_>()
+                let mailbox = Mailbox()
+                mailbox.OnAll<int64> <| fun e ->
                     if Interlocked.Increment count <= maxActorCount then
                         let span = e.Span
-                        use m = inbox.BeginRespond()
                         for i = 0 to span.Length - 1 do
-                            m.WriteValue span.[i]
-                inbox
+                            writer.WriteValue span.[i]
+                        writer.Outbox <- mailbox
+                        writer.DestinationId <- mailbox.SourceId 
+                        writer.Send()
+                mailbox
             use a = new ActorSystem(workerCount)
             a.Register(ActorId 1, fun _ -> Actor(createInbox()))
             a.Register(ActorId 2, fun _ -> Actor(createInbox(), if useMain then 1 else 0))
             for i = 1 to initCount do
-                a.Send(ActorId 1, int64 i, ActorId 2)
+                a.Send(ActorId 1, ActorId 2, int64 i)
             a.ProcessAll()
             if log then
-                printfn "%s\n%d" (a.ToString()) count.Value
+                printfn $"%s{a.ToString()}\n%d{count.Value}"
 
 type Run = struct end
 type Ping = struct end

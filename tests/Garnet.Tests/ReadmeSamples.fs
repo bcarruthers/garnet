@@ -224,7 +224,7 @@ a.Register(ActorId 2, fun (c : Container) ->
     
 // send a message and run until all complete
 // output: ping pong
-a.Send(ActorId 1, Ping(), sourceId = ActorId 2)
+a.Send(ActorId 1, ActorId 2, Ping())
 a.ProcessAll()
 
 // Subscribing to event batch

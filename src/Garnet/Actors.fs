@@ -1,12 +1,13 @@
 ﻿namespace Garnet.Composition
 
 open System
+open System.Buffers
 open System.Diagnostics
 open System.Threading
 open System.Collections.Generic
 open System.Runtime.InteropServices
 
-/// Defines how an actor is executed
+/// Defines which kind of thread an actor can be executed on
 type DispatcherType =
     /// Actor which can be run on a background thread
     | Background = 0
@@ -15,6 +16,8 @@ type DispatcherType =
 
 type DispatcherDescriptor = {
     DispatcherType : DispatcherType
+    /// Optional, useful to see thread name when printing, debugging, or profiling.
+    Name : string
     /// For background dispatchers, the number of worker threads
     ThreadCount : int
     /// Max number of batches to process for an actor before releasing lock. When
@@ -31,6 +34,7 @@ type DispatcherDescriptor = {
     /// Pool of background threads
     static member Background = {
         DispatcherType = DispatcherType.Background
+        Name = "Background"
         ThreadCount = DispatcherDescriptor.DefaultThreadCount
         Throughput = 100
         }
@@ -38,6 +42,7 @@ type DispatcherDescriptor = {
     /// Single foreground thread
     static member Foreground = {
         DispatcherType = DispatcherType.Foreground
+        Name = "Foreground"
         ThreadCount = 0
         Throughput = 100
         }
@@ -45,6 +50,7 @@ type DispatcherDescriptor = {
     /// Single dedicated background thread
     static member Dedicated = {
         DispatcherType = DispatcherType.Background
+        Name = "Dedicated"
         ThreadCount = 1
         Throughput = 1000
         }
@@ -77,81 +83,7 @@ type ActorException(sourceId : ActorId, destId : ActorId, msg : string, innerEx 
     inherit Exception(msg, innerEx)
     member _.SourceId = sourceId
     member _.DestinationId = destId
-
-[<AutoOpen>]
-module internal Sending =       
-    type internal IOutboxSender =
-        abstract member Send<'a> : Message<'a> -> unit
-
-    and internal NullOutboxSender() =
-        static let mutable instance = NullOutboxSender() :> IOutboxSender
-        static member Instance = instance
-        interface IOutboxSender with
-            member c.Send _ = ()
            
-    // Not thread-safe, but intended for read-only sharing 
-    // among threads with thread-safe refcounting to ensure
-    // only one thread clears.
-    and internal Message<'a>() =
-        let mutable buffer = Array.zeroCreate<'a> 1
-        let mutable recipients = Array.zeroCreate<Destination> 1
-        let mutable bufferLength = 0
-        let mutable recipientCount = 0
-        let mutable receiveCount = 0
-        let mutable sourceId = ActorId.Undefined
-        member c.SourceId = sourceId
-        member c.Capacity = buffer.Length
-        member c.Buffer = ReadOnlyMemory(buffer, 0, bufferLength)
-        member c.Destinations = ReadOnlyMemory(recipients, 0, recipientCount)
-        member val Sender = NullOutboxSender.Instance with get, set
-        member val Recycle : Action<Message<'a>> = null with get, set
-        member val OriginPool : obj = null with get, set
-        member val OriginStack : Stack<Message<'a>> = null with get, set
-        member c.SetSource id = 
-            sourceId <- id
-        member c.IncrementReceived() =
-            recipientCount = 1 || 
-            Interlocked.Increment(&receiveCount) = recipientCount
-        member c.Clear() =
-            receiveCount <- 0
-            c.Recycle <- null
-            c.OriginPool <- null
-            c.OriginStack <- null                    
-            c.Sender <- NullOutboxSender.Instance
-            sourceId <- ActorId.Undefined
-            bufferLength <- 0
-            recipientCount <- 0
-        interface IMessageWriter<'a> with
-            member c.SetSource(id) = 
-                sourceId <- id
-            member c.AddDestination(x) =
-                Buffer.addToArray &recipientCount &recipients x
-            member c.Advance(count) =
-                bufferLength <- bufferLength + count
-            member c.GetMemory(minSize) =
-                let required = bufferLength + max 1 minSize
-                if buffer.Length < required then
-                    Buffer.resizeArray required &buffer
-                Memory(buffer, bufferLength, buffer.Length - bufferLength)
-            member c.GetSpan(minSize) =
-                let required = bufferLength + max 1 minSize
-                if buffer.Length < required then
-                    Buffer.resizeArray required &buffer
-                Span(buffer, bufferLength, buffer.Length - bufferLength)
-            member c.Dispose() =
-                if bufferLength > 0 then c.Sender.Send(c)            
-                else
-                    // if empty message, just return to pool without sending
-                    let recycle = c.Recycle
-                    c.Clear()
-                    recycle.Invoke c
-        override c.ToString() =
-            let strMessages = buffer |> Seq.map (sprintf "%A")
-            sprintf "Message (%s):\n  Source: %d\n  Recipients (%d): %s\n  Buffer (%d): %s" 
-                (Format.typeToString typeof<'a>) sourceId.Value
-                recipientCount (String.Join(", ", recipients |> Seq.take recipientCount))
-                bufferLength (String.Join(", ", strMessages |> Seq.take bufferLength))
-
 [<AutoOpen>]
 module internal Pooling =                            
     module TypeInfo =
@@ -162,170 +94,44 @@ module internal Pooling =
         static let mutable id = TypeInfo.next()
         static member Id = id
 
-    // Thread-safe
-    type SharedPool<'a>() =
-        let pool = Stack<Message<'a>>()
-        let sync = obj()
-        let recycle batch =
-            Monitor.Enter sync
-            pool.Push batch
-            Monitor.Exit sync
-        let recycleAction = Action<_>(recycle)
-        member c.Rent() =
-            Monitor.Enter sync
-            let r =
-                if pool.Count > 0 then 
-                    let r = pool.Pop()
-                    Monitor.Exit sync
-                    r
-                else
-                    Monitor.Exit sync
-                    new Message<'a>()
-            r.Recycle <- recycleAction
-            r
-        member c.Return batch =
-            recycle batch
-        override c.ToString() =
-            lock sync <| fun () ->
-                let count = pool.Count
-                let total = pool |> Seq.sumBy (fun p -> p.Capacity)
-                if count = 0 && total = 0 then""
-                else
-                    let mean = if count > 0 then total / count else 0
-                    sprintf "%s (%d): %d total, %d mean" 
-                        (Format.typeToString typeof<'a>)
-                        count total mean
-
-    // Thread-safe
-    type SharedPool() =
-        let mutable pools = Array.zeroCreate<obj> 8
-        let sync = obj()
-        member c.GetPool<'a>() =
-            let id = TypeInfo<'a>.Id
-            Monitor.Enter sync
-            Buffer.resizeArray (id + 1) &pools
-            let pool = pools.[id]
-            let pool =
-                if pool <> null then pool :?> SharedPool<'a>
-                else
-                    let p = SharedPool<'a>()
-                    pools.[id] <- p :> obj
-                    p
-            Monitor.Exit sync
-            pool
-        member c.ToString(writer : IStringBlockWriter) =
-            lock sync <| fun () ->
-                let pools = pools |> Seq.filter (fun p -> p <> null)
-                let count = pools |> Seq.length
-                if writer.BeginList("Shared pools", count) then
-                    for pool in pools do
-                        let str = pool.ToString()
-                        if str <> "" then writer.Write(str)
-                    writer.End()
-        override c.ToString() =
-            StringBlockWriter.Format(c.ToString)
-
-    // Local pool for use by a single thread to minimize
-    // accessing shared pool.
-    // Not thread-safe
-    type LocalPool<'a>(owner : obj, shared : SharedPool<'a>) =
-        let pool = Stack<Message<'a>>()
-        let mutable rentCount = 0
-        let recycle (x : Message<'a>) =
-            // Only return to local pools that have rented
-            // out this type, otherwise we could have batches
-            // accumulate that are never sent out from actors
-            // within the current dispatcher pool.
-            if pool.Count < rentCount then 
-                pool.Push x
-            else shared.Return x
-        let recycleAction = Action<_>(recycle)
-        member c.Rent() =
-            let r =
-                if pool.Count > 0 then pool.Pop()
-                else 
-                    rentCount <- rentCount + 1
-                    shared.Rent()
-            r.OriginPool <- owner
-            r.OriginStack <- pool
-            r.Recycle <- recycleAction
-            r
-        member c.Return (x : Message<'a>) =
-            recycle x
-        override c.ToString() =
-            let count = pool.Count
-            let total = pool |> Seq.sumBy (fun p -> p.Capacity)
-            if count = 0 && total = 0 then""
-            else
-                let mean = if count > 0 then total / count else 0
-                sprintf "%s (%d): %d total, %d mean" 
-                    (Format.typeToString typeof<'a>)
-                    count total mean
-
-    // Not thread-safe
-    type LocalPool(shared : SharedPool) =
-        let mutable pools = Array.zeroCreate<obj> 8
-        member c.GetPool<'a>() =
-            let id = TypeInfo<'a>.Id
-            Buffer.resizeArray (id + 1) &pools
-            let pool = pools.[id]
-            if pool <> null then pool :?> LocalPool<'a>
-            else
-                let p = LocalPool<'a>(c, shared.GetPool<'a>())
-                pools.[id] <- p :> obj
-                p
-        member c.ToString(writer : IStringBlockWriter) =
-            let pools = pools |> Seq.filter (fun p -> p <> null)
-            let count = pools |> Seq.length
-            if writer.BeginList("Local pools", count) then
-                for pool in pools do
-                    let str = pool.ToString()
-                    if str <> "" then writer.Write(str)
-                writer.End()
-        override c.ToString() =
-            StringBlockWriter.Format(c.ToString)
-
-    [<AutoOpen>]
-    module BatchExtensions =
-        type Message<'a> with
-            member c.Release(pool : LocalPool) =
-                if c.IncrementReceived() then
-                    let sourcePool = c.OriginPool
-                    let sourceStack = c.OriginStack
-                    c.Clear()        
-                    // Fast path: if local pool is the same as the one
-                    // batch came from, we can just return directly.
-                    if obj.ReferenceEquals(pool, sourcePool) 
-                        then sourceStack.Push c
-                        else pool.GetPool<'a>().Return c
-
 [<AutoOpen>]
 module internal Processing =
+    [<Struct>]
+    type QueuedMessage = {
+        Buffer : obj
+        Count : int
+        SourceId : ActorId
+        DestinationId : ActorId
+        Pool : obj
+        }
+    
     // Stateless
     type IDeliverer =
-        abstract Deliver : LocalPool * IInbox * Envelope<obj> -> unit        
+        abstract Deliver : IInbox * IOutbox * QueuedMessage -> unit        
 
     // Stateless
     type Deliverer<'a>() =
         static let instance = Deliverer<'a>() :> IDeliverer
         static member Instance = instance
         interface IDeliverer with
-            member c.Deliver(pool, inbox, mail) =
-                let msg = mail.Message :?> Message<'a>
+            member c.Deliver(inbox, outbox, message) =
+                let buffer = message.Buffer :?> 'a[]
+                let pool = message.Pool :?> ArrayPool<'a>
                 try
                     try
-                        inbox.Receive {
-                            SourceId = mail.SourceId
-                            DestinationId = mail.DestinationId
-                            Outbox = mail.Outbox
-                            Message = msg.Buffer
-                            }
+                        inbox.Receive(outbox, {
+                            Buffer = buffer
+                            Count = message.Count
+                            SourceId = message.SourceId
+                            DestinationId = message.DestinationId
+                            Pool = pool
+                            })
                     with
                     | ex -> 
-                        let msg = sprintf "Processing failed:\n%s" (msg.ToString())
+                        let msg = $"Processing failed:\n%A{buffer.[0]}"
                         raise (exn(msg, ex))
                 finally
-                    msg.Release(pool)
+                    pool.Return(buffer)
                         
     // Thread-safe
     type IDispatcher =
@@ -339,43 +145,45 @@ module internal Processing =
     and ActorProcessor(actorId, inbox : IInbox, dispose, dispatcher : IDispatcher) =
         let processSync = obj()
         let queueSync = obj()
-        let queue = Queue<struct(int * int * IDeliverer * obj)>()
+        let queue = Queue<struct(QueuedMessage * IDeliverer)>()
         let mutable inbox = inbox
         let mutable maxQueued = 0
         let mutable total = 0
         let mutable waitDuration = 0L
         let mutable waitCount = 0
         // returns number of messages before processing
-        let run outbox pool =
+        let run outbox =
             // lock for duration of dequeue, which ends
             // in handler process method
-            Monitor.Enter queueSync
+            Monitor.Enter(queueSync)
             let remaining = queue.Count
             if remaining = 0 then Monitor.Exit queueSync
             else
-                let struct(sourceId, destId, deliverer, msg) = queue.Dequeue()
-                Monitor.Exit queueSync
+                let struct(message, deliverer) = queue.Dequeue()
+                Monitor.Exit(queueSync)
                 try
-                    deliverer.Deliver(pool, inbox, {
-                        Outbox = outbox
-                        SourceId = ActorId sourceId
-                        DestinationId = ActorId destId
-                        Message = msg
-                        })
+                    deliverer.Deliver(inbox, outbox, message)
                 with
                 | ex ->
                     // Halt any further processing of actor
                     inbox <- NullInbox.Instance
                     // Report exception
-                    let msg = sprintf "Actor %d failed" actorId
-                    let actorEx = ActorException(ActorId sourceId, ActorId destId, msg, ex)
+                    let msg = $"Actor %d{actorId} failed"
+                    let actorEx = ActorException(message.SourceId, message.DestinationId, msg, ex)
                     dispatcher.OnException(actorEx)
             remaining
         member c.ActorId = actorId
         member c.WaitDuration = waitDuration
-        member c.Enqueue<'a>(sourceId, destId, message : Message<'a>) =
-            let entry = struct(sourceId, destId, Deliverer<'a>.Instance, message :> obj)
-            Monitor.Enter queueSync
+        member c.Enqueue<'a>(message : Message<'a>) =
+            let queued : QueuedMessage = {
+                SourceId = message.SourceId
+                DestinationId = message.DestinationId
+                Count = message.Count
+                Buffer = message.Buffer
+                Pool = message.Pool
+            }
+            let entry = struct(queued, Deliverer<'a>.Instance)
+            Monitor.Enter(queueSync)
             queue.Enqueue(entry)
             // This check is an optimization to avoid queuing actors repeatedly in dispatchers,
             // but it relies on dispatchers taking full responsibility to ensure all messages
@@ -385,7 +193,7 @@ module internal Processing =
             maxQueued <- max maxQueued queue.Count
             Monitor.Exit queueSync
             r            
-        member private c.Process(outbox, pool, throughput) =
+        member private c.Process(outbox, throughput) =
             if not (Monitor.TryEnter processSync) then
                 // This is a case where actor is in more than one dispatcher queue and
                 // contention has occurred. This should only occur when a worker has
@@ -404,7 +212,7 @@ module internal Processing =
             let target = total + throughput
             while total < target && remaining > 0 do
                 // get count in queue prior to dequeuing
-                remaining <- run outbox pool
+                remaining <- run outbox
                 if remaining > 0 then
                     // count the batch that was just processed
                     total <- total + 1
@@ -414,11 +222,11 @@ module internal Processing =
             count
         /// Takes total byref to allow frequent updating in case this takes a long
         /// time to return.
-        member c.ProcessAll(outbox, pool, throughput, total : byref<int64>) =
+        member c.ProcessAll(outbox, throughput, total : byref<int64>) =
             let mutable count = 0
             let mutable pending = true
             while pending do
-                let delta = c.Process(outbox, pool, throughput)
+                let delta = c.Process(outbox, throughput)
                 count <- count + delta
                 total <- total + int64 delta
                 pending <- delta > 0
@@ -429,8 +237,7 @@ module internal Processing =
                 dispose()
                 )     
         override c.ToString() =
-            sprintf "Actor %d: %d batches processed (%d waits, %d ticks), %d max queued"
-                actorId total waitCount waitDuration maxQueued
+            $"Actor %d{actorId}: %d{total} batches processed (%d{waitCount} waits, %d{waitDuration} ticks), %d{maxQueued} max queued"
         interface IDisposable with
             member c.Dispose() = c.Dispose()
                             
@@ -517,8 +324,8 @@ module internal Dispatchers =
             if canReset then signal.Reset()
             Monitor.Exit(sync)
             r        
-        member c.Enqueue(actor : ActorProcessor, recipientId, message : Message<'a>) =
-            match actor.Enqueue<'a>(message.SourceId.Value, recipientId, message) with
+        member c.Enqueue(actor : ActorProcessor, message : Message<'a>) =
+            match actor.Enqueue<'a>(message) with
             | ValueNone -> ()
             | ValueSome dispatcher ->
                 if obj.ReferenceEquals(dispatcher, owner) 
@@ -533,11 +340,10 @@ module internal Dispatchers =
         interface IDisposable with
             member c.Dispose() = c.Dispose()
         override c.ToString() =
-            lock sync <| fun () ->
-                sprintf "%d actors max queued" maxCount
+            lock sync <| fun () -> $"%d{maxCount} actors max queued"
 
     // Not thread-safe
-    type OutboxSender(queue : DispatchQueue, actorMap : SharedActorMap) =
+    type LocalOutbox(name, queue : DispatchQueue, actorMap : SharedActorMap) =
         let actors = Dictionary<int, ActorProcessor>()
         member private c.Get(destId) =
             match actors.TryGetValue(destId) with
@@ -546,55 +352,27 @@ module internal Dispatchers =
                 let actor = actorMap.GetProcessor(destId)
                 actors.Add(destId, actor)
                 actor
-        member c.Send<'a>(message : Message<'a>) =
-            // Avoiding foreach since recipients will be cleared on last iteration.
-            let destinations = message.Destinations.Span
-            for i = 0 to destinations.Length - 1 do
-                let dest = destinations.[i]
-                queue.Enqueue(c.Get(dest.RecipientId.Value), dest.DestinationId.Value, message)
-        interface IOutboxSender with
-            member c.Send<'a> message =
-                c.Send<'a> message
+        member val ActiveId = 0 with get, set
+        member c.SendAll<'a>(message : Message<'a>, deliveryId : ActorId) =
+            let processor = c.Get(deliveryId.Value)
+            let message = if message.SourceId.Value = 0 then { message with SourceId = ActorId c.ActiveId } else message
+            queue.Enqueue(processor, message)
+        interface IOutbox with
+            member c.SendAll<'a>(message, deliveryId) =
+                c.SendAll<'a>(message, deliveryId)
         override c.ToString() =
-            sprintf "%d outbox actors" actors.Count
+            $"{name}: %d{actors.Count} outbox actors"
 
     // Thread-safe
-    type SharedOutbox(pool : SharedPool, actors : SharedActorMap) =
-        member c.BeginSend<'a>() =
-            // Use shared pool here instead of going directly
-            // to worker, since its pool isn't thread-safe
-            let msg = pool.GetPool<'a>().Rent()
-            msg.Sender <- c
-            msg :> IMessageWriter<'a>
+    type SharedOutbox(actors : SharedActorMap) =
+        member c.SendAll<'a>(message : Message<'a>, deliveryId : ActorId) =
+            let actor = actors.GetProcessor(deliveryId.Value)
+            match actor.Enqueue<'a>(message) with
+            | ValueSome dispatcher -> dispatcher.Enqueue(actor)
+            | ValueNone -> ()
         interface IOutbox with
-            member c.BeginSend<'a>() =
-                c.BeginSend<'a>()
-        interface IOutboxSender with
-            member c.Send<'a>(message : Message<'a>) =
-                // Avoiding foreach since recipients will be cleared.
-                let destinations = message.Destinations.Span
-                let sourceId = message.SourceId.Value
-                for i = 0 to destinations.Length - 1 do
-                    let dest = destinations.[i]
-                    // Using shared map here
-                    let actor = actors.GetProcessor(dest.RecipientId.Value)
-                    match actor.Enqueue<'a>(sourceId, dest.DestinationId.Value, message) with
-                    | ValueSome dispatcher -> dispatcher.Enqueue(actor)
-                    | ValueNone -> ()
-
-    // Not thread-safe
-    type LocalOutbox(name, pool : LocalPool, sender : OutboxSender) =
-        member val ActiveId = 0 with get, set
-        member c.BeginSend<'a>() =
-            let msg = pool.GetPool<'a>().Rent()
-            msg.Sender <- sender
-            msg.SetSource (ActorId c.ActiveId)
-            msg :> IMessageWriter<'a>
-        interface IOutbox with
-            member c.BeginSend<'a>() =
-                c.BeginSend<'a>()
-        override c.ToString() =
-            name
+            member c.SendAll<'a>(message, deliveryId) =
+                c.SendAll<'a>(message, deliveryId)
 
     [<Struct>]
     type WorkerStatus = {
@@ -618,11 +396,9 @@ module internal Dispatchers =
             s2.QueuedCount > 0
 
     // Thread-safe
-    type private Worker(owner : IDispatcher, actorMap, sharedPool, workerId, throughput, workers : Worker[]) =
-        let pool = LocalPool(sharedPool)
+    type private Worker(owner : IDispatcher, actorMap, name, workerId, throughput, workers : Worker[]) =
         let queue = new DispatchQueue(owner)
-        let sender = OutboxSender(queue, actorMap)
-        let outbox = LocalOutbox(workerId.ToString(), pool, sender)
+        let outbox = LocalOutbox(workerId.ToString(), queue, actorMap)
         let sync = obj()
         let mutable active = Unchecked.defaultof<ActorProcessor>
         let mutable isRunning = true
@@ -648,7 +424,7 @@ module internal Dispatchers =
                 // run single actor until no messages remain, respecting
                 // throughput param
                 outbox.ActiveId <- active.ActorId
-                count <- count + active.ProcessAll(outbox, pool, throughput, &total)
+                count <- count + active.ProcessAll(outbox, throughput, &total)
                 outbox.ActiveId <- 0
                 active <- Unchecked.defaultof<_>
             count > 0
@@ -668,7 +444,7 @@ module internal Dispatchers =
                 printfn "Failed %s" <| ex.ToString()
         let thread = 
             let t = Thread(run)
-            t.Name <- sprintf "Worker %d" workerId
+            t.Name <- $"{name} %d{workerId}"
             t
         member c.TryDequeue([<Out>] item : byref<_>) =
             queue.TryDequeue(&item)
@@ -689,12 +465,11 @@ module internal Dispatchers =
         member c.Enqueue(x : ActorProcessor) =
             queue.Enqueue(x)
         member c.ToString(writer : IStringBlockWriter) =
-            let name = sprintf "Worker %d (%d batches processed, %d waits)" workerId total waits
-            let id = sprintf "Worker %d" workerId
+            let name = $"{thread.Name} (%d{total} batches processed, %d{waits} waits)"
+            let id = thread.Name
             if writer.Begin(name, id) then
-                writer.Write(sender.ToString())
+                writer.Write(outbox.ToString())
                 writer.Write(queue.ToString())
-                pool.ToString(writer)
                 writer.End()
         override c.ToString() =
             StringBlockWriter.Format(c.ToString)
@@ -702,14 +477,14 @@ module internal Dispatchers =
             member c.Dispose() = c.Dispose()
 
     // Thread-safe
-    type WorkerDispatcher(actorMap, pool, workerCount, throughput, onException) as c =
+    type WorkerDispatcher(actorMap, name, workerCount, throughput, onException) as c =
         let workers = 
             // round up to pow2 size so we can avoid modulus
             let size = Bits.getNextPow2 workerCount
             let arr = Array.zeroCreate size
             // create workers
             for i = 0 to workerCount - 1 do
-                arr.[i] <- new Worker(c, actorMap, pool, i, throughput, arr)
+                arr.[i] <- new Worker(c, actorMap, name, i, throughput, arr)
             // fill in remaining by distributing original workers
             for i = workerCount to arr.Length - 1 do
                 arr.[i] <- arr.[i % workerCount]
@@ -768,11 +543,9 @@ module internal Dispatchers =
             StringBlockWriter.Format(c.ToString)
 
     // Thread-safe
-    type Dispatcher(actorMap, sharedPool, throughput) as c =
-        let pool = LocalPool(sharedPool)
+    type Dispatcher(actorMap, name, throughput) as c =
         let queue = new DispatchQueue(c)
-        let sender = OutboxSender(queue, actorMap)
-        let outbox = LocalOutbox("Main", pool, sender)
+        let outbox = LocalOutbox(name, queue, actorMap)
         let sync = obj()
         let mutable total = 0L
         interface IDispatcher with
@@ -783,7 +556,7 @@ module internal Dispatchers =
                 let mutable count = 0
                 while queue.TryDequeue &actor do
                     outbox.ActiveId <- actor.ActorId
-                    count <- count + actor.ProcessAll(outbox, pool, throughput, &total)
+                    count <- count + actor.ProcessAll(outbox, throughput, &total)
                     outbox.ActiveId <- 0
                 Monitor.Exit sync
                 count > 0
@@ -796,27 +569,25 @@ module internal Dispatchers =
             member c.ToString(writer) =
                 c.ToString(writer)
         member c.ToString(writer : IStringBlockWriter) =
-            let name = sprintf "Main (%d processed)" total
-            let id = "Main"
+            let name = $"{name} (%d{total} processed)"
+            let id = name
             if writer.Begin(name, id) then
-                writer.Write(sender.ToString())
+                writer.Write(outbox.ToString())
                 writer.Write(queue.ToString())
-                pool.ToString(writer)
                 writer.End()
         override c.ToString() =
             StringBlockWriter.Format(c.ToString)
 
     // Thread-safe
-    type CurrentDispatcher(actorMap, sharedPool, throughput) =
-        let pool = LocalPool(sharedPool)
-        let outbox = SharedOutbox(sharedPool, actorMap)
+    type CurrentDispatcher(actorMap, name, throughput) =
+        let outbox = SharedOutbox(actorMap)
         let sync = obj()
         let mutable total = 0L
         interface IDispatcher with
             member c.Process _ = false
             member c.Enqueue(actor) =
                 Monitor.Enter sync
-                actor.ProcessAll(outbox, pool, throughput, &total) |> ignore
+                actor.ProcessAll(outbox, throughput, &total) |> ignore
                 Monitor.Exit sync
             member c.OnException(ex) =
                 raise ex
@@ -824,10 +595,9 @@ module internal Dispatchers =
             member c.ToString(writer) =
                 c.ToString(writer)
         member c.ToString(writer : IStringBlockWriter) =
-            let name = sprintf "Current (%d processed)" total
-            let id = "Current"
+            let name = $"{name} (%d{total} processed)"
+            let id = name
             if writer.Begin(name, id) then
-                pool.ToString(writer)
                 writer.End()
         override c.ToString() =
             StringBlockWriter.Format(c.ToString)
@@ -880,18 +650,18 @@ module internal Dispatchers =
             StringBlockWriter.Format(c.ToString)
 
     type DispatcherLookup with
-        member c.SetDispatchers(actors, pool, onWorkerError, dispatchers : _[]) =
+        member c.SetDispatchers(actors, onWorkerError, dispatchers : _[]) =
             for i = 0 to dispatchers.Length - 1 do
                 let desc = dispatchers.[i]
                 let dispatcher : IDispatcher = 
                     match desc.DispatcherType with
                     | DispatcherType.Foreground -> 
-                        new Dispatcher(actors, pool, desc.Throughput) :> IDispatcher
+                        new Dispatcher(actors, desc.Name, desc.Throughput) :> IDispatcher
                     | DispatcherType.Background | _ -> 
                         if desc.ThreadCount <= 0 
-                        then new Dispatcher(actors, pool, desc.Throughput) :> IDispatcher
+                        then new Dispatcher(actors, desc.Name, desc.Throughput) :> IDispatcher
                         else 
-                            new WorkerDispatcher(actors, pool, desc.ThreadCount, 
+                            new WorkerDispatcher(actors, desc.Name, desc.ThreadCount, 
                                 desc.Throughput, onWorkerError) :> IDispatcher                            
                 c.SetDispatcher(i, dispatcher)
 
@@ -918,12 +688,11 @@ type internal ExceptionHandlers() =
 
 // Thread-safe
 type ActorSystem(config) =
-    let pool = SharedPool()
     let dispatchers = new DispatcherLookup(config.Dispatchers.Length)
     let actors = new SharedActorMap(dispatchers)
-    let outbox = SharedOutbox(pool, actors)
+    let outbox = SharedOutbox(actors)
     let handlers = ExceptionHandlers()
-    do dispatchers.SetDispatchers(actors, pool, handlers.Handle, config.Dispatchers)
+    do dispatchers.SetDispatchers(actors, handlers.Handle, config.Dispatchers)
     new() = new ActorSystem(ActorSystemConfiguration.Default)
     new(workerCount) = new ActorSystem(ActorSystemConfiguration.Create(workerCount))
     member c.ActorCount =
@@ -941,22 +710,18 @@ type ActorSystem(config) =
     /// Sleep/poll while background threads complete
     member c.ProcessAll() =
         dispatchers.ProcessAll()
-    member c.BeginSend<'a>() =
-        outbox.BeginSend<'a>()
+    member c.SendAll<'a>(message, deliveryId) =
+        outbox.SendAll<'a>(message, deliveryId)
     interface IMessagePump with
-        member c.BeginSend<'a>() = c.BeginSend<'a>()
+        member c.SendAll<'a>(message, deliveryId) = c.SendAll<'a>(message, deliveryId)
         member c.Process() = c.Process()
         member c.ProcessAll() = c.ProcessAll()
         member c.Dispose() = c.Dispose()
     member c.ToString(writer : IStringBlockWriter) =
         actors.ToString(writer)
-        pool.ToString(writer)
         dispatchers.ToString(writer)
     override c.ToString() =
-        sprintf "Actor system\n  %s%s%s"
-            (Format.addIndent (actors.ToString()))
-            (Format.addIndent (pool.ToString()))
-            (Format.addIndent (dispatchers.ToString()))
+        $"Actor system\n  %s{Format.addIndent (actors.ToString())}%s{Format.addIndent (dispatchers.ToString())}"
     static member CreateSingleThread() =
         new ActorSystem(ActorSystemConfiguration.SingleThread)
 
@@ -964,7 +729,7 @@ type NullMessagePump() =
     static let mutable instance = new NullMessagePump() :> IMessagePump
     static member Instance = instance
     interface IMessagePump with
-        member c.BeginSend<'a>() = NullOutbox.Instance.BeginSend<'a>()
+        member c.SendAll<'a>(message, deliveryId) = NullOutbox.Instance.SendAll<'a>(message, deliveryId)
         member c.Process() = ()
         member c.ProcessAll() = ()
         member c.Dispose() = ()
@@ -992,8 +757,8 @@ module ActorSystem =
             c.Send(destId, msg)
             c.Process()
 
-        member c.Process<'a>(destId, msg : 'a, sourceId) =
-            c.Send(destId, msg, sourceId)
+        member c.Process<'a>(destId, sourceId, msg : 'a) =
+            c.Send(destId, sourceId, msg)
             c.Process()
 
     type ActorSystem with
@@ -1042,22 +807,19 @@ module ActorSystem =
 
         member c.Register(actorId : ActorId, register : Container -> IDisposable) =
             c.Register(actorId, 0, register)
-
+    
     type ActorReference with
-        member c.BeginSend<'a>() =
-            c.MessagePump.BeginSend(c.ActorId)
-
         member c.Send(msg) =
             c.MessagePump.Send(c.ActorId, msg)
 
         member c.Send(msg, sourceId) =
-            c.MessagePump.Send(c.ActorId, msg, sourceId)
+            c.MessagePump.Send(c.ActorId, sourceId, msg)
 
-        member c.SendAll(msgs) =
-            c.MessagePump.SendAll(c.ActorId, msgs)
+        member c.SendAll(span) =
+            c.MessagePump.SendAll(c.ActorId, span)
 
-        member c.SendAll<'a>(msgs : ReadOnlySpan<'a>, sourceId) =
-            c.MessagePump.SendAll(c.ActorId, msgs, sourceId)
+        member c.SendAll<'a>(sourceId, span : ReadOnlySpan<'a>) =
+            c.MessagePump.SendAll(c.ActorId, sourceId, span)
 
         member c.Process msg =
             c.MessagePump.Process(c.ActorId, msg)

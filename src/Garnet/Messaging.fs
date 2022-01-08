@@ -17,88 +17,17 @@ type ActorId =
     static member inline Undefined = ActorId 0
 
 [<Struct>]
-type Destination = {
-    DestinationId : ActorId
-    RecipientId : ActorId
-    }
-
-type IMessageWriter =
-    inherit IDisposable
-    /// Assigns the source actor ID, which is typically the actor
-    /// sending the message
-    abstract member SetSource : ActorId -> unit
-    /// Adds a recipient actor ID
-    abstract member AddDestination : Destination -> unit
-         
-/// Provides methods for constructing a batch of messages, sending
-/// them upon disposal
-type IMessageWriter<'a> =
-    inherit IMessageWriter
-    inherit IBufferWriter<'a>
-
-type IOutbox =
-    abstract member BeginSend<'a> : unit -> IMessageWriter<'a>
-
-type MessageWriter<'a>(dispose : Action<_>) =
-    let mutable pos = 0
-    let mutable arr = ArrayPool<'a>.Shared.Rent(0)
-    let mutable sourceId = ActorId.Undefined
-    let recipients = List<Destination>()
-    new() = new MessageWriter<'a>(Action<_>(ignore))
-    member c.Recipients = recipients
-    member c.SourceId = sourceId
-    member c.Memory = ReadOnlyMemory(arr, 0, pos)
-    member c.Allocate minSize =
-        let required = pos + minSize
-        if required > arr.Length then
-            let newMem = ArrayPool.Shared.Rent(required)
-            arr.CopyTo(newMem, 0)
-            ArrayPool.Shared.Return(arr, true)
-            arr <- newMem        
-    member c.SetSource(id) =
-        sourceId <- id
-    member c.AddDestination(id) =
-        recipients.Add(id)
-    member c.Advance count =
-        pos <- pos + count
-    member c.GetMemory minSize =
-        c.Allocate minSize
-        Memory(arr)
-    member c.GetSpan minSize =
-        c.Allocate minSize
-        Span(arr)
-    member c.CopyTo(writer : IMessageWriter<'a>) =
-        writer.SetSource sourceId
-        for dest in recipients do
-            writer.AddDestination(dest)
-        let span = c.Memory.Span
-        span.CopyTo(writer.GetSpan(span.Length))
-        writer.Advance(span.Length)
-    member c.Dispose() = 
-        sourceId <- ActorId.Undefined
-        recipients.Clear()
-        ArrayPool.Shared.Return(arr, true)
-        arr <- ArrayPool<'a>.Shared.Rent(0)
-        pos <- 0
-        dispose.Invoke c
-    interface IMessageWriter<'a> with
-        member c.SetSource id = c.SetSource id
-        member c.AddDestination id = c.AddDestination id
-        member c.Advance count = c.Advance count
-        member c.GetMemory minSize = c.GetMemory minSize
-        member c.GetSpan minSize = c.GetSpan minSize
-        member c.Dispose() = c.Dispose()
-        
-[<Struct>]
-type Envelope<'a> = {
-    Outbox : IOutbox
+type Message<'a> = {
+    Buffer : 'a[]
+    Count : int
     SourceId : ActorId
     DestinationId : ActorId
-    Message : 'a
-    } with
-    override c.ToString() =
-        sprintf "%d->%d: %A" c.SourceId.Value c.DestinationId.Value c.Message
+    Pool : ArrayPool<'a>
+    }
 
+type IOutbox =
+    abstract member SendAll<'a> : Message<'a> * ActorId -> unit
+     
 [<AutoOpen>]
 module Mailbox =
     type IBufferWriter<'a> with
@@ -106,93 +35,110 @@ module Mailbox =
             c.GetSpan(1).[0] <- x
             c.Advance(1)
 
-    type IMessageWriter with
-        member c.AddDestination(destId) =
-            c.AddDestination {
-                DestinationId = destId
-                RecipientId = destId
-                }
-
-        member c.AddDestination(destId, recipientId) =
-            c.AddDestination {
-                DestinationId = destId
-                RecipientId = recipientId
-                }
-
-        member c.AddDestinations(recipients : ActorId[]) =
-            for id in recipients do
-                c.AddDestination(id)
-
-        member c.AddDestinations(recipients : ReadOnlySpan<ActorId>) =
-            for id in recipients do
-                c.AddDestination(id)
-
-    type IMessageWriter<'a> with
-        member c.WriteAll(msgs : ReadOnlySpan<'a>) =
-            let dest = c.GetSpan(msgs.Length)
-            for i = 0 to msgs.Length - 1 do
-                dest.[i] <- msgs.[i]
-            c.Advance(msgs.Length)
-
     type IOutbox with
-        member c.BeginSend<'a>(destId : ActorId) =
-            let batch = c.BeginSend<'a>()
-            batch.AddDestination(destId)
-            batch
+        member c.Send<'a>(destId : ActorId, payload : 'a) =
+            c.Send(destId, ActorId.Undefined, destId, payload)
 
-        member c.Send<'a>(destId, msg) =
-            use batch = c.BeginSend<'a>(destId)
-            batch.WriteValue(msg)
+        member c.Send<'a>(destId : ActorId, sourceId : ActorId, payload : 'a) =
+            c.Send(destId, sourceId, destId, payload)
 
-        member c.Send<'a>(destId, msg, sourceId) =
-            use batch = c.BeginSend<'a>(destId)
-            batch.SetSource(sourceId)
-            batch.WriteValue(msg)
+        member c.Send<'a>(destId : ActorId, sourceId : ActorId, deliveryId : ActorId, payload : 'a) =
+            let arr = ArrayPool.Shared.Rent(1)
+            arr.[0] <- payload
+            c.SendAll({
+                Buffer = arr
+                Count = 1
+                SourceId = sourceId
+                DestinationId = destId
+                Pool = ArrayPool.Shared
+                }, deliveryId)
 
-        member c.SendAll<'a>(destId, msgs : ReadOnlySpan<'a>) =
-            use batch = c.BeginSend<'a>(destId)
-            batch.WriteAll(msgs)
+        member c.SendAll<'a>(destId : ActorId, payload : ReadOnlySpan<'a>) =
+            c.SendAll(destId, ActorId.Undefined, destId, payload)
 
-        member c.SendAll<'a>(destId, msgs : ReadOnlySpan<'a>, sourceId) =
-            use batch = c.BeginSend<'a>(destId)
-            batch.SetSource(sourceId)
-            batch.WriteAll(msgs)
+        member c.SendAll<'a>(destId : ActorId, sourceId : ActorId, payload : ReadOnlySpan<'a>) =
+            c.SendAll(destId, sourceId, destId, payload)
 
-        member c.SendToAll<'a>(destIds : ReadOnlySpan<ActorId>, msg) =
-            use batch = c.BeginSend<'a>()
-            batch.WriteValue(msg)
-            batch.AddDestinations(destIds)
-
-        member c.SendToAll<'a>(destIds : ReadOnlySpan<ActorId>, msg, sourceId) =
-            use batch = c.BeginSend<'a>()
-            batch.SetSource(sourceId)
-            batch.WriteValue(msg)
-            batch.AddDestinations(destIds)
-
-        member c.SendToAll<'a>(destIds : ActorId[], msg) =
-            c.SendToAll<'a>(ReadOnlyMemory(destIds).Span, msg)
-
-        member c.SendToAll<'a>(destIds : ActorId[], msg, sourceId) =
-            c.SendToAll<'a>(ReadOnlyMemory(destIds).Span, msg, sourceId)
-
-        member c.SendAll<'a>(e : Envelope<ReadOnlyMemory<'a>>) =
-            use msg = c.BeginSend()
-            msg.SetSource(e.SourceId)
-            msg.AddDestination(e.DestinationId)
-            let src = e.Message.Span
-            let span = msg.GetSpan(e.Message.Length)
-            src.CopyTo(span)
-            msg.Advance(e.Message.Length)
+        member c.SendAll<'a>(destId : ActorId, sourceId : ActorId, deliveryId : ActorId, payload : ReadOnlySpan<'a>) =
+            let arr = ArrayPool.Shared.Rent(payload.Length)
+            payload.CopyTo(arr.AsSpan())
+            c.SendAll({
+                Buffer = arr
+                Count = payload.Length
+                SourceId = sourceId
+                DestinationId = destId
+                Pool = ArrayPool.Shared
+                }, deliveryId)
 
 type NullOutbox() =
     static let mutable instance = NullOutbox() :> IOutbox
     static member Instance = instance
     interface IOutbox with
-        member c.BeginSend<'a>() =
-            new MessageWriter<'a>() :> IMessageWriter<'a>
-            
+        member c.SendAll<'a>(message : Message<'a>, _) =
+            if message.Buffer.Length > 0 then
+                message.Pool.Return(message.Buffer, true)
+
+/// Similar to ArrayBufferWriter, but uses ArrayPool for allocations
+type MessageWriter<'a>() =
+    let mutable arr = Array.Empty<'a>()
+    let mutable pos = 0
+    member val Outbox = NullOutbox.Instance with get, set
+    member val SourceId = ActorId.Undefined with get, set
+    member val DestinationId = ActorId.Undefined with get, set
+    member val DeliveryId = ActorId.Undefined with get, set
+    member c.WrittenCount = pos
+    member c.WrittenSpan = ReadOnlySpan(arr, 0, pos)
+    member c.WrittenMemory = ReadOnlyMemory(arr, 0, pos)
+    member c.Allocate(minSize) =
+        // Note min allocation in case count is zero
+        let required = pos + max minSize 16
+        if required > arr.Length then
+            let newMem = ArrayPool.Shared.Rent(required)
+            arr.CopyTo(newMem, 0)
+            ArrayPool.Shared.Return(arr, true)
+            arr <- newMem        
+    member c.WriteValue(x) =
+        if pos >= arr.Length then
+            c.Allocate(1)
+        arr.[pos] <- x
+        pos <- pos + 1
+    member c.Advance(count) =
+        pos <- pos + count
+    member c.GetMemory(minSize) =
+        c.Allocate(minSize)
+        Memory(arr, pos, arr.Length - pos)
+    member c.GetSpan(minSize) =
+        c.GetMemory(minSize).Span
+    member c.Clear() =
+        if arr.Length > 0 then
+            ArrayPool.Shared.Return(arr, true)
+            arr <- Array.Empty<'a>()
+        pos <- 0
+        c.Outbox <- NullOutbox.Instance
+        c.SourceId <- ActorId.Undefined
+        c.DestinationId <- ActorId.Undefined
+        c.DeliveryId <- ActorId.Undefined
+    member c.Send() =
+        if pos > 0 then
+            c.Outbox.SendAll({
+                Buffer = arr
+                Count = pos
+                SourceId = c.SourceId
+                DestinationId = c.DestinationId
+                Pool = ArrayPool.Shared
+                }, if c.DeliveryId.IsDefined then c.DeliveryId else c.DestinationId)
+            arr <- Array.Empty<'a>()
+        c.Clear()
+    member c.Dispose() = c.Send()
+    interface IDisposable with
+        member c.Dispose() = c.Send()
+    interface IBufferWriter<'a> with
+        member c.Advance(count) = c.Advance(count)
+        member c.GetMemory(minSize) = c.GetMemory(minSize)
+        member c.GetSpan(minSize) = c.GetSpan(minSize)
+
 type IInbox =
-    abstract member Receive<'a> : Envelope<ReadOnlyMemory<'a>> -> unit
+    abstract member Receive<'a> : IOutbox * Message<'a> -> unit
     
 type internal MessageTypeId() =
     static let mutable id  = 0
@@ -226,17 +172,17 @@ type Mailbox() =
             let span = buffer.Span
             for i = 0 to span.Length - 1 do
                 handle span.[i])
-    member c.TryReceive<'a> (e : Envelope<ReadOnlyMemory<'a>>) =
+    member c.TryReceive<'a>(currentOutbox : IOutbox, e : Message<'a>) =
         let id = MessageTypeId<'a>.Id
         if id < lookup.Length then
             let h = lookup.[id]
             if isNotNull h then
-                outbox <- e.Outbox
+                outbox <- currentOutbox
                 sourceId <- e.SourceId
                 destId <- e.DestinationId
                 try
                     let handle = h :?> ReadOnlyMemory<'a> -> unit
-                    handle e.Message
+                    handle (ReadOnlyMemory(e.Buffer, 0, e.Count))
                     true
                 finally
                     outbox <- NullOutbox.Instance
@@ -244,14 +190,14 @@ type Mailbox() =
                     destId <- ActorId.Undefined
             else false
         else false
-    member c.BeginSend<'a>() =
-        outbox.BeginSend<'a>()
+    member c.Send<'a>(message, deliveryId) =
+        outbox.Send<'a>(message, deliveryId)
     interface IInbox with
-        member c.Receive e =
-            c.TryReceive e |> ignore
+        member c.Receive(outbox, e) =
+            c.TryReceive(outbox, e) |> ignore
     interface IOutbox with
-        member c.BeginSend<'a>() =
-            outbox.BeginSend<'a>()
+        member c.SendAll<'a>(message, deliveryId) =
+            outbox.SendAll<'a>(message, deliveryId)
     override c.ToString() =
         outbox.ToString()
     static member Create(register) =
@@ -260,9 +206,6 @@ type Mailbox() =
         inbox
 
 type Mailbox with
-    member c.BeginRespond() =
-        c.BeginSend(c.SourceId)
-
     member c.Respond(msg) =
         c.Send(c.SourceId, msg)
 
@@ -270,13 +213,15 @@ type NullInbox() =
     static let mutable instance = NullInbox() :> IInbox
     static member Instance = instance
     interface IInbox with
-        member c.Receive _ = ()
+        member c.Receive(_, _) = ()
     
-type private InboxCollection(handlers : IInbox[]) =
+type InboxCollection(handlers : IInbox[]) =
+    new(handlers : IInbox seq) =
+        InboxCollection(handlers |> Seq.toArray)
     interface IInbox with
-        member c.Receive<'a> e =
+        member c.Receive<'a>(outbox, e) =
             for handler in handlers do
-                handler.Receive<'a> e
+                handler.Receive<'a>(outbox, e)
     override c.ToString() =
          Format.formatList "Inboxes" handlers.Length (String.Join("\n", handlers))
 
@@ -411,18 +356,10 @@ module internal MessageContext =
         Outbox = NullOutbox.Instance
         }
     
-    let fromEnvelope (c : Envelope<_>) = {
-        Outbox = c.Outbox
-        Addresses = {
-            SourceId = c.SourceId
-            DestinationId = c.DestinationId
-            }
-        }
-
 /// Need sender member indirection because container registrations
 /// need permanent reference while incoming messages have varying sender
 type internal Outbox() =
-    let mutable batchCount = 0
+    let mutable sendCount = 0
     let mutable pushCount = 0
     let mutable popCount = 0
     let mutable current = MessageContext.empty
@@ -433,20 +370,24 @@ type internal Outbox() =
     let scope = new Disposable(popOutbox)
     member c.Current = current
     /// Set temporary outbox for a scope such as handling incoming message
-    member c.Push mail = 
-        let outbox = MessageContext.fromEnvelope mail
-        outboxStack.Push current
-        current <- outbox
+    member c.Push(outbox, message : Message<_>) = 
+        let context = {
+            Outbox = outbox
+            Addresses = {
+                SourceId = message.SourceId
+                DestinationId = message.DestinationId
+                }
+            }
+        outboxStack.Push(current)
+        current <- context
         pushCount <- pushCount + 1
         scope
-    /// Create an outgoing message batch which is sent on batch disposal
-    member c.BeginSend() =             
-        // get current outbox
-        let batch = current.Outbox.BeginSend()
-        batchCount <- batchCount + 1
-        batch
+    member c.SendAll(message, deliveryId) =             
+        current.Outbox.SendAll(message, deliveryId)
+        sendCount <- sendCount + 1
     interface IOutbox with
-        member c.BeginSend() = c.BeginSend()            
+        member c.SendAll(message, deliveryId) =
+            c.SendAll(message, deliveryId)            
     override c.ToString() =
-        sprintf "Outbox: %d outboxes, %d batches, %d/%d push/pop" outboxStack.Count batchCount pushCount popCount
+        sprintf "Outbox: %d outboxes, %d sent, %d/%d push/pop" outboxStack.Count sendCount pushCount popCount
         

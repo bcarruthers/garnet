@@ -1,6 +1,7 @@
 ﻿namespace Garnet.Composition
 
 open System
+open System.Buffers
 open System.Collections.Generic
 open System.Runtime.InteropServices
 open Garnet.Composition.Comparisons
@@ -99,14 +100,14 @@ type Container() =
         let sid = eid.SegmentIndex
         let ci = eid.ComponentIndex
         eids.Remove(sid, 1UL <<< ci)
-    member c.Step deltaTime =
-        scheduler.Step deltaTime
-    member c.Start coroutine = 
-        scheduler.Schedule coroutine
-    member c.SetPublisher pub =
-        channels.SetPublisher pub
-    member c.SetPublisher pub =
-        c.SetPublisher (ValueSome pub)
+    member c.Step(deltaTime) =
+        scheduler.Step(deltaTime)
+    member c.Start(coroutine) = 
+        scheduler.Schedule(coroutine)
+    member c.SetPublisher(pub) =
+        channels.SetPublisher(pub)
+    member c.SetPublisher(pub) =
+        c.SetPublisher(ValueSome pub)
     member c.UnsubscribeAll() =
         channels.Clear()
     interface IRegistry with
@@ -133,20 +134,20 @@ type Container() =
             c.Handle(param, sid, mask, handler)
         member c.GetSegments<'a>() = 
             segments.GetSegments<'a>()
-    member c.BeginSend() =
-        outbox.BeginSend()
+    member c.SendAll(message, deliveryId) =
+        outbox.SendAll(message, deliveryId)
     interface IOutbox with
-        member c.BeginSend() =
-            outbox.BeginSend()
-    member c.Receive (e : Envelope<_>) =
+        member c.SendAll(message, deliveryId) =
+            outbox.SendAll(message, deliveryId)
+    member c.Receive(currentOutbox, message) =
         // assign outbox for duration of call
-        use s = outbox.Push e
+        use s = outbox.Push(currentOutbox, message)
         let channel = c.GetChannel<'a>()
-        channel.PublishAll e.Message
+        channel.PublishAll(ReadOnlyMemory(message.Buffer, 0, message.Count))
         c.Run()
     interface IInbox with
-        member c.Receive e =
-            c.Receive(e)
+        member c.Receive(outbox, message) =
+            c.Receive(outbox, message)
     override c.ToString() = 
         reg.ToString()
 
@@ -184,6 +185,29 @@ type Container with
     member c.GetDestinationId() =
         c.GetAddresses().DestinationId
 
+    member c.BeginSend<'a>() =
+        let writer = c.Get<MessageWriter<'a>>()
+        writer.Outbox <- c
+        writer
+        
+    member c.BeginSend<'a>(destId : ActorId) =
+        let writer = c.BeginSend<'a>()
+        writer.DestinationId <- destId
+        writer
+
+    member c.BeginSend<'a>(destId : ActorId, sourceId : ActorId) =
+        let writer = c.BeginSend<'a>()
+        writer.DestinationId <- destId
+        writer.SourceId <- sourceId
+        writer
+
+    member c.BeginSend<'a>(destId : ActorId, sourceId : ActorId, deliveryId) =
+        let writer = c.BeginSend<'a>()
+        writer.DestinationId <- destId
+        writer.SourceId <- sourceId
+        writer.DeliveryId <- deliveryId
+        writer
+
     member c.Create(partition) =
         let eid = c.CreateEid(partition)
         c.Get eid
@@ -201,10 +225,10 @@ type Container with
         c.Run()
 
     member c.BeginRespond() =
-        c.BeginSend(c.GetAddresses().SourceId)
+        c.BeginSend(c.GetSourceId())
 
-    member c.Respond(msg) =
-        c.Send(c.GetAddresses().SourceId, msg)
+    member c.Respond(message) =
+        c.Send(c.GetSourceId(), message)
 
     member c.AddSystems(systems) =
         systems
@@ -217,12 +241,13 @@ type Container with
 
     member c.AddSystem(actorId, actorOutbox, register : Container -> IDisposable) =
         let outbox = c.Get<Outbox>()
-        use s = outbox.Push {
-            Outbox = actorOutbox
+        use s = outbox.Push(actorOutbox, {
             SourceId = ActorId.Undefined
             DestinationId = actorId
-            Message = ()
-            }
+            Pool = ArrayPool.Shared
+            Buffer = ArrayPool.Shared.Rent(1)
+            Count = 1
+            })
         let sub = register c
         c.Commit()
         sub
@@ -255,11 +280,11 @@ type LazyContainerInbox(actorId, register) =
     let mutable sub = Disposable.Null
     let mutable isCreated = false
     interface IInbox with
-        member c.Receive(e) =
+        member c.Receive(outbox, message) =
             if not isCreated then                
-                sub <- container.AddSystem(actorId, e.Outbox, register)
+                sub <- container.AddSystem(actorId, outbox, register)
                 isCreated <- true
-            container.Receive(e)
+            container.Receive(outbox, message)
     member c.Dispose() = sub.Dispose()
     interface IDisposable with
         member c.Dispose() = c.Dispose()

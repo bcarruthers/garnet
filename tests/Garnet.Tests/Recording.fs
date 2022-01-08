@@ -7,22 +7,6 @@ open System.Text
 open Garnet.Composition.Comparisons
 open Garnet.Composition
 
-/// Logs incoming and outgoing messages
-type LogInbox(actorId : ActorId, baseHandler : IInbox, logger : IInbox) =
-    let nullOutbox = NullOutbox() :> IOutbox
-    let outbox = LogMessageOutbox(actorId, logger)
-    interface IInbox with
-        member c.Receive e =
-            // log incoming message
-            logger.Receive e
-            // redirect logging outbox
-            outbox.SetOutbox e.Outbox
-            // handle message using logging outbox
-            // so outgoing messages will go to log first, then to actual outbox
-            try baseHandler.Receive { e with Outbox = outbox }
-            // revert logging outbox
-            finally outbox.SetOutbox nullOutbox
-
 type ActorLogFilter = {
     actorFilter : ActorId -> bool
     sourceFilter : ActorId -> bool
@@ -212,75 +196,3 @@ type ActorLogCommand = {
     enableActorLog : bool 
     }
     
-type PrintInbox(id : ActorId, formatter : IFormatter, counter : ref<int>, print) =
-    let formatMessagesTo (sb : StringBuilder) (formatMsg : _ -> string) (batch : ReadOnlySpan<_>) maxCount =
-        let printCount = min batch.Length maxCount
-        for i = 0 to printCount - 1 do
-            let msg = batch.[i]
-            sb.AppendLine() |> ignore
-            sb.Append("  ") |> ignore
-            sb.Append(formatMsg msg) |> ignore
-            //sb.Append(sprintf "%A" msg) |> ignore
-        // count of messages not printed
-        let remaining = batch.Length - printCount
-        if remaining > 0 then
-            sb.AppendLine() |> ignore
-            sb.Append(sprintf "  +%d" remaining) |> ignore
-    let sb = System.Text.StringBuilder()
-    let mutable batchCount = 0
-    let mutable messageCount = 0
-    let mutable isEnabled = false
-    let mutable maxMessages = 10
-    let handler = 
-        let h = Mailbox()
-        h.On<ActorLogCommand> <| fun e -> isEnabled <- e.enableActorLog
-        h :> IInbox
-    member c.IsEnabled 
-        with get() = isEnabled
-        and set value = isEnabled <- value
-    interface IInbox with
-        member c.Receive<'a> (e : Envelope<ReadOnlyMemory<'a>>) =
-            // print if enabled before or after
-            let isEnabledBefore = isEnabled
-            handler.Receive e
-            let isEnabledAfter = isEnabled
-            if (isEnabledBefore || isEnabledAfter) && formatter.CanFormat<'a>() then 
-                sb.Append(sprintf "%d: %d->%d %d/%d/%d: %dx %s" 
-                    id.Value e.SourceId.Value e.DestinationId.Value 
-                    counter.Value batchCount messageCount
-                    e.Message.Length (typeof<'a>.Name)) |> ignore
-                formatMessagesTo sb formatter.Format e.Message.Span maxMessages
-                sb.ToString() |> print//printfn "%s"
-                sb.Clear() |> ignore
-            counter.Value <- counter.Value + 1
-            batchCount <- batchCount + 1
-            messageCount <- messageCount + e.Message.Length
-          
-[<AutoOpen>]
-module internal RecordingInternal =
-    let getSentCount (sender : StreamMessageSender) typeId = 
-        if typeId = 0 then sender.SentCount else sender.GetCount typeId
-            
-    let seek reg filter typeId count ms =
-        let sender = StreamMessageSender(reg, filter)
-        let nullOutbox = NullOutbox()
-        while getSentCount sender typeId < count && sender.Send(ms, nullOutbox) do
-            ()
-
-    let replayTo (a : IMessagePump) reg filter range ms =
-        let filter = fun (h : MessageHeader) -> filter.sourceFilter h.sourceId
-        seek reg filter range.messageTypeId range.start ms
-        let sender = StreamMessageSender(reg, filter)
-        while getSentCount sender range.messageTypeId < range.count && sender.Send(ms, a) do
-            a.ProcessAll()
-
-    let createPrintActorSystem (options : PrintOptions) =
-        // share counter/formatter since no threads
-        let formatter = options.createFormatter()
-        let counter = ref 0
-        let a = new ActorSystem(workerCount = 0)
-        a.Register(options.filter.destinationFilter, fun createId ->
-            let h = PrintInbox(createId, formatter, counter, options.print) 
-            h.IsEnabled <- true
-            Actor(h))
-        a
