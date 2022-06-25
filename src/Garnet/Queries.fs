@@ -16,7 +16,7 @@ type MaskEnumerator =
     member c.Current = c.i
     [<MethodImpl(MethodImplOptions.AggressiveInlining)>]
     member c.MoveNext() =
-        // Alternative for .NET 5.0:
+        // Alternative for .NET 3.0 onward
         // let skip = System.Numerics.BitOperations.TrailingZeroCount(c.mask) + 1
         // c.mask <- c.mask >>> skip
         // c.i <- c.i + skip

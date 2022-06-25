@@ -60,7 +60,7 @@ for i = 1 to 10 do
 
 ## Getting started
 
-1. Create either a .NET Framework, Core, or 5.0+ application.
+1. Create either a .NET Framework, Core, or 6.0+ application.
 2. Reference the [Garnet NuGet package](https://www.nuget.org/packages/Garnet/). 
 3. For sample code, see unit tests or [sample projects](https://github.com/bcarruthers/garnet/tree/master/samples).
 

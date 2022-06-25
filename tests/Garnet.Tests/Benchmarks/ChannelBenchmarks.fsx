@@ -1,4 +1,4 @@
-﻿#r "../bin/Release/net5.0/Garnet.dll"
+﻿#r "../bin/Release/net6.0/Garnet.dll"
 #load "ChannelBenchmarks.fs"
 
 open Garnet.Benchmarks.Channels
